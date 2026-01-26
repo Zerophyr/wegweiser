@@ -1,0 +1,1021 @@
+// sidepanel.js
+
+// Import UI constants (if modules are supported, otherwise constants are global)
+const UI_CONSTANTS = window.UI_CONSTANTS || {
+  TEXTAREA_MAX_HEIGHT: 200,
+  TEXTAREA_MIN_HEIGHT: 44,
+  CHARS_PER_TOKEN: 4,
+  TOKEN_BAR_MAX_TOKENS: 4000,
+  COPY_FEEDBACK_DURATION: 500,
+  DEBOUNCE_DELAY: 150
+};
+
+// Initialize theme on page load
+if (typeof initTheme === 'function') {
+  initTheme();
+}
+
+const promptEl = document.getElementById("prompt");
+const answerEl = document.getElementById("answer");
+const answerSection = document.getElementById("answer-section");
+const askBtn = document.getElementById("askBtn");
+const metaEl = document.getElementById("meta");
+const balanceEl = document.getElementById("balance");
+const balanceRefreshBtn = document.getElementById("balance-refresh");
+const modelSelect = document.getElementById("model-select");
+const modelInput = document.getElementById("model-input");
+const modelStatusEl = document.getElementById("model-status");
+const webSearchToggle = document.getElementById("web-search-toggle");
+const reasoningToggle = document.getElementById("reasoning-toggle");
+const settingsIcon = document.getElementById("settings-icon");
+const typingIndicator = document.getElementById("typing-indicator");
+const stopBtn = document.getElementById("stopBtn");
+const estimatedCostEl = document.getElementById("estimated-cost");
+
+// ---- Toggle states ----
+let webSearchEnabled = false;
+let reasoningEnabled = false;
+
+// ---- Model dropdown manager ----
+let modelDropdown = null;
+
+// ---- Context visualization ----
+let contextViz = null;
+
+// ---- Active streaming port ----
+let activePort = null;
+
+// ---- Utility functions ----
+// Token estimation using constants
+function estimateTokens(text) {
+  return Math.ceil(text.length / UI_CONSTANTS.CHARS_PER_TOKEN);
+}
+
+// ---- Answer visibility management ----
+function updateAnswerVisibility() {
+  const clearBtn = document.getElementById("clear-answer-btn");
+  if (answerEl.innerHTML.trim() === "") {
+    answerEl.classList.add("hidden");
+    if (clearBtn) clearBtn.style.display = "none";
+  } else {
+    answerEl.classList.remove("hidden");
+    if (clearBtn) clearBtn.style.display = "block";
+  }
+}
+
+function showAnswerBox() {
+  answerEl.classList.remove("hidden");
+  const clearBtn = document.getElementById("clear-answer-btn");
+  if (clearBtn) clearBtn.style.display = "block";
+}
+
+function setAnswerLoading(isLoading) {
+  if (isLoading) {
+    answerEl.classList.add("loading");
+  } else {
+    answerEl.classList.remove("loading");
+  }
+}
+
+answerEl.addEventListener("click", (e) => {
+  const target = e.target;
+
+  // Handle copy button clicks
+  const copyBtn = target.closest('.copy-answer-btn');
+  if (copyBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const answerItem = copyBtn.closest('.answer-item');
+    if (answerItem) {
+      const answerContent = answerItem.querySelector('.answer-content');
+      if (answerContent) {
+        const text = answerContent.innerText || answerContent.textContent;
+
+        // Check if clipboard API is available
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          console.error('Clipboard API not available');
+          showToast('Clipboard not supported in this browser', 'error');
+          return;
+        }
+
+        navigator.clipboard.writeText(text).then(() => {
+          // Visual feedback
+          const originalColor = copyBtn.style.color;
+          copyBtn.style.color = '#22c55e';
+          copyBtn.setAttribute('aria-label', 'Copied to clipboard');
+          setTimeout(() => {
+            copyBtn.style.color = originalColor;
+            copyBtn.setAttribute('aria-label', 'Copy answer to clipboard');
+          }, UI_CONSTANTS.COPY_FEEDBACK_DURATION);
+          showToast('Answer copied to clipboard', 'success');
+        }).catch(err => {
+          console.error('Failed to copy:', err);
+          // More specific error messages
+          if (err.name === 'NotAllowedError') {
+            showToast('Permission denied. Please allow clipboard access.', 'error');
+          } else if (err.name === 'SecurityError') {
+            showToast('Cannot copy from insecure context', 'error');
+          } else {
+            showToast('Failed to copy to clipboard', 'error');
+          }
+        });
+      }
+    }
+    return;
+  }
+
+  // Handle link clicks
+  if (target && target.tagName === "A") {
+    e.preventDefault();
+    const href = target.getAttribute("href");
+    if (href) {
+      chrome.tabs.create({ url: href });
+    }
+  }
+});
+
+// ---- Input validation and sanitization ----
+// Note: escapeHtml() and validateUrl() are now in utils.js
+
+function sanitizePrompt(prompt) {
+  if (!prompt || typeof prompt !== 'string') return "";
+  // Trim and limit length
+  const trimmed = prompt.trim();
+  const maxLength = 10000; // Reasonable limit
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+// ---- Balance handling ----
+async function refreshBalance() {
+  if (!balanceEl) return;
+
+  balanceEl.textContent = "Loading…";
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "get_balance" });
+    if (!res?.ok) {
+      balanceEl.textContent = res?.error || "Error";
+      return;
+    }
+
+    const value = res.balance;
+    if (value == null || Number.isNaN(value)) {
+      balanceEl.textContent = "Unknown";
+    } else {
+      balanceEl.textContent = `$${value.toFixed(4)}`;
+    }
+  } catch (e) {
+    console.error("Error refreshing balance:", e);
+    balanceEl.textContent = "Error";
+  }
+}
+
+if (balanceRefreshBtn) {
+  balanceRefreshBtn.addEventListener("click", refreshBalance);
+}
+
+// ---- Ask function with real-time streaming ----
+async function askQuestion() {
+  const rawPrompt = promptEl.value;
+  const prompt = sanitizePrompt(rawPrompt);
+
+  if (!prompt) {
+    metaEl.textContent = "Enter a prompt first.";
+    return;
+  }
+
+  if (prompt.length >= 10000) {
+    metaEl.textContent = "⚠️ Prompt truncated to 10,000 characters.";
+  }
+
+  // Disconnect any active port first
+  if (activePort) {
+    try {
+      activePort.disconnect();
+    } catch (e) {
+      // Ignore errors
+    }
+    activePort = null;
+  }
+
+  askBtn.disabled = true;
+  stopBtn.style.display = 'block';
+
+  // Track start time
+  const startTime = Date.now();
+
+  // Step 1: Show preparation
+  metaEl.textContent = "🔄 Preparing request...";
+
+  // Move typing indicator to bottom of answer section
+  showAnswerBox();
+  answerEl.appendChild(typingIndicator);
+  showTypingIndicator();
+  answerSection.scrollTop = answerSection.scrollHeight;
+
+  try {
+    // Get current tab ID for conversation context
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id || 'default';
+
+    // Get current context size for display
+    const currentContextMsg = await chrome.runtime.sendMessage({
+      type: "get_context_size",
+      tabId
+    });
+    const contextSize = currentContextMsg?.contextSize || 0;
+    const contextInfo = contextSize > 0 ? ` (with ${Math.floor(contextSize / 2)} previous Q&A)` : '';
+
+    // Show "Thinking..." if reasoning is enabled
+    if (reasoningEnabled) {
+      metaEl.textContent = `💭 Thinking${contextInfo}...`;
+    } else {
+      metaEl.textContent = `📤 Streaming response${contextInfo}...`;
+    }
+
+    // Create answer item for streaming
+    const answerItem = document.createElement("div");
+    answerItem.className = "answer-item";
+    const contextBadge = contextSize > 2 ? `<span class="answer-context-badge" title="${contextSize} messages in conversation context">🧠 ${Math.floor(contextSize / 2)} Q&A</span>` : '';
+
+    answerItem.innerHTML = `
+      <div class="answer-meta">
+        <span>${new Date().toLocaleTimeString()} - Streaming...</span>
+        <button class="copy-answer-btn" title="Copy answer to clipboard" aria-label="Copy answer to clipboard">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          </svg>
+        </button>
+      </div>
+      ${reasoningEnabled ? '<div class="reasoning-content" style="margin-bottom: 12px;" role="region" aria-label="Reasoning steps"></div>' : ''}
+      <div class="answer-content" role="article" aria-live="polite"></div>
+      <div class="answer-footer">
+        <div class="answer-stats">
+          <span class="answer-time" aria-label="Response time">--s</span>
+          <span class="answer-tokens" aria-label="Token count">-- tokens</span>
+          ${contextBadge}
+        </div>
+        <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
+          <div class="token-usage-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+    `;
+
+    hideTypingIndicator();
+    answerEl.appendChild(answerItem);
+
+    const answerContent = answerItem.querySelector(".answer-content");
+    const reasoningContent = answerItem.querySelector(".reasoning-content");
+    const answerMeta = answerItem.querySelector(".answer-meta");
+
+    // Setup reasoning display if enabled
+    if (reasoningEnabled && reasoningContent) {
+      reasoningContent.innerHTML = `
+        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>💭</span>
+            <span>Thinking...</span>
+          </div>
+          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+        </div>
+      `;
+    }
+
+    const reasoningText = reasoningContent?.querySelector(".reasoning-text");
+    const reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+    let fullAnswer = '';
+    let currentModel = '';
+    let finalTokens = null;
+    let finalContextSize = contextSize;
+    let hasReceivedReasoning = false;
+
+    // Connect via Port for streaming
+    const port = chrome.runtime.connect({ name: 'streaming' });
+    activePort = port;
+
+    port.postMessage({
+      type: 'start_stream',
+      prompt,
+      webSearch: webSearchEnabled,
+      reasoning: reasoningEnabled,
+      tabId
+    });
+
+    // Handle port disconnection (e.g., when stopped)
+    port.onDisconnect.addListener(() => {
+      activePort = null;
+      stopBtn.style.display = 'none';
+      askBtn.disabled = false;
+    });
+
+    port.onMessage.addListener((msg) => {
+      console.log('[Port] Received message type:', msg.type, 'fullAnswer length:', fullAnswer.length);
+      if (msg.type === 'reasoning' && reasoningText && msg.reasoning) {
+        // Stream reasoning in real-time
+        hasReceivedReasoning = true;
+        // Change "Thinking..." to "Reasoning:" once we receive content
+        if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
+          reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
+        }
+        reasoningText.textContent += msg.reasoning;
+        answerSection.scrollTop = answerSection.scrollHeight;
+      } else if (msg.type === 'content' && msg.content) {
+        try {
+          // Stream content in real-time
+          fullAnswer += msg.content;
+
+          // Extract sources and render
+          const { sources, cleanText } = extractSources(fullAnswer);
+          // Note: applyMarkdownStyles handles escaping internally via markdownToHtml
+          const renderedHTML = applyMarkdownStyles(cleanText);
+
+          answerContent.innerHTML = renderedHTML;
+
+          // Note: Sources are rendered in the completion handler, not during streaming
+          // to avoid them being overwritten by subsequent innerHTML updates
+
+          answerSection.scrollTop = answerSection.scrollHeight;
+        } catch (e) {
+          console.error('[UI] Error rendering content:', e);
+          answerContent.innerHTML = `<div style="color: red;">Error rendering: ${e.message}</div>`;
+        }
+      } else if (msg.type === 'complete') {
+        // Stream complete
+        console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
+        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        currentModel = msg.model || 'default model';
+        finalTokens = msg.tokens;
+        finalContextSize = msg.contextSize;
+
+        // Update meta and footer
+        const metaSpan = answerMeta.querySelector('span');
+        if (metaSpan) {
+          metaSpan.textContent = `${new Date().toLocaleTimeString()} - ${currentModel}`;
+        }
+        const timeSpan = answerItem.querySelector(".answer-time");
+        const tokensSpan = answerItem.querySelector(".answer-tokens");
+        const tokenBar = answerItem.querySelector(".token-usage-fill");
+        if (timeSpan) timeSpan.textContent = `${elapsedTime}s`;
+        if (tokensSpan) tokensSpan.textContent = `${finalTokens || '—'} tokens`;
+
+        // Update token usage bar using constants
+        if (tokenBar && finalTokens) {
+          const percentage = Math.min((finalTokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100);
+          tokenBar.style.width = `${percentage}%`;
+
+          // Update progress bar aria attributes
+          const progressBar = answerItem.querySelector(".token-usage-bar");
+          if (progressBar) {
+            progressBar.setAttribute('aria-valuenow', Math.round(percentage));
+          }
+
+          // Color based on usage: green < 50%, yellow < 80%, red >= 80%
+          if (percentage < 50) {
+            tokenBar.style.background = 'linear-gradient(90deg, #22c55e, #16a34a)';
+          } else if (percentage < 80) {
+            tokenBar.style.background = 'linear-gradient(90deg, #eab308, #ca8a04)';
+          } else {
+            tokenBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
+          }
+        }
+
+        // Update context badge
+        if (finalContextSize > 2) {
+          const badge = answerItem.querySelector(".answer-context-badge");
+          if (badge) {
+            badge.textContent = `🧠 ${Math.floor(finalContextSize / 2)} Q&A`;
+            badge.title = `${finalContextSize} messages in conversation context`;
+          }
+        }
+
+        // Hide reasoning section if no reasoning was received (it was just a loading indicator)
+        // Otherwise keep it visible to show the reasoning that was streamed
+        if (reasoningContent && !hasReceivedReasoning) {
+          reasoningContent.style.display = 'none';
+        }
+
+        // Ensure answer content is visible (final render)
+        if (fullAnswer) {
+          const { sources, cleanText } = extractSources(fullAnswer);
+          // Note: applyMarkdownStyles handles escaping internally
+          answerContent.innerHTML = applyMarkdownStyles(cleanText);
+
+          // Add sources indicator if any
+          if (sources.length > 0) {
+            // Make [number] references clickable
+            makeSourceReferencesClickable(answerContent, sources);
+
+            // Add compact sources indicator button
+            const sourcesIndicator = createSourcesIndicator(sources, answerEl);
+            if (sourcesIndicator) {
+              answerContent.appendChild(sourcesIndicator);
+            }
+          }
+        }
+
+        // Update context viz
+        if (contextViz && finalContextSize) {
+          try {
+            contextViz.update(finalContextSize, 'assistant');
+          } catch (e) {
+            console.error('[UI] Error updating context viz:', e);
+          }
+        }
+
+        metaEl.textContent = `✅ Answer received using ${currentModel}.`;
+        port.disconnect();
+        activePort = null;
+        stopBtn.style.display = 'none';
+      } else if (msg.type === 'error') {
+        // Handle error
+        answerContent.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
+        const metaSpan = answerMeta.querySelector('span');
+        if (metaSpan) {
+          metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+        }
+        metaEl.textContent = "❌ Error from OpenRouter.";
+        port.disconnect();
+        activePort = null;
+        stopBtn.style.display = 'none';
+      }
+    });
+
+    // Clear the prompt for next question
+    promptEl.value = "";
+    // Reset textarea height
+    promptEl.style.height = 'auto';
+    // Hide estimated cost
+    estimatedCostEl.style.display = 'none';
+
+    // Update balance
+    await refreshBalance();
+  } catch (e) {
+    console.error("Error sending query:", e);
+    hideTypingIndicator();
+    const errorHtml = `<div class="answer-item error-item">
+      <div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div>
+      <div class="answer-content">${escapeHtml(e?.message || String(e))}</div>
+    </div>`;
+    answerEl.insertAdjacentHTML('beforeend', errorHtml);
+    updateAnswerVisibility();
+    metaEl.textContent = "❌ Failed to send request.";
+    answerSection.scrollTop = answerSection.scrollHeight;
+  } finally {
+    askBtn.disabled = false;
+    stopBtn.style.display = 'none';
+    activePort = null;
+  }
+}
+
+// ---- Ask button ----
+askBtn.addEventListener("click", askQuestion);
+
+// ---- Stop button ----
+stopBtn.addEventListener("click", () => {
+  if (activePort) {
+    activePort.disconnect();
+    activePort = null;
+    stopBtn.style.display = 'none';
+    askBtn.disabled = false;
+    metaEl.textContent = "⚠️ Generation stopped by user.";
+    hideTypingIndicator();
+    showToast('Generation stopped', 'info');
+  }
+});
+
+// ---- Summarize Page button ----
+const summarizeBtn = document.getElementById("summarizeBtn");
+if (summarizeBtn) {
+  summarizeBtn.addEventListener("click", async () => {
+    // Track start time
+    const startTime = Date.now();
+
+    // Disable button during processing
+    summarizeBtn.disabled = true;
+    askBtn.disabled = true;
+
+    // Step 1: Show preparation
+    metaEl.textContent = "🔄 Extracting page content...";
+
+    // Move typing indicator to bottom of answer section
+    showAnswerBox();
+    answerEl.appendChild(typingIndicator);
+    showTypingIndicator();
+    answerSection.scrollTop = answerSection.scrollHeight;
+
+    try {
+      // Get current tab ID
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+
+      if (!tabId) {
+        throw new Error("Could not get active tab");
+      }
+
+      // Step 2: Sending to OpenRouter
+      metaEl.textContent = "📤 Sending to OpenRouter for summarization (this may take longer for large pages)...";
+      await new Promise(resolve => setTimeout(resolve, 200)); // Brief pause for UX
+
+      const res = await chrome.runtime.sendMessage({
+        type: "summarize_page",
+        tabId,
+        webSearch: webSearchEnabled,
+        reasoning: reasoningEnabled
+      });
+
+      // Step 3: Processing response
+      metaEl.textContent = "⚙️ Processing response...";
+      await new Promise(resolve => setTimeout(resolve, 100)); // Brief pause for UX
+
+      hideTypingIndicator();
+
+      // Calculate elapsed time
+      const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+      if (!res?.ok) {
+        // Check if permission is needed
+        if (res?.requiresPermission && res?.url) {
+          metaEl.textContent = "🔐 Requesting permission to access page...";
+
+          // Request permission
+          const permResponse = await chrome.runtime.sendMessage({
+            type: "request_permission",
+            url: res.url
+          });
+
+          if (permResponse?.ok && permResponse?.granted) {
+            // Permission granted, retry the summarization
+            metaEl.textContent = "✅ Permission granted! Retrying...";
+            toast.success("Permission granted! Retrying page summarization...");
+
+            // Wait a bit for user feedback
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Retry the summarization
+            showTypingIndicator();
+            metaEl.textContent = "📤 Sending to OpenRouter for summarization...";
+
+            const retryRes = await chrome.runtime.sendMessage({
+              type: "summarize_page",
+              tabId,
+              webSearch: webSearchEnabled,
+              reasoning: reasoningEnabled
+            });
+
+            hideTypingIndicator();
+
+            if (!retryRes?.ok) {
+              const errorHtml = `<div class="answer-item error-item">
+                <div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div>
+                <div class="answer-content">${escapeHtml(retryRes?.error || "Unknown error")}</div>
+              </div>`;
+              answerEl.insertAdjacentHTML('beforeend', errorHtml);
+              updateAnswerVisibility();
+              metaEl.textContent = "❌ Error summarizing page.";
+              answerSection.scrollTop = answerSection.scrollHeight;
+              summarizeBtn.disabled = false;
+              askBtn.disabled = false;
+              return;
+            }
+
+            // Use the retry response for rendering
+            res.ok = retryRes.ok;
+            res.answer = retryRes.answer;
+            res.model = retryRes.model;
+            res.tokens = retryRes.tokens;
+            res.contextSize = retryRes.contextSize;
+          } else {
+            // Permission denied
+            const errorHtml = `<div class="answer-item error-item">
+              <div class="answer-meta">Permission Denied - ${new Date().toLocaleTimeString()}</div>
+              <div class="answer-content">You need to grant permission for this extension to access the page content. Please click "Summarize Page" again and allow access when prompted.</div>
+            </div>`;
+            answerEl.insertAdjacentHTML('beforeend', errorHtml);
+            updateAnswerVisibility();
+            metaEl.textContent = "❌ Permission denied.";
+            toast.error("Permission denied. Click Summarize Page again to retry.");
+            answerSection.scrollTop = answerSection.scrollHeight;
+            summarizeBtn.disabled = false;
+            askBtn.disabled = false;
+            return;
+          }
+        } else {
+          // Regular error
+          const errorHtml = `<div class="answer-item error-item">
+            <div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div>
+            <div class="answer-content">${escapeHtml(res?.error || "Unknown error")}</div>
+          </div>`;
+          answerEl.insertAdjacentHTML('beforeend', errorHtml);
+          updateAnswerVisibility();
+          metaEl.textContent = "❌ Error summarizing page.";
+          answerSection.scrollTop = answerSection.scrollHeight;
+          summarizeBtn.disabled = false;
+          askBtn.disabled = false;
+          return;
+        }
+      }
+
+      if (res?.ok) {
+        // Step 4: Rendering answer
+        metaEl.textContent = "✨ Rendering summary...";
+
+        // Create new answer item
+        const answerItem = document.createElement("div");
+        answerItem.className = "answer-item";
+        const contextBadge = res.contextSize > 2 ? `<span class="answer-context-badge" title="${res.contextSize} messages in conversation context">🧠 ${Math.floor(res.contextSize / 2)} Q&A</span>` : '';
+        answerItem.innerHTML = `
+          <div class="answer-meta">
+            <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${res.model || "default model"}</span>
+            <button class="copy-answer-btn" title="Copy answer to clipboard">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="answer-content"></div>
+          <div class="answer-footer">
+            <div class="answer-stats">
+              <span class="answer-time">${elapsedTime}s</span>
+              <span class="answer-tokens">${res.tokens || '—'} tokens</span>
+              ${contextBadge}
+            </div>
+            <div class="token-usage-bar" role="progressbar" aria-valuenow="${res.tokens ? Math.round(Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100)) : 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
+              <div class="token-usage-fill" style="width: ${res.tokens ? Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100) : 0}%; background: ${res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.5 ? 'linear-gradient(90deg, #22c55e, #16a34a)' : res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.8 ? 'linear-gradient(90deg, #eab308, #ca8a04)' : 'linear-gradient(90deg, #ef4444, #dc2626)'};"></div>
+            </div>
+          </div>
+        `;
+        answerEl.appendChild(answerItem);
+
+        const answerContent = answerItem.querySelector(".answer-content");
+
+        // Extract sources and clean the answer text
+        const fullAnswer = res.answer;
+        const { sources, cleanText } = extractSources(fullAnswer);
+
+        // Use optimized streaming render (applies markdown once at end)
+        await renderStreamingText(answerContent, cleanText);
+
+        updateAnswerVisibility();
+
+        // Display context info in meta
+        const contextInfo = res.contextSize > 2 ? ` (${Math.floor(res.contextSize / 2)} previous Q&A in context)` : '';
+        metaEl.textContent = `✅ Page summarized using ${res.model || "default model"}${contextInfo}.`;
+
+        // Update context visualization
+        if (contextViz && res.contextSize) {
+          contextViz.update(res.contextSize, 'assistant');
+        }
+
+        // Display sources indicator and make [number] references clickable
+        if (sources.length > 0) {
+          // Make [number] references in the answer clickable
+          makeSourceReferencesClickable(answerContent, sources);
+
+          // Add sources indicator at the bottom
+          const sourcesIndicator = createSourcesIndicator(sources, answerItem);
+          if (sourcesIndicator) {
+            answerItem.appendChild(sourcesIndicator);
+          }
+        }
+
+        // Show success toast
+        toast.success(`Page summarized using ${res.model || "default model"}`);
+
+        // Scroll to bottom to show newest answer
+        answerSection.scrollTop = answerSection.scrollHeight;
+
+        // Update balance
+        await refreshBalance();
+      }
+    } catch (e) {
+      console.error("Error summarizing page:", e);
+      hideTypingIndicator();
+      const errorHtml = `<div class="answer-item error-item">
+        <div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div>
+        <div class="answer-content">${escapeHtml(e?.message || String(e))}</div>
+      </div>`;
+      answerEl.insertAdjacentHTML('beforeend', errorHtml);
+      updateAnswerVisibility();
+      metaEl.textContent = "❌ Failed to summarize page.";
+      answerSection.scrollTop = answerSection.scrollHeight;
+    } finally {
+      summarizeBtn.disabled = false;
+      askBtn.disabled = false;
+    }
+  });
+}
+
+// ---- Auto-resize textarea ----
+function autoResizeTextarea() {
+  // Reset height to auto to get the correct scrollHeight
+  promptEl.style.height = 'auto';
+  // Set height to scrollHeight, using constants for limits
+  const newHeight = Math.min(promptEl.scrollHeight, UI_CONSTANTS.TEXTAREA_MAX_HEIGHT);
+  promptEl.style.height = newHeight + 'px';
+}
+
+// Update token estimation display
+function updateTokenEstimation() {
+  const text = promptEl.value.trim();
+  if (text.length > 0) {
+    const tokens = estimateTokens(text);
+    estimatedCostEl.textContent = `~${tokens} tokens`;
+    estimatedCostEl.style.display = 'block';
+  } else {
+    estimatedCostEl.style.display = 'none';
+  }
+}
+
+// Create debounced version for performance
+const debouncedTokenEstimation = typeof debounce === 'function'
+  ? debounce(updateTokenEstimation, UI_CONSTANTS.DEBOUNCE_DELAY)
+  : updateTokenEstimation;
+
+// Auto-resize on input and show estimated cost
+promptEl.addEventListener("input", () => {
+  autoResizeTextarea(); // Always resize immediately for better UX
+  debouncedTokenEstimation(); // Debounce token calculation
+});
+
+// ---- Keyboard shortcuts ----
+promptEl.addEventListener("keydown", (e) => {
+  // Ctrl/Cmd+Enter to send
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    askQuestion();
+    return;
+  }
+
+  // Enter to send (Shift+Enter for new line)
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    askQuestion();
+  }
+});
+
+// Global keyboard shortcuts
+document.addEventListener("keydown", (e) => {
+  // Ctrl/Cmd + K to clear answers
+  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+    e.preventDefault();
+    const clearBtn = document.getElementById("clear-answer-btn");
+    if (clearBtn && clearBtn.style.display !== "none") {
+      clearBtn.click();
+    }
+  }
+
+  // Escape to focus prompt input
+  if (e.key === "Escape") {
+    promptEl.focus();
+  }
+
+  // Ctrl/Cmd + / for help (show available shortcuts)
+  if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+    e.preventDefault();
+    metaEl.textContent = "⌨️ Shortcuts: Enter=Send | Shift+Enter=New Line | Ctrl+K=Clear | Esc=Focus Input";
+    setTimeout(() => {
+      metaEl.textContent = "";
+    }, 5000);
+  }
+});
+
+// ---- Model loading and selection ----
+async function loadModels() {
+  try {
+    modelStatusEl.textContent = "Loading models...";
+    const res = await chrome.runtime.sendMessage({ type: "get_models" });
+
+    if (!res?.ok) {
+      modelStatusEl.textContent = res?.error || "Failed to load models";
+      return;
+    }
+
+    const models = res.models || [];
+
+    // Get favorites from storage
+    const favData = await chrome.storage.sync.get(["or_favorites"]);
+    const favorites = favData.or_favorites || [];
+
+    // Initialize ModelDropdownManager if not already done
+    if (!modelDropdown) {
+      modelDropdown = new ModelDropdownManager({
+        inputElement: modelInput,
+        containerType: 'sidebar',
+        onModelSelect: async (modelId) => {
+          // Update input field
+          if (modelInput) {
+            modelInput.value = modelId;
+          }
+
+          // Send to background
+          try {
+            const res = await chrome.runtime.sendMessage({
+              type: "set_model",
+              model: modelId
+            });
+
+            if (res?.ok) {
+              modelStatusEl.textContent = `Using: ${modelId}`;
+              return true; // Indicate success
+            } else {
+              modelStatusEl.textContent = "Failed to set model";
+              return false;
+            }
+          } catch (e) {
+            console.error("Error setting model:", e);
+            modelStatusEl.textContent = "Error setting model";
+            return false;
+          }
+        }
+      });
+    }
+
+    // Set models and favorites in the dropdown manager
+    modelDropdown.setModels(models);
+    modelDropdown.setFavorites(favorites);
+
+    // Get and set current model from storage
+    const cfgRes = await chrome.runtime.sendMessage({ type: "get_config" });
+    if (cfgRes?.ok && cfgRes.config?.model) {
+      if (modelInput) {
+        modelInput.value = cfgRes.config.model;
+      }
+      modelStatusEl.textContent = `Using: ${cfgRes.config.model}`;
+    } else {
+      modelStatusEl.textContent = "Ready";
+    }
+  } catch (e) {
+    console.error("Error loading models:", e);
+    modelStatusEl.textContent = "Error loading models";
+  }
+}
+
+// ---- Web Search and Reasoning toggles ----
+async function loadToggleSettings() {
+  try {
+    const settings = await chrome.storage.local.get(["webSearchEnabled", "reasoningEnabled"]);
+    webSearchEnabled = settings.webSearchEnabled || false;
+    reasoningEnabled = settings.reasoningEnabled || false;
+
+    if (webSearchEnabled) {
+      webSearchToggle.classList.add("active");
+    }
+    webSearchToggle.setAttribute('aria-pressed', webSearchEnabled.toString());
+
+    if (reasoningEnabled) {
+      reasoningToggle.classList.add("active");
+    }
+    reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
+  } catch (e) {
+    console.error("Error loading toggle settings:", e);
+  }
+}
+
+async function saveToggleSettings() {
+  try {
+    await chrome.storage.local.set({
+      webSearchEnabled,
+      reasoningEnabled
+    });
+  } catch (e) {
+    console.error("Error saving toggle settings:", e);
+  }
+}
+
+webSearchToggle.addEventListener("click", async () => {
+  webSearchEnabled = !webSearchEnabled;
+  webSearchToggle.classList.toggle("active");
+  webSearchToggle.setAttribute('aria-pressed', webSearchEnabled.toString());
+  await saveToggleSettings();
+});
+
+reasoningToggle.addEventListener("click", async () => {
+  reasoningEnabled = !reasoningEnabled;
+  reasoningToggle.classList.toggle("active");
+  reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
+  await saveToggleSettings();
+});
+
+// ---- Settings icon click ----
+settingsIcon.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
+
+// ---- Spaces button - open Spaces page ----
+const spacesBtn = document.getElementById('spaces-btn');
+if (spacesBtn) {
+  const openSpacesPage = async () => {
+    const spacesUrl = chrome.runtime.getURL('src/spaces/spaces.html');
+    const tabs = await chrome.tabs.query({ url: spacesUrl });
+
+    if (tabs.length > 0) {
+      // Focus existing tab
+      chrome.tabs.update(tabs[0].id, { active: true });
+      chrome.windows.update(tabs[0].windowId, { focused: true });
+    } else {
+      // Open new tab
+      chrome.tabs.create({ url: spacesUrl });
+    }
+  };
+
+  spacesBtn.addEventListener('click', openSpacesPage);
+  spacesBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openSpacesPage();
+    }
+  });
+}
+
+// ---- Clear answer button functionality ----
+const clearAnswerBtn = document.getElementById("clear-answer-btn");
+let pendingClearTimeout = null;
+let savedAnswersHtml = null;
+
+if (clearAnswerBtn) {
+  clearAnswerBtn.addEventListener("click", async () => {
+    // Store current state for potential undo
+    savedAnswersHtml = answerEl.innerHTML;
+
+    // Clear UI immediately
+    answerEl.innerHTML = "";
+    updateAnswerVisibility();
+    metaEl.textContent = "Answers cleared.";
+
+    // Cancel any previous pending clear
+    if (pendingClearTimeout) {
+      clearTimeout(pendingClearTimeout);
+    }
+
+    // Show undo toast
+    showToast('Conversation cleared', 'info', {
+      duration: 5000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          // Cancel the pending clear
+          if (pendingClearTimeout) {
+            clearTimeout(pendingClearTimeout);
+            pendingClearTimeout = null;
+          }
+          // Restore the saved answers
+          if (savedAnswersHtml) {
+            answerEl.innerHTML = savedAnswersHtml;
+            updateAnswerVisibility();
+            metaEl.textContent = "Answers restored.";
+            savedAnswersHtml = null;
+          }
+        }
+      }
+    });
+
+    // Schedule actual context clear after 5 seconds
+    pendingClearTimeout = setTimeout(async () => {
+      pendingClearTimeout = null;
+      savedAnswersHtml = null;
+
+      // Clear conversation context in background
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tabId = tabs[0]?.id || 'default';
+        await chrome.runtime.sendMessage({
+          type: "clear_context",
+          tabId
+        });
+
+        // Reset context visualization
+        if (contextViz) {
+          contextViz.update(0, 'user');
+        }
+      } catch (e) {
+        console.error("Error clearing context:", e);
+      }
+    }, 5000);
+  });
+}
+
+// ---- Typing indicator ----
+function showTypingIndicator() {
+  typingIndicator.classList.add("active");
+}
+
+function hideTypingIndicator() {
+  typingIndicator.classList.remove("active");
+}
+
+// ---- Initial load ----
+document.addEventListener("DOMContentLoaded", () => {
+  // Hide answer box initially if empty
+  updateAnswerVisibility();
+
+  // Load toggle settings
+  loadToggleSettings();
+
+  refreshBalance();
+  loadModels();
+
+  // Initialize context visualization
+  const contextVizContainer = document.getElementById('context-viz-section');
+  if (contextVizContainer) {
+    contextViz = new ContextVisualization(contextVizContainer);
+  }
+});
