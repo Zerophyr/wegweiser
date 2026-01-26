@@ -10,6 +10,18 @@ const STORAGE_KEYS = {
 
 const MAX_STORAGE_BYTES = 10485760; // 10MB
 
+// Common emojis for space icons
+const SPACE_EMOJIS = [
+  '📁', '📂', '📋', '📝', '📚', '📖', '📓', '📒',
+  '💼', '🗂️', '🗃️', '📊', '📈', '📉', '🧮', '💡',
+  '🎯', '🚀', '⭐', '🌟', '💫', '✨', '🔥', '💪',
+  '🧠', '💭', '💬', '🗣️', '👥', '🤝', '🎓', '🏆',
+  '🔬', '🔭', '🧪', '⚗️', '🔧', '🔨', '⚙️', '🛠️',
+  '💻', '🖥️', '📱', '🌐', '🔗', '📡', '🎮', '🎨',
+  '🎵', '🎬', '📷', '🎤', '✏️', '🖊️', '🖌️', '📐',
+  '🏠', '🏢', '🏗️', '🌳', '🌍', '🌎', '🌏', '☀️'
+];
+
 // ============ UTILITY FUNCTIONS ============
 
 function generateId(prefix) {
@@ -108,6 +120,7 @@ async function createSpace(data) {
     id: generateId('space'),
     name: data.name,
     description: data.description || '',
+    icon: data.icon || '📁',
     model: data.model || '',
     customInstructions: data.customInstructions || '',
     createdAt: Date.now(),
@@ -263,6 +276,10 @@ function initElements() {
   elements.spaceDescription = document.getElementById('space-description');
   elements.spaceModel = document.getElementById('space-model');
   elements.spaceInstructions = document.getElementById('space-instructions');
+  elements.spaceIcon = document.getElementById('space-icon');
+  elements.iconPreview = document.getElementById('icon-preview');
+  elements.emojiGrid = document.getElementById('emoji-grid');
+  elements.emojiGridInner = document.getElementById('emoji-grid-inner');
   elements.modalCancel = document.getElementById('modal-cancel');
   elements.modalSave = document.getElementById('modal-save');
 
@@ -317,23 +334,27 @@ async function renderSpacesList() {
   const cardsHtml = await Promise.all(spaces.map(async space => {
     const threadCount = await getThreadCount(space.id);
     const modelName = space.model ? space.model.split('/').pop() : 'Default model';
+    const spaceIcon = space.icon || '📁';
 
     return `
       <div class="space-card" data-space-id="${space.id}">
-        <div class="space-card-header">
-          <h3 class="space-card-name">${escapeHtml(space.name)}</h3>
-          <div class="space-card-menu menu-dropdown">
-            <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
-            <div class="menu-items" style="display: none;">
-              <button class="menu-item" onclick="event.stopPropagation(); openEditSpaceModal('${space.id}')">Edit</button>
-              <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('space', '${space.id}')">Delete</button>
+        <div class="space-card-icon">${spaceIcon}</div>
+        <div class="space-card-content">
+          <div class="space-card-header">
+            <h3 class="space-card-name">${escapeHtml(space.name)}</h3>
+            <div class="space-card-menu menu-dropdown">
+              <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
+              <div class="menu-items" style="display: none;">
+                <button class="menu-item" onclick="event.stopPropagation(); openEditSpaceModal('${space.id}')">Edit</button>
+                <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('space', '${space.id}')">Delete</button>
+              </div>
             </div>
           </div>
-        </div>
-        <p class="space-card-description">${escapeHtml(space.description) || 'No description'}</p>
-        <div class="space-card-footer">
-          <span class="space-card-model">🤖 ${escapeHtml(modelName)}</span>
-          <span class="space-card-threads">${threadCount} thread${threadCount !== 1 ? 's' : ''}</span>
+          <p class="space-card-description">${escapeHtml(space.description) || 'No description'}</p>
+          <div class="space-card-meta">
+            <span class="space-card-model">🤖 ${escapeHtml(modelName)}</span>
+            <span class="space-card-threads">${threadCount} thread${threadCount !== 1 ? 's' : ''}</span>
+          </div>
         </div>
       </div>
     `;
@@ -520,6 +541,10 @@ function openCreateSpaceModal() {
   elements.modalTitle.textContent = 'Create Space';
   elements.modalSave.textContent = 'Create Space';
   elements.spaceForm.reset();
+  // Reset icon to default
+  elements.spaceIcon.value = '📁';
+  elements.iconPreview.textContent = '📁';
+  elements.emojiGrid.classList.remove('show');
   elements.spaceModal.style.display = 'flex';
   elements.spaceName.focus();
 }
@@ -534,8 +559,11 @@ async function openEditSpaceModal(spaceId) {
 
   elements.spaceName.value = space.name;
   elements.spaceDescription.value = space.description;
+  elements.spaceIcon.value = space.icon || '📁';
+  elements.iconPreview.textContent = space.icon || '📁';
   elements.spaceModel.value = space.model;
   elements.spaceInstructions.value = space.customInstructions;
+  elements.emojiGrid.classList.remove('show');
 
   elements.spaceModal.style.display = 'flex';
   elements.spaceName.focus();
@@ -552,6 +580,7 @@ async function handleSpaceFormSubmit(e) {
   const data = {
     name: elements.spaceName.value.trim(),
     description: elements.spaceDescription.value.trim(),
+    icon: elements.spaceIcon.value || '📁',
     model: elements.spaceModel.value,
     customInstructions: elements.spaceInstructions.value.trim()
   };
@@ -690,6 +719,39 @@ async function loadModels() {
   } catch (err) {
     console.error('Error loading models:', err);
   }
+}
+
+// ============ EMOJI PICKER ============
+
+function setupEmojiPicker() {
+  // Populate emoji grid
+  elements.emojiGridInner.innerHTML = SPACE_EMOJIS.map(emoji =>
+    `<button type="button" class="emoji-btn" data-emoji="${emoji}">${emoji}</button>`
+  ).join('');
+
+  // Toggle emoji grid on icon preview click
+  elements.iconPreview.addEventListener('click', (e) => {
+    e.stopPropagation();
+    elements.emojiGrid.classList.toggle('show');
+  });
+
+  // Select emoji
+  elements.emojiGridInner.addEventListener('click', (e) => {
+    const btn = e.target.closest('.emoji-btn');
+    if (btn) {
+      const emoji = btn.dataset.emoji;
+      elements.spaceIcon.value = emoji;
+      elements.iconPreview.textContent = emoji;
+      elements.emojiGrid.classList.remove('show');
+    }
+  });
+
+  // Close emoji grid when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.icon-picker-wrapper')) {
+      elements.emojiGrid.classList.remove('show');
+    }
+  });
 }
 
 // ============ EVENT BINDINGS ============
@@ -920,6 +982,7 @@ async function init() {
   initElements();
   bindEvents();
   setupChatInput();
+  setupEmojiPicker();
 
   // Initialize theme
   if (typeof initTheme === 'function') {

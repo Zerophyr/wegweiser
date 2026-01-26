@@ -91,6 +91,21 @@
         <button class="modal-close" id="modal-close">&times;</button>
       </div>
       <form id="space-form">
+        <div class="icon-picker-group">
+          <label class="icon-picker-label">Icon</label>
+          <div class="icon-picker-wrapper">
+            <div class="icon-picker-container">
+              <div class="icon-preview" id="icon-preview" title="Click to change icon">📁</div>
+              <span class="text-muted">Click to choose an emoji</span>
+            </div>
+            <div class="emoji-grid" id="emoji-grid">
+              <div class="emoji-grid-inner" id="emoji-grid-inner">
+                <!-- Emojis will be inserted by JS -->
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="space-icon" value="📁">
+        </div>
         <div class="form-group">
           <label for="space-name">Name *</label>
           <input type="text" id="space-name" required placeholder="e.g., Project Research">
