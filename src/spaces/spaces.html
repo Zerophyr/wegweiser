@@ -73,10 +73,24 @@
             <!-- Messages will be inserted here -->
           </div>
 
-          <div class="chat-input-container">
-            <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
-            <button id="send-btn" class="btn btn-primary">Send</button>
-            <button id="stop-btn" class="btn btn-danger" style="display: none;">Stop</button>
+          <div class="chat-input-wrapper">
+            <div class="chat-toggles">
+              <label class="chat-toggle">
+                <input type="checkbox" id="chat-web-search">
+                <span class="chat-toggle-switch"></span>
+                <span class="chat-toggle-text">Web Search</span>
+              </label>
+              <label class="chat-toggle">
+                <input type="checkbox" id="chat-reasoning">
+                <span class="chat-toggle-switch"></span>
+                <span class="chat-toggle-text">Reasoning</span>
+              </label>
+            </div>
+            <div class="chat-input-container">
+              <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+              <button id="send-btn" class="btn btn-primary">Send</button>
+              <button id="stop-btn" class="btn btn-danger" style="display: none;">Stop</button>
+            </div>
           </div>
         </div>
       </main>
@@ -123,6 +137,22 @@
         <div class="form-group">
           <label for="space-instructions">Custom Instructions</label>
           <textarea id="space-instructions" rows="3" placeholder="Optional instructions for AI responses in this space"></textarea>
+        </div>
+        <div class="form-group-row">
+          <div class="toggle-group">
+            <label class="toggle-label">
+              <input type="checkbox" id="space-web-search">
+              <span class="toggle-switch"></span>
+              <span class="toggle-text">Web Search</span>
+            </label>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle-label">
+              <input type="checkbox" id="space-reasoning">
+              <span class="toggle-switch"></span>
+              <span class="toggle-text">Reasoning</span>
+            </label>
+          </div>
         </div>
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
@@ -177,6 +207,7 @@
   <script src="../lib/purify.min.js"></script>
   <script src="../modules/toast.js"></script>
   <script src="../modules/markdown.js"></script>
+  <script src="../modules/sources.js"></script>
   <script src="../modules/theme.js"></script>
   <script src="../shared/utils.js"></script>
   <script src="spaces.js"></script>

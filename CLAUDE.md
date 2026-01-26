@@ -226,7 +226,8 @@ The extension uses **optional host permissions** for the "Summarize Page" featur
 - Chrome Web Store compliance: preferred over broad `host_permissions`
 
 ## Version History Context
-The codebase is currently at **v1.0.0** with these major milestones:
+The codebase is currently at **v1.1.0** with these major milestones:
+- **v1.1.0**: Spaces UI improvements - 5-column grid layout, emoji icons, web search/reasoning toggles, source citations, copy button, clean URL removal
 - **v1.0.0**: Spaces feature - full-page experience for organizing conversations by project
 - **v0.9.1**: DOMPurify integration, comprehensive unit tests (101 tests)
 - **v0.9.0**: Copy button, stop generation, token estimation, accessibility improvements

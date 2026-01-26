@@ -42,6 +42,14 @@ function formatRelativeTime(timestamp) {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function formatDate(timestamp) {
+  const date = new Date(timestamp);
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const year = date.getFullYear();
+  return `${day}. ${month}. ${year}`;
+}
+
 function truncateText(text, maxLength) {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength).trim() + '...';
@@ -123,6 +131,8 @@ async function createSpace(data) {
     icon: data.icon || '📁',
     model: data.model || '',
     customInstructions: data.customInstructions || '',
+    webSearch: data.webSearch || false,
+    reasoning: data.reasoning || false,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
@@ -266,6 +276,8 @@ function initElements() {
   elements.chatInput = document.getElementById('chat-input');
   elements.sendBtn = document.getElementById('send-btn');
   elements.stopBtn = document.getElementById('stop-btn');
+  elements.chatWebSearch = document.getElementById('chat-web-search');
+  elements.chatReasoning = document.getElementById('chat-reasoning');
 
   // Space modal
   elements.spaceModal = document.getElementById('space-modal');
@@ -280,6 +292,8 @@ function initElements() {
   elements.iconPreview = document.getElementById('icon-preview');
   elements.emojiGrid = document.getElementById('emoji-grid');
   elements.emojiGridInner = document.getElementById('emoji-grid-inner');
+  elements.spaceWebSearch = document.getElementById('space-web-search');
+  elements.spaceReasoning = document.getElementById('space-reasoning');
   elements.modalCancel = document.getElementById('modal-cancel');
   elements.modalSave = document.getElementById('modal-save');
 
@@ -334,22 +348,28 @@ async function renderSpacesList() {
   const cardsHtml = await Promise.all(spaces.map(async space => {
     const modelName = space.model ? space.model.split('/').pop() : 'Default';
     const spaceIcon = space.icon || '📁';
+    const dateStr = formatDate(space.updatedAt);
 
     return `
       <div class="space-card" data-space-id="${space.id}">
         <div class="space-card-icon">${spaceIcon}</div>
+        <div class="space-card-menu menu-dropdown">
+          <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
+          <div class="menu-items" style="display: none;">
+            <button class="menu-item" data-action="edit" data-space-id="${space.id}">Edit</button>
+            <button class="menu-item danger" data-action="delete" data-space-id="${space.id}">Delete</button>
+          </div>
+        </div>
         <div class="space-card-content">
           <div class="space-card-info">
             <h3 class="space-card-name">${escapeHtml(space.name)}</h3>
-            <p class="space-card-description">${escapeHtml(space.description) || 'No description'}</p>
           </div>
-          <span class="space-card-model">${escapeHtml(modelName)}</span>
-          <div class="space-card-menu menu-dropdown">
-            <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
-            <div class="menu-items" style="display: none;">
-              <button class="menu-item" onclick="event.stopPropagation(); openEditSpaceModal('${space.id}')">Edit</button>
-              <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('space', '${space.id}')">Delete</button>
-            </div>
+          <div class="space-card-footer">
+            <span class="space-card-date">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
+              ${dateStr}
+            </span>
+            <span class="space-card-model">${escapeHtml(modelName)}</span>
           </div>
         </div>
       </div>
@@ -358,13 +378,40 @@ async function renderSpacesList() {
 
   elements.spacesGrid.innerHTML = cardsHtml.join('');
 
-  // Add click handlers - but not on menu elements
+  // Add click handlers using event delegation
   document.querySelectorAll('.space-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // Don't navigate if clicking on menu or its children
-      if (e.target.closest('.menu-dropdown')) {
+      const target = e.target;
+
+      // Handle menu button click
+      if (target.closest('[data-action="toggle-menu"]')) {
+        e.stopPropagation();
+        toggleMenu(target.closest('[data-action="toggle-menu"]'));
         return;
       }
+
+      // Handle edit click
+      if (target.closest('[data-action="edit"]')) {
+        e.stopPropagation();
+        const spaceId = target.closest('[data-action="edit"]').dataset.spaceId;
+        openEditSpaceModal(spaceId);
+        return;
+      }
+
+      // Handle delete click
+      if (target.closest('[data-action="delete"]')) {
+        e.stopPropagation();
+        const spaceId = target.closest('[data-action="delete"]').dataset.spaceId;
+        openDeleteModal('space', spaceId);
+        return;
+      }
+
+      // Don't navigate if clicking on menu dropdown area
+      if (target.closest('.menu-dropdown')) {
+        return;
+      }
+
+      // Navigate to space
       const spaceId = card.dataset.spaceId;
       openSpace(spaceId);
     });
@@ -389,22 +436,49 @@ async function renderThreadList() {
       <h4 class="thread-title">${escapeHtml(thread.title)}</h4>
       <span class="thread-time">${formatRelativeTime(thread.updatedAt)}</span>
       <div class="thread-menu menu-dropdown">
-        <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
+        <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
         <div class="menu-items" style="display: none;">
-          <button class="menu-item" onclick="event.stopPropagation(); openRenameModal('${thread.id}')">Rename</button>
-          <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('thread', '${thread.id}')">Delete</button>
+          <button class="menu-item" data-action="rename" data-thread-id="${thread.id}">Rename</button>
+          <button class="menu-item danger" data-action="delete-thread" data-thread-id="${thread.id}">Delete</button>
         </div>
       </div>
     </div>
   `).join('');
 
-  // Add click handlers - but not on menu elements
+  // Add click handlers using event delegation
   document.querySelectorAll('.thread-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      // Don't navigate if clicking on menu or its children
-      if (e.target.closest('.menu-dropdown')) {
+      const target = e.target;
+
+      // Handle menu button click
+      if (target.closest('[data-action="toggle-menu"]')) {
+        e.stopPropagation();
+        toggleMenu(target.closest('[data-action="toggle-menu"]'));
         return;
       }
+
+      // Handle rename click
+      if (target.closest('[data-action="rename"]')) {
+        e.stopPropagation();
+        const threadId = target.closest('[data-action="rename"]').dataset.threadId;
+        openRenameModal(threadId);
+        return;
+      }
+
+      // Handle delete click
+      if (target.closest('[data-action="delete-thread"]')) {
+        e.stopPropagation();
+        const threadId = target.closest('[data-action="delete-thread"]').dataset.threadId;
+        openDeleteModal('thread', threadId);
+        return;
+      }
+
+      // Don't navigate if clicking on menu dropdown area
+      if (target.closest('.menu-dropdown')) {
+        return;
+      }
+
+      // Navigate to thread
       const threadId = item.dataset.threadId;
       openThread(threadId);
     });
@@ -417,11 +491,71 @@ function renderChatMessages(messages) {
     return;
   }
 
-  elements.chatMessages.innerHTML = messages.map(msg => `
-    <div class="chat-message chat-message-${msg.role}">
-      <div class="chat-bubble">${msg.role === 'assistant' ? applyMarkdownStyles(msg.content) : escapeHtml(msg.content)}</div>
-    </div>
-  `).join('');
+  elements.chatMessages.innerHTML = messages.map((msg, index) => {
+    if (msg.role === 'assistant') {
+      // Extract sources and clean text
+      const { sources, cleanText } = typeof extractSources === 'function'
+        ? extractSources(msg.content)
+        : { sources: [], cleanText: msg.content };
+
+      return `
+        <div class="chat-message chat-message-assistant" data-msg-index="${index}">
+          <div class="chat-bubble-wrapper">
+            <div class="chat-bubble" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
+            <button class="copy-btn" data-content="${escapeHtml(cleanText).replace(/"/g, '&quot;')}">
+              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              Copy
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="chat-message chat-message-user">
+          <div class="chat-bubble">${escapeHtml(msg.content)}</div>
+        </div>
+      `;
+    }
+  }).join('');
+
+  // Make source references clickable and add sources indicators
+  document.querySelectorAll('.chat-message-assistant .chat-bubble').forEach(bubble => {
+    try {
+      const sources = JSON.parse(bubble.dataset.sources || '[]');
+      if (sources.length > 0 && typeof makeSourceReferencesClickable === 'function') {
+        makeSourceReferencesClickable(bubble, sources);
+
+        // Add sources indicator
+        if (typeof createSourcesIndicator === 'function') {
+          const indicator = createSourcesIndicator(sources, bubble);
+          if (indicator) {
+            bubble.appendChild(indicator);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error processing sources:', e);
+    }
+  });
+
+  // Add copy button handlers
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const content = btn.dataset.content;
+      try {
+        await navigator.clipboard.writeText(content);
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
+        }, 2000);
+      } catch (err) {
+        showToast('Failed to copy', 'error');
+      }
+    });
+  });
 
   // Scroll to bottom
   elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
@@ -501,6 +635,13 @@ async function openThread(threadId) {
 
   currentThreadId = threadId;
 
+  // Set chat toggles from space settings
+  const space = await getSpace(currentSpaceId);
+  if (space) {
+    elements.chatWebSearch.checked = space.webSearch || false;
+    elements.chatReasoning.checked = space.reasoning || false;
+  }
+
   elements.chatEmptyState.style.display = 'none';
   elements.chatContainer.style.display = 'flex';
 
@@ -510,6 +651,13 @@ async function openThread(threadId) {
 
 async function createNewThread() {
   if (!currentSpaceId) return;
+
+  // Set chat toggles from space settings
+  const space = await getSpace(currentSpaceId);
+  if (space) {
+    elements.chatWebSearch.checked = space.webSearch || false;
+    elements.chatReasoning.checked = space.reasoning || false;
+  }
 
   const thread = await createThread(currentSpaceId);
   await renderThreadList();
@@ -549,6 +697,9 @@ function openCreateSpaceModal() {
   elements.spaceIcon.value = '📁';
   elements.iconPreview.textContent = '📁';
   elements.emojiGrid.classList.remove('show');
+  // Reset toggles
+  elements.spaceWebSearch.checked = false;
+  elements.spaceReasoning.checked = false;
   elements.spaceModal.style.display = 'flex';
   elements.spaceName.focus();
 }
@@ -567,6 +718,8 @@ async function openEditSpaceModal(spaceId) {
   elements.iconPreview.textContent = space.icon || '📁';
   elements.spaceModel.value = space.model;
   elements.spaceInstructions.value = space.customInstructions;
+  elements.spaceWebSearch.checked = space.webSearch || false;
+  elements.spaceReasoning.checked = space.reasoning || false;
   elements.emojiGrid.classList.remove('show');
 
   elements.spaceModal.style.display = 'flex';
@@ -586,7 +739,9 @@ async function handleSpaceFormSubmit(e) {
     description: elements.spaceDescription.value.trim(),
     icon: elements.spaceIcon.value || '📁',
     model: elements.spaceModel.value,
-    customInstructions: elements.spaceInstructions.value.trim()
+    customInstructions: elements.spaceInstructions.value.trim(),
+    webSearch: elements.spaceWebSearch.checked,
+    reasoning: elements.spaceReasoning.checked
   };
 
   if (!data.name) {
@@ -885,14 +1040,15 @@ async function streamMessage(content, space, thread) {
 
     let fullContent = '';
     let assistantBubble = null;
+    let messageDiv = null;
 
     // Remove typing indicator and add empty assistant message
     const indicator = document.getElementById('typing-indicator');
     if (indicator) indicator.remove();
 
-    const messageDiv = document.createElement('div');
+    messageDiv = document.createElement('div');
     messageDiv.className = 'chat-message chat-message-assistant';
-    messageDiv.innerHTML = '<div class="chat-bubble"></div>';
+    messageDiv.innerHTML = '<div class="chat-bubble-wrapper"><div class="chat-bubble"></div></div>';
     assistantBubble = messageDiv.querySelector('.chat-bubble');
     elements.chatMessages.appendChild(messageDiv);
 
@@ -907,6 +1063,50 @@ async function streamMessage(content, space, thread) {
           role: 'assistant',
           content: fullContent
         });
+
+        // Process sources and clean text
+        if (typeof extractSources === 'function') {
+          const { sources, cleanText } = extractSources(fullContent);
+          assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+
+          if (sources.length > 0) {
+            // Make references clickable
+            if (typeof makeSourceReferencesClickable === 'function') {
+              makeSourceReferencesClickable(assistantBubble, sources);
+            }
+
+            // Add sources indicator
+            if (typeof createSourcesIndicator === 'function') {
+              const sourcesIndicator = createSourcesIndicator(sources, messageDiv);
+              if (sourcesIndicator) {
+                assistantBubble.appendChild(sourcesIndicator);
+              }
+            }
+          }
+        }
+
+        // Add copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.dataset.content = typeof extractSources === 'function'
+          ? extractSources(fullContent).cleanText
+          : fullContent;
+        copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
+        copyBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(copyBtn.dataset.content);
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
+            setTimeout(() => {
+              copyBtn.classList.remove('copied');
+              copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
+            }, 2000);
+          } catch (err) {
+            showToast('Failed to copy', 'error');
+          }
+        });
+        messageDiv.querySelector('.chat-bubble-wrapper').appendChild(copyBtn);
 
         streamPort.disconnect();
         streamPort = null;
@@ -932,14 +1132,18 @@ async function streamMessage(content, space, thread) {
     }
     messages.push(...thread.messages);
 
+    // Use chat toggles (temporary override) instead of space settings
+    const webSearch = elements.chatWebSearch.checked;
+    const reasoning = elements.chatReasoning.checked;
+
     // Send stream request
     streamPort.postMessage({
       type: 'start_stream',
       prompt: content,
       messages: messages,
       model: space.model || null,
-      webSearch: false,
-      reasoning: false,
+      webSearch: webSearch,
+      reasoning: reasoning,
       tabId: `space_${space.id}`
     });
   });
@@ -1003,9 +1207,3 @@ async function init() {
 
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
-
-// Expose functions globally for onclick handlers in dynamic HTML
-window.toggleMenu = toggleMenu;
-window.openEditSpaceModal = openEditSpaceModal;
-window.openDeleteModal = openDeleteModal;
-window.openRenameModal = openRenameModal;

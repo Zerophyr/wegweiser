@@ -1,4 +1,4 @@
-# 🤖 OpenRouter Buddy v1.0.0
+# 🤖 OpenRouter Buddy v1.1.0
 
 > Your friendly AI companion powered by OpenRouter - chat with any model right from your browser sidebar!
 
@@ -12,11 +12,18 @@
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 
-### Spaces (v1.0.0)
+### Spaces (v1.1.0)
 - 🏠 **Spaces** - Organize conversations by project or topic in a full-page experience
+- 🎨 **5-Column Grid Layout** - Beautiful card-based overview with square cards
+- 😀 **Emoji Icons** - Custom emoji picker to easily identify spaces
 - 📁 **Multiple Threads** - Create and manage threads within each space
 - ⚙️ **Custom Instructions** - Set AI behavior per space with system prompts
 - 🤖 **Per-Space Models** - Choose different models for different projects
+- 🌐 **Per-Space Web Search** - Enable/disable web search per space
+- 🧠 **Per-Space Reasoning** - Enable/disable reasoning mode per space
+- 🔄 **Chat Toggles** - Temporarily override web search/reasoning per message
+- 🔗 **Source Citations** - Clickable [1], [2] references with clean URL removal
+- 📋 **Copy Answers** - One-click copy button for AI responses in threads
 - 💾 **Persistent Storage** - All conversations saved locally with unlimited history
 - 📊 **Storage Monitoring** - Visual usage tracking with tiered warnings (70%/85%/95%)
 
@@ -185,7 +192,18 @@ openrouter-sidepanel-ext/
 
 ## 📝 Changelog
 
-### v1.0.0 (Latest)
+### v1.1.0 (Latest)
+- 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards
+- 😀 **Emoji Icons** - Custom emoji picker for space icons
+- 🌐 **Web Search Toggle** - Enable/disable web search per space
+- 🧠 **Reasoning Toggle** - Enable/disable reasoning mode per space
+- 🔄 **Chat Toggles** - Temporarily override web search/reasoning above chat input
+- 🔗 **Source Citations** - Clickable citation numbers [1], [2] in spaces
+- 🧹 **Clean URLs** - Plain URLs removed from answers, only citations remain
+- 📋 **Copy Button** - Copy AI responses in space threads
+- 🎯 **Improved Sources** - Better URL extraction and cleanup in all responses
+
+### v1.0.0
 - 🏠 **Spaces Feature** - Full-page experience for organizing conversations by project
 - 📁 **Thread Management** - Create, rename, and delete threads within spaces
 - ⚙️ **Custom Instructions** - Per-space system prompts for AI behavior
@@ -285,4 +303,4 @@ A: Yes, you must use your own OpenRouter API key.
 
 **Made with ❤️ by the OpenRouter Buddy team**
 
-*Version 1.0.0 | January 2026*
+*Version 1.1.0 | January 2026*
