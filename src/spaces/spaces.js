@@ -332,28 +332,24 @@ async function renderSpacesList() {
   spaces.sort((a, b) => b.updatedAt - a.updatedAt);
 
   const cardsHtml = await Promise.all(spaces.map(async space => {
-    const threadCount = await getThreadCount(space.id);
-    const modelName = space.model ? space.model.split('/').pop() : 'Default model';
+    const modelName = space.model ? space.model.split('/').pop() : 'Default';
     const spaceIcon = space.icon || '📁';
 
     return `
       <div class="space-card" data-space-id="${space.id}">
         <div class="space-card-icon">${spaceIcon}</div>
         <div class="space-card-content">
-          <div class="space-card-header">
+          <div class="space-card-info">
             <h3 class="space-card-name">${escapeHtml(space.name)}</h3>
-            <div class="space-card-menu menu-dropdown">
-              <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
-              <div class="menu-items" style="display: none;">
-                <button class="menu-item" onclick="event.stopPropagation(); openEditSpaceModal('${space.id}')">Edit</button>
-                <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('space', '${space.id}')">Delete</button>
-              </div>
-            </div>
+            <p class="space-card-description">${escapeHtml(space.description) || 'No description'}</p>
           </div>
-          <p class="space-card-description">${escapeHtml(space.description) || 'No description'}</p>
-          <div class="space-card-meta">
-            <span class="space-card-model">🤖 ${escapeHtml(modelName)}</span>
-            <span class="space-card-threads">${threadCount} thread${threadCount !== 1 ? 's' : ''}</span>
+          <span class="space-card-model">${escapeHtml(modelName)}</span>
+          <div class="space-card-menu menu-dropdown">
+            <button class="menu-btn" onclick="event.stopPropagation(); toggleMenu(this)">&#8942;</button>
+            <div class="menu-items" style="display: none;">
+              <button class="menu-item" onclick="event.stopPropagation(); openEditSpaceModal('${space.id}')">Edit</button>
+              <button class="menu-item danger" onclick="event.stopPropagation(); openDeleteModal('space', '${space.id}')">Delete</button>
+            </div>
           </div>
         </div>
       </div>
@@ -362,9 +358,13 @@ async function renderSpacesList() {
 
   elements.spacesGrid.innerHTML = cardsHtml.join('');
 
-  // Add click handlers
+  // Add click handlers - but not on menu elements
   document.querySelectorAll('.space-card').forEach(card => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      // Don't navigate if clicking on menu or its children
+      if (e.target.closest('.menu-dropdown')) {
+        return;
+      }
       const spaceId = card.dataset.spaceId;
       openSpace(spaceId);
     });
@@ -398,9 +398,13 @@ async function renderThreadList() {
     </div>
   `).join('');
 
-  // Add click handlers
+  // Add click handlers - but not on menu elements
   document.querySelectorAll('.thread-item').forEach(item => {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (e) => {
+      // Don't navigate if clicking on menu or its children
+      if (e.target.closest('.menu-dropdown')) {
+        return;
+      }
       const threadId = item.dataset.threadId;
       openThread(threadId);
     });
