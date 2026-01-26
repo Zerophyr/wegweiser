@@ -1003,3 +1003,9 @@ async function init() {
 
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
+
+// Expose functions globally for onclick handlers in dynamic HTML
+window.toggleMenu = toggleMenu;
+window.openEditSpaceModal = openEditSpaceModal;
+window.openDeleteModal = openDeleteModal;
+window.openRenameModal = openRenameModal;
