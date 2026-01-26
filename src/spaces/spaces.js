@@ -749,3 +749,190 @@ function bindEvents() {
     }
   });
 }
+
+// ============ CHAT FUNCTIONALITY ============
+
+async function sendMessage() {
+  const content = elements.chatInput.value.trim();
+  if (!content || !currentThreadId || !currentSpaceId || isStreaming) return;
+
+  const space = await getSpace(currentSpaceId);
+  if (!space) return;
+
+  // Add user message to thread
+  await addMessageToThread(currentThreadId, {
+    role: 'user',
+    content
+  });
+
+  // Clear input
+  elements.chatInput.value = '';
+  elements.chatInput.style.height = 'auto';
+
+  // Re-render messages
+  const thread = await getThread(currentThreadId);
+  renderChatMessages(thread.messages);
+
+  // Show typing indicator
+  const typingIndicator = document.createElement('div');
+  typingIndicator.className = 'chat-message chat-message-assistant';
+  typingIndicator.id = 'typing-indicator';
+  typingIndicator.innerHTML = `
+    <div class="typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+  elements.chatMessages.appendChild(typingIndicator);
+  elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+  // Show stop button, hide send
+  elements.sendBtn.style.display = 'none';
+  elements.stopBtn.style.display = 'block';
+  isStreaming = true;
+
+  // Start streaming
+  try {
+    await streamMessage(content, space, thread);
+  } catch (err) {
+    console.error('Stream error:', err);
+    showToast(err.message || 'Failed to send message', 'error');
+  } finally {
+    // Remove typing indicator
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.remove();
+
+    // Restore buttons
+    elements.sendBtn.style.display = 'block';
+    elements.stopBtn.style.display = 'none';
+    isStreaming = false;
+
+    await renderThreadList();
+  }
+}
+
+async function streamMessage(content, space, thread) {
+  return new Promise((resolve, reject) => {
+    // Create port for streaming
+    streamPort = chrome.runtime.connect({ name: 'streaming' });
+
+    let fullContent = '';
+    let assistantBubble = null;
+
+    // Remove typing indicator and add empty assistant message
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.remove();
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message chat-message-assistant';
+    messageDiv.innerHTML = '<div class="chat-bubble"></div>';
+    assistantBubble = messageDiv.querySelector('.chat-bubble');
+    elements.chatMessages.appendChild(messageDiv);
+
+    streamPort.onMessage.addListener(async (msg) => {
+      if (msg.type === 'content') {
+        fullContent += msg.content;
+        assistantBubble.innerHTML = applyMarkdownStyles(fullContent);
+        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+      } else if (msg.type === 'complete') {
+        // Save assistant message to thread
+        await addMessageToThread(currentThreadId, {
+          role: 'assistant',
+          content: fullContent
+        });
+
+        streamPort.disconnect();
+        streamPort = null;
+        resolve();
+      } else if (msg.type === 'error') {
+        streamPort.disconnect();
+        streamPort = null;
+        reject(new Error(msg.error));
+      }
+    });
+
+    streamPort.onDisconnect.addListener(() => {
+      streamPort = null;
+      if (isStreaming) {
+        resolve(); // Might be stopped by user
+      }
+    });
+
+    // Build messages array with custom instructions
+    const messages = [];
+    if (space.customInstructions) {
+      messages.push({ role: 'system', content: space.customInstructions });
+    }
+    messages.push(...thread.messages);
+
+    // Send stream request
+    streamPort.postMessage({
+      type: 'start_stream',
+      prompt: content,
+      messages: messages,
+      model: space.model || null,
+      webSearch: false,
+      reasoning: false,
+      tabId: `space_${space.id}`
+    });
+  });
+}
+
+function stopStreaming() {
+  if (streamPort) {
+    streamPort.disconnect();
+    streamPort = null;
+  }
+  isStreaming = false;
+  elements.sendBtn.style.display = 'block';
+  elements.stopBtn.style.display = 'none';
+  showToast('Generation stopped', 'info');
+}
+
+// ============ CHAT INPUT HANDLERS ============
+
+function setupChatInput() {
+  // Auto-resize textarea
+  elements.chatInput.addEventListener('input', () => {
+    elements.chatInput.style.height = 'auto';
+    elements.chatInput.style.height = Math.min(elements.chatInput.scrollHeight, 200) + 'px';
+  });
+
+  // Send on Enter (Shift+Enter for new line)
+  elements.chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Send button
+  elements.sendBtn.addEventListener('click', sendMessage);
+
+  // Stop button
+  elements.stopBtn.addEventListener('click', stopStreaming);
+}
+
+// ============ INITIALIZATION ============
+
+async function init() {
+  initElements();
+  bindEvents();
+  setupChatInput();
+
+  // Initialize theme
+  if (typeof initTheme === 'function') {
+    initTheme();
+  }
+
+  // Load data
+  await loadModels();
+  await renderSpacesList();
+  await renderStorageUsage();
+
+  showView('list');
+}
+
+// Start the app
+document.addEventListener('DOMContentLoaded', init);
