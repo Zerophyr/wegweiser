@@ -446,3 +446,306 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ============ ACTIONS ============
+
+async function openSpace(spaceId) {
+  const space = await getSpace(spaceId);
+  if (!space) {
+    showToast('Space not found', 'error');
+    return;
+  }
+
+  currentSpaceId = spaceId;
+  currentThreadId = null;
+
+  elements.spaceTitle.textContent = space.name;
+  elements.chatEmptyState.style.display = 'flex';
+  elements.chatContainer.style.display = 'none';
+
+  showView('space');
+  await renderThreadList();
+}
+
+async function openThread(threadId) {
+  const thread = await getThread(threadId);
+  if (!thread) {
+    showToast('Thread not found', 'error');
+    return;
+  }
+
+  currentThreadId = threadId;
+
+  elements.chatEmptyState.style.display = 'none';
+  elements.chatContainer.style.display = 'flex';
+
+  renderChatMessages(thread.messages);
+  await renderThreadList(); // Update active state
+}
+
+async function createNewThread() {
+  if (!currentSpaceId) return;
+
+  const thread = await createThread(currentSpaceId);
+  await renderThreadList();
+  openThread(thread.id);
+  showToast('New thread created', 'success');
+}
+
+function toggleMenu(button) {
+  // Close all other menus
+  document.querySelectorAll('.menu-items').forEach(menu => {
+    if (menu !== button.nextElementSibling) {
+      menu.style.display = 'none';
+    }
+  });
+
+  const menu = button.nextElementSibling;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-dropdown')) {
+    document.querySelectorAll('.menu-items').forEach(menu => {
+      menu.style.display = 'none';
+    });
+  }
+});
+
+// ============ MODAL HANDLERS ============
+
+function openCreateSpaceModal() {
+  editingSpaceId = null;
+  elements.modalTitle.textContent = 'Create Space';
+  elements.modalSave.textContent = 'Create Space';
+  elements.spaceForm.reset();
+  elements.spaceModal.style.display = 'flex';
+  elements.spaceName.focus();
+}
+
+async function openEditSpaceModal(spaceId) {
+  const space = await getSpace(spaceId);
+  if (!space) return;
+
+  editingSpaceId = spaceId;
+  elements.modalTitle.textContent = 'Edit Space';
+  elements.modalSave.textContent = 'Save Changes';
+
+  elements.spaceName.value = space.name;
+  elements.spaceDescription.value = space.description;
+  elements.spaceModel.value = space.model;
+  elements.spaceInstructions.value = space.customInstructions;
+
+  elements.spaceModal.style.display = 'flex';
+  elements.spaceName.focus();
+}
+
+function closeSpaceModal() {
+  elements.spaceModal.style.display = 'none';
+  editingSpaceId = null;
+}
+
+async function handleSpaceFormSubmit(e) {
+  e.preventDefault();
+
+  const data = {
+    name: elements.spaceName.value.trim(),
+    description: elements.spaceDescription.value.trim(),
+    model: elements.spaceModel.value,
+    customInstructions: elements.spaceInstructions.value.trim()
+  };
+
+  if (!data.name) {
+    showToast('Name is required', 'error');
+    return;
+  }
+
+  try {
+    if (editingSpaceId) {
+      await updateSpace(editingSpaceId, data);
+      showToast('Space updated', 'success');
+
+      // Update title if viewing this space
+      if (currentSpaceId === editingSpaceId) {
+        elements.spaceTitle.textContent = data.name;
+      }
+    } else {
+      await createSpace(data);
+      showToast('Space created', 'success');
+    }
+
+    closeSpaceModal();
+    await renderSpacesList();
+    await renderStorageUsage();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function openRenameModal(threadId) {
+  const thread = await getThread(threadId);
+  if (!thread) return;
+
+  renamingThreadId = threadId;
+  elements.threadTitle.value = thread.title;
+  elements.renameModal.style.display = 'flex';
+  elements.threadTitle.focus();
+  elements.threadTitle.select();
+}
+
+function closeRenameModal() {
+  elements.renameModal.style.display = 'none';
+  renamingThreadId = null;
+}
+
+async function handleRenameFormSubmit(e) {
+  e.preventDefault();
+
+  const title = elements.threadTitle.value.trim();
+  if (!title) {
+    showToast('Title is required', 'error');
+    return;
+  }
+
+  try {
+    await updateThread(renamingThreadId, { title });
+    showToast('Thread renamed', 'success');
+    closeRenameModal();
+    await renderThreadList();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function openDeleteModal(type, id) {
+  deletingItem = { type, id };
+
+  if (type === 'space') {
+    const space = await getSpace(id);
+    const threadCount = await getThreadCount(id);
+    elements.deleteTitle.textContent = 'Delete Space';
+    elements.deleteMessage.textContent = `Are you sure you want to delete "${space.name}" and all its threads?`;
+    elements.deleteSize.textContent = `This will delete ${threadCount} thread${threadCount !== 1 ? 's' : ''}.`;
+  } else {
+    const thread = await getThread(id);
+    const size = await estimateItemSize(thread);
+    elements.deleteTitle.textContent = 'Delete Thread';
+    elements.deleteMessage.textContent = `Are you sure you want to delete "${thread.title}"?`;
+    elements.deleteSize.textContent = `This will free ~${(size / 1024).toFixed(1)}KB.`;
+  }
+
+  elements.deleteModal.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  elements.deleteModal.style.display = 'none';
+  deletingItem = null;
+}
+
+async function handleDeleteConfirm() {
+  if (!deletingItem) return;
+
+  try {
+    if (deletingItem.type === 'space') {
+      await deleteSpace(deletingItem.id);
+      showToast('Space deleted', 'success');
+
+      if (currentSpaceId === deletingItem.id) {
+        showView('list');
+      }
+      await renderSpacesList();
+    } else {
+      await deleteThread(deletingItem.id);
+      showToast('Thread deleted', 'success');
+
+      if (currentThreadId === deletingItem.id) {
+        currentThreadId = null;
+        elements.chatEmptyState.style.display = 'flex';
+        elements.chatContainer.style.display = 'none';
+      }
+      await renderThreadList();
+    }
+
+    closeDeleteModal();
+    await renderStorageUsage();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ============ MODEL LOADING ============
+
+async function loadModels() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'get_models' });
+    if (response.ok && response.models) {
+      const currentModel = (await chrome.storage.local.get([STORAGE_KEYS.MODEL]))[STORAGE_KEYS.MODEL] || '';
+
+      elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
+        response.models.map(m =>
+          `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
+        ).join('');
+    }
+  } catch (err) {
+    console.error('Error loading models:', err);
+  }
+}
+
+// ============ EVENT BINDINGS ============
+
+function bindEvents() {
+  // Create space buttons
+  elements.createSpaceBtn.addEventListener('click', openCreateSpaceModal);
+  elements.emptyCreateBtn.addEventListener('click', openCreateSpaceModal);
+
+  // Space modal
+  elements.modalClose.addEventListener('click', closeSpaceModal);
+  elements.modalCancel.addEventListener('click', closeSpaceModal);
+  elements.spaceForm.addEventListener('submit', handleSpaceFormSubmit);
+
+  // Rename modal
+  elements.renameModalClose.addEventListener('click', closeRenameModal);
+  elements.renameCancel.addEventListener('click', closeRenameModal);
+  elements.renameForm.addEventListener('submit', handleRenameFormSubmit);
+
+  // Delete modal
+  elements.deleteModalClose.addEventListener('click', closeDeleteModal);
+  elements.deleteCancel.addEventListener('click', closeDeleteModal);
+  elements.deleteConfirm.addEventListener('click', handleDeleteConfirm);
+
+  // Storage warning
+  elements.warningClose.addEventListener('click', hideStorageWarning);
+
+  // Space view
+  elements.backBtn.addEventListener('click', async () => {
+    showView('list');
+    await renderSpacesList();
+  });
+
+  elements.spaceSettingsBtn.addEventListener('click', () => {
+    if (currentSpaceId) {
+      openEditSpaceModal(currentSpaceId);
+    }
+  });
+
+  elements.newThreadBtn.addEventListener('click', createNewThread);
+
+  // Close modals on backdrop click
+  [elements.spaceModal, elements.renameModal, elements.deleteModal].forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  });
+
+  // Close modals on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSpaceModal();
+      closeRenameModal();
+      closeDeleteModal();
+    }
+  });
+}
