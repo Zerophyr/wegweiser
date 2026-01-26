@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "OpenRouter Buddy",
+  "version": "1.0.0",
+  "description": "AI companion for Chrome sidebar - chat with 100+ models, real-time streaming, markdown, themes, and smart features.",
+  "icons": {
+    "48": "icons/icon48.png"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://openrouter.ai/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "OpenRouter Sidepanel"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
