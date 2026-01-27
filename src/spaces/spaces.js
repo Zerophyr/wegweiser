@@ -542,8 +542,10 @@ function renderChatMessages(messages) {
         <div class="chat-message chat-message-assistant" data-msg-index="${index}">
           <div class="chat-bubble-wrapper">
             ${metaHtml}
-            <div class="chat-bubble" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
-            ${footerHtml}
+            <div class="chat-bubble">
+              <div class="chat-content" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
+              ${footerHtml}
+            </div>
             <button class="copy-btn" data-content="${escapeHtml(cleanText).replace(/"/g, '&quot;')}">
               <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
               Copy
@@ -561,17 +563,17 @@ function renderChatMessages(messages) {
   }).join('');
 
   // Make source references clickable and add sources indicators
-  document.querySelectorAll('.chat-message-assistant .chat-bubble').forEach(bubble => {
+  document.querySelectorAll('.chat-message-assistant .chat-content').forEach(contentEl => {
     try {
-      const sources = JSON.parse(bubble.dataset.sources || '[]');
+      const sources = JSON.parse(contentEl.dataset.sources || '[]');
       if (sources.length > 0 && typeof makeSourceReferencesClickable === 'function') {
-        makeSourceReferencesClickable(bubble, sources);
+        makeSourceReferencesClickable(contentEl, sources);
 
         // Add sources indicator
         if (typeof createSourcesIndicator === 'function') {
-          const indicator = createSourcesIndicator(sources, bubble);
+          const indicator = createSourcesIndicator(sources, contentEl);
           if (indicator) {
-            bubble.appendChild(indicator);
+            contentEl.appendChild(indicator);
           }
         }
       }
@@ -1041,20 +1043,22 @@ function createStreamingAssistantMessage() {
         <span class="chat-meta-text">Streaming...</span>
       </div>
       <div class="chat-bubble">
-        <div class="typing-indicator">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+        <div class="chat-content">
+          <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
         </div>
-      </div>
-      <div class="chat-footer">
-        <div class="chat-stats">
-          <span class="chat-time">--s</span>
-          <span class="chat-tokens">-- tokens</span>
-          <span class="chat-context-badge" style="display: none;"></span>
-        </div>
-        <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
-          <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
+        <div class="chat-footer">
+          <div class="chat-stats">
+            <span class="chat-time">--s</span>
+            <span class="chat-tokens">-- tokens</span>
+            <span class="chat-context-badge" style="display: none;"></span>
+          </div>
+          <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
+            <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1063,7 +1067,7 @@ function createStreamingAssistantMessage() {
   return {
     messageDiv,
     wrapper: messageDiv.querySelector('.chat-bubble-wrapper'),
-    bubble: messageDiv.querySelector('.chat-bubble'),
+    content: messageDiv.querySelector('.chat-content'),
     metaText: messageDiv.querySelector('.chat-meta-text'),
     timeEl: messageDiv.querySelector('.chat-time'),
     tokensEl: messageDiv.querySelector('.chat-tokens'),
@@ -1169,7 +1173,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
     streamPort = chrome.runtime.connect({ name: 'streaming' });
 
     let fullContent = '';
-    const assistantBubble = streamingUi?.bubble || null;
+    const assistantBubble = streamingUi?.content || null;
     const messageDiv = streamingUi?.messageDiv || null;
 
     streamPort.onMessage.addListener(async (msg) => {
@@ -1211,11 +1215,9 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
 
             // Add sources indicator
             if (typeof createSourcesIndicator === 'function') {
-              const sourcesIndicator = createSourcesIndicator(sources, messageDiv);
-              if (sourcesIndicator) {
-                if (assistantBubble) {
-                  assistantBubble.appendChild(sourcesIndicator);
-                }
+              const sourcesIndicator = createSourcesIndicator(sources, assistantBubble || messageDiv);
+              if (sourcesIndicator && assistantBubble) {
+                assistantBubble.appendChild(sourcesIndicator);
               }
             }
           }
