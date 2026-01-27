@@ -40,19 +40,22 @@ function extractSources(text) {
       title = titleMatch ? titleMatch[1] : '';
     }
 
+    let domain = '';
+    try {
+      domain = new URL(url).hostname.replace('www.', '');
+    } catch (e) {
+      domain = url;
+    }
+
     // If no title found, use domain name
     if (!title) {
-      try {
-        const domain = new URL(url).hostname.replace('www.', '');
-        title = domain;
-      } catch (e) {
-        title = url;
-      }
+      title = domain || url;
     }
 
     return {
       url,
       title,
+      domain,
       number,
       id: `source-${number}`
     };
@@ -150,34 +153,21 @@ function makeSourceReferencesClickable(answerContent, sources) {
   // Find all [number] patterns and make them clickable
   sources.forEach(source => {
     const refPattern = new RegExp(`\\[${source.number}\\]`, 'g');
-    const replacement = `<span class="source-ref-link" data-source-id="${source.id}" style="cursor: pointer; color: var(--color-primary, #3b82f6); font-weight: 600; text-decoration: underline; text-decoration-style: dotted;">[${source.number}]</span>`;
+    const label = source.domain || source.title || source.url;
+    const replacement = `<span class="source-chip" data-source-id="${source.id}" title="${label}">${label}</span>`;
     newHtml = newHtml.replace(refPattern, replacement);
   });
 
   answerContent.innerHTML = newHtml;
 
   // Add click handlers to the references
-  const refLinks = answerContent.querySelectorAll('.source-ref-link');
-  refLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
+  const chips = answerContent.querySelectorAll('.source-chip');
+  chips.forEach(chip => {
+    chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      const sourceId = link.getAttribute('data-source-id');
+      const sourceId = chip.getAttribute('data-source-id');
       const uniqueDomains = getUniqueDomains(sources);
       showSourcesModal(sources, uniqueDomains, sourceId);
-    });
-
-    // Hover effect
-    link.addEventListener('mouseenter', () => {
-      link.style.textDecoration = 'underline';
-      link.style.textDecorationStyle = 'solid';
-      link.style.transform = 'scale(1.1)';
-      link.style.display = 'inline-block';
-    });
-
-    link.addEventListener('mouseleave', () => {
-      link.style.textDecoration = 'underline';
-      link.style.textDecorationStyle = 'dotted';
-      link.style.transform = 'scale(1)';
     });
   });
 }

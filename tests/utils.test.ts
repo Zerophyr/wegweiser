@@ -1,4 +1,5 @@
 const { getTokenBarStyle } = require("../src/shared/utils.js");
+const { extractSources } = require("../src/modules/sources");
 
 describe("getTokenBarStyle", () => {
   test("returns 0% and green for null tokens", () => {
@@ -17,5 +18,12 @@ describe("getTokenBarStyle", () => {
     const res = getTokenBarStyle(3600, 4000);
     expect(res.percent).toBe(90);
     expect(res.gradient).toContain("#ef4444");
+  });
+});
+
+describe("extractSources domain metadata", () => {
+  test("extractSources returns domain names", () => {
+    const { sources } = extractSources("https://example.com [1]");
+    expect(sources[0].domain).toBe("example.com");
   });
 });
