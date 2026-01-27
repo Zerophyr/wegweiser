@@ -426,6 +426,20 @@ body {
   overflow-wrap: break-word;
 }
 
+.answer-content .topic-heading {
+  padding: 6px 10px 6px 12px;
+  border-left: 3px solid var(--topic-color, #60a5fa);
+  background: color-mix(in srgb, var(--topic-color, #60a5fa) 12%, transparent);
+  border-radius: 6px;
+}
+
+.answer-content .topic-color-1 { --topic-color: #60a5fa; }
+.answer-content .topic-color-2 { --topic-color: #34d399; }
+.answer-content .topic-color-3 { --topic-color: #fbbf24; }
+.answer-content .topic-color-4 { --topic-color: #f472b6; }
+.answer-content .topic-color-5 { --topic-color: #a78bfa; }
+.answer-content .topic-color-6 { --topic-color: #22d3ee; }
+
 .answer-content a {
   color: #60a5fa;
   text-decoration: none;
