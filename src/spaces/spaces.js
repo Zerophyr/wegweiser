@@ -64,6 +64,22 @@ function generateThreadTitle(firstMessage) {
   return firstMessage.substring(0, 50).trim() + '...';
 }
 
+function getLiveWindowSize(summary) {
+  return summary ? 8 : 12;
+}
+
+function splitMessagesForSummary(messages, liveWindowSize) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  if (safeMessages.length <= liveWindowSize) {
+    return { historyToSummarize: [], liveMessages: safeMessages };
+  }
+  const cutoffIndex = safeMessages.length - liveWindowSize;
+  return {
+    historyToSummarize: safeMessages.slice(0, cutoffIndex),
+    liveMessages: safeMessages.slice(cutoffIndex)
+  };
+}
+
 
 // ============ STORAGE FUNCTIONS ============
 
@@ -695,6 +711,8 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.buildAssistantMessage = buildAssistantMessage;
   window.buildStreamMessages = buildStreamMessages;
   window.getSourcesData = getSourcesData;
+  window.getLiveWindowSize = getLiveWindowSize;
+  window.splitMessagesForSummary = splitMessagesForSummary;
 }
 
 async function renderStorageUsage() {
