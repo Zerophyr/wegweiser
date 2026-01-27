@@ -98,3 +98,29 @@ describe("provider helpers", () => {
     expect(getProviderApiKeyPlaceholder("naga")).toBe("ng-...");
   });
 });
+
+describe("model display helpers", () => {
+  const {
+    getModelBaseName,
+    buildModelDisplayName,
+    buildCombinedModelId,
+    parseCombinedModelId
+  } = require("../src/shared/utils.js");
+
+  test("getModelBaseName strips provider segments", () => {
+    expect(getModelBaseName("anthropic/claude-3-opus")).toBe("claude-3-opus");
+    expect(getModelBaseName("openai/gpt-4o")).toBe("gpt-4o");
+    expect(getModelBaseName("mistral:latest")).toBe("latest");
+  });
+
+  test("buildModelDisplayName prefixes NG-/OR-", () => {
+    expect(buildModelDisplayName("naga", "anthropic/claude-3-opus")).toBe("NG-claude-3-opus");
+    expect(buildModelDisplayName("openrouter", "openai/gpt-4o")).toBe("OR-gpt-4o");
+  });
+
+  test("combined model IDs round-trip", () => {
+    const id = buildCombinedModelId("naga", "anthropic/claude-3-opus");
+    expect(id).toBe("naga:anthropic/claude-3-opus");
+    expect(parseCombinedModelId(id)).toEqual({ provider: "naga", modelId: "anthropic/claude-3-opus" });
+  });
+});

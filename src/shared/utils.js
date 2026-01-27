@@ -131,6 +131,60 @@ function getProviderStorageKey(baseKey, providerId) {
 }
 
 /**
+ * Returns the base model name without provider prefixes.
+ * @param {string} modelId - Raw model id.
+ * @returns {string} Base model name.
+ */
+function getModelBaseName(modelId) {
+  if (!modelId || typeof modelId !== "string") return "";
+  const lastSlash = modelId.lastIndexOf("/");
+  const lastColon = modelId.lastIndexOf(":");
+  const cutIndex = Math.max(lastSlash, lastColon);
+  return cutIndex >= 0 ? modelId.slice(cutIndex + 1) : modelId;
+}
+
+/**
+ * Builds a display name with provider prefix.
+ * @param {string|null} providerId - Provider identifier.
+ * @param {string} modelId - Raw model id.
+ * @returns {string} Display name.
+ */
+function buildModelDisplayName(providerId, modelId) {
+  const provider = normalizeProviderId(providerId);
+  const prefix = provider === "naga" ? "NG" : "OR";
+  return `${prefix}-${getModelBaseName(modelId)}`;
+}
+
+/**
+ * Builds a combined model id for UI selection.
+ * @param {string|null} providerId - Provider identifier.
+ * @param {string} modelId - Raw model id.
+ * @returns {string} Combined model id.
+ */
+function buildCombinedModelId(providerId, modelId) {
+  const provider = normalizeProviderId(providerId);
+  return `${provider}:${modelId}`;
+}
+
+/**
+ * Parses a combined model id into provider + raw model id.
+ * @param {string} combinedId - Combined model id.
+ * @returns {{provider: string, modelId: string}} Parsed data.
+ */
+function parseCombinedModelId(combinedId) {
+  if (!combinedId || typeof combinedId !== "string") {
+    return { provider: "openrouter", modelId: "" };
+  }
+  const splitIndex = combinedId.indexOf(":");
+  if (splitIndex === -1) {
+    return { provider: "openrouter", modelId: combinedId };
+  }
+  const provider = normalizeProviderId(combinedId.slice(0, splitIndex));
+  const modelId = combinedId.slice(splitIndex + 1);
+  return { provider, modelId };
+}
+
+/**
  * Parses models API response into a normalized list.
  * @param {any} payload - Models response payload.
  * @returns {Array<{id: string, name: string}>} Normalized models.
@@ -323,6 +377,10 @@ if (typeof module !== "undefined") {
     getProviderLabel,
     getProviderApiKeyPlaceholder,
     getProviderStorageKey,
+    getModelBaseName,
+    buildModelDisplayName,
+    buildCombinedModelId,
+    parseCombinedModelId,
     parseModelsResponse,
     groupModelsByProvider,
     formatRelativeTime,
