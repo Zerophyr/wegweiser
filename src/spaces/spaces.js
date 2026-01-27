@@ -486,22 +486,64 @@ async function renderThreadList() {
 }
 
 function renderChatMessages(messages) {
-  if (!messages || messages.length === 0) {
-    elements.chatMessages.innerHTML = '';
+  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
+  if (!chatMessagesEl) {
     return;
   }
 
-  elements.chatMessages.innerHTML = messages.map((msg, index) => {
+  if (!messages || messages.length === 0) {
+    chatMessagesEl.innerHTML = '';
+    return;
+  }
+
+  chatMessagesEl.innerHTML = messages.map((msg, index) => {
     if (msg.role === 'assistant') {
       // Extract sources and clean text
       const { sources, cleanText } = typeof extractSources === 'function'
         ? extractSources(msg.content)
         : { sources: [], cleanText: msg.content };
 
+      const meta = msg.meta || null;
+      const metaTime = meta?.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
+      const metaModel = meta?.model || 'default model';
+      const metaText = meta ? `${metaTime} - ${metaModel}` : '';
+      const metaHtml = meta
+        ? `<div class="chat-meta"><span class="chat-meta-text">${escapeHtml(metaText)}</span></div>`
+        : '';
+
+      let footerHtml = '';
+      if (meta) {
+        const responseTime = typeof meta.responseTimeSec === 'number'
+          ? `${meta.responseTimeSec.toFixed(2)}s`
+          : '--s';
+        const tokensText = meta.tokens ? `${meta.tokens} tokens` : '-- tokens';
+        const contextBadge = meta.contextSize > 2
+          ? `<span class="chat-context-badge" title="${meta.contextSize} messages in conversation context">🧠 ${Math.floor(meta.contextSize / 2)} Q&A</span>`
+          : '';
+        const tokenStyle = typeof getTokenBarStyle === 'function'
+          ? getTokenBarStyle(meta.tokens || null)
+          : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+
+        footerHtml = `
+          <div class="chat-footer">
+            <div class="chat-stats">
+              <span class="chat-time">${responseTime}</span>
+              <span class="chat-tokens">${escapeHtml(tokensText)}</span>
+              ${contextBadge}
+            </div>
+            <div class="token-usage-bar" role="progressbar" aria-valuenow="${tokenStyle.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
+              <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="chat-message chat-message-assistant" data-msg-index="${index}">
           <div class="chat-bubble-wrapper">
+            ${metaHtml}
             <div class="chat-bubble" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
+            ${footerHtml}
             <button class="copy-btn" data-content="${escapeHtml(cleanText).replace(/"/g, '&quot;')}">
               <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
               Copy
@@ -558,7 +600,11 @@ function renderChatMessages(messages) {
   });
 
   // Scroll to bottom
-  elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+if (typeof window !== 'undefined' && window.__TEST__) {
+  window.renderChatMessages = renderChatMessages;
 }
 
 async function renderStorageUsage() {
