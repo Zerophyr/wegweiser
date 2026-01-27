@@ -6,6 +6,8 @@ if (typeof initTheme === 'function') {
 }
 
 const apiKeyInput = document.getElementById("apiKey");
+const apiKeyLabel = document.getElementById("apiKeyLabel");
+const providerSelect = document.getElementById("provider");
 const modelSelect = document.getElementById("model");
 const modelInput = document.getElementById("model-input");
 const modelsStatusEl = document.getElementById("models-status");
@@ -24,24 +26,140 @@ let modelDropdown = null; // ModelDropdownManager instance
 // Undo state for history deletion
 let pendingDeleteItem = null; // { item, timeout }
 let pendingClearAllHistory = null; // { items, timeout }
+let currentProvider = "openrouter";
+
+// ---- Provider helpers ----
+function normalizeProvider(providerId) {
+  if (typeof normalizeProviderId === "function") {
+    return normalizeProviderId(providerId);
+  }
+  return providerId === "naga" ? "naga" : "openrouter";
+}
+
+function getProviderLabelSafe(providerId) {
+  if (typeof getProviderLabel === "function") {
+    return getProviderLabel(providerId);
+  }
+  return normalizeProvider(providerId) === "naga" ? "NagaAI" : "OpenRouter";
+}
+
+function getProviderStorageKeySafe(baseKey, providerId) {
+  if (typeof getProviderStorageKey === "function") {
+    return getProviderStorageKey(baseKey, providerId);
+  }
+  return normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
+}
+
+function getProviderSettings(providerId) {
+  const provider = normalizeProvider(providerId);
+  return {
+    id: provider,
+    label: getProviderLabelSafe(provider),
+    apiKeyKey: provider === "naga" ? "naga_api_key" : "or_api_key",
+    modelKey: getProviderStorageKeySafe("or_model", provider),
+    favoritesKey: getProviderStorageKeySafe("or_favorites", provider),
+    recentModelsKey: getProviderStorageKeySafe("or_recent_models", provider),
+    apiKeyPlaceholder: provider === "naga" ? "sk-naga-..." : "sk-or-..."
+  };
+}
+
+function applyProviderSettings(providerId, localItems, syncItems) {
+  const settings = getProviderSettings(providerId);
+  currentProvider = settings.id;
+
+  if (providerSelect) {
+    providerSelect.value = settings.id;
+  }
+
+  if (apiKeyLabel) {
+    apiKeyLabel.textContent = `${settings.label} API key`;
+  }
+  if (apiKeyInput) {
+    apiKeyInput.value = localItems[settings.apiKeyKey] || "";
+    apiKeyInput.placeholder = settings.apiKeyPlaceholder;
+  }
+
+  savedModelId = localItems[settings.modelKey] || null;
+
+  if (Array.isArray(syncItems[settings.favoritesKey])) {
+    favoriteModels = new Set(syncItems[settings.favoritesKey]);
+  } else {
+    favoriteModels = new Set();
+  }
+
+  if (localItems.or_history_limit) {
+    historyLimitInput.value = localItems.or_history_limit;
+  }
+}
+
+function initModelDropdown(settings) {
+  if (modelDropdown) {
+    modelDropdown.destroy();
+    modelDropdown = null;
+  }
+
+  modelDropdown = new ModelDropdownManager({
+    inputElement: modelInput,
+    containerType: 'modal',
+    favoritesKey: settings.favoritesKey,
+    recentModelsKey: settings.recentModelsKey,
+    onModelSelect: async (modelId) => {
+      savedModelId = modelId;
+
+      // Update the input field
+      if (modelInput) {
+        modelInput.value = modelId;
+      }
+
+      // Update hidden select for form compatibility
+      if (modelSelect) {
+        modelSelect.value = modelId;
+      }
+
+      return true; // Return true to indicate success
+    }
+  });
+}
+
+async function loadProviderState(providerId) {
+  const settings = getProviderSettings(providerId);
+  const localItems = await chrome.storage.local.get([
+    "or_provider",
+    "or_api_key",
+    "naga_api_key",
+    "or_model",
+    "or_model_naga",
+    "or_history_limit"
+  ]);
+  const syncItems = await chrome.storage.sync.get([
+    "or_favorites",
+    "or_favorites_naga"
+  ]);
+
+  applyProviderSettings(settings.id, localItems, syncItems);
+  initModelDropdown(settings);
+}
 
 // ---- Load stored settings (API key, model, favorites, history limit) ----
 // SECURITY FIX: API key now stored in chrome.storage.local (not synced across devices)
 Promise.all([
-  chrome.storage.local.get(["or_api_key", "or_model", "or_history_limit"]),
-  chrome.storage.sync.get(["or_favorites"])
+  chrome.storage.local.get([
+    "or_provider",
+    "or_api_key",
+    "naga_api_key",
+    "or_model",
+    "or_model_naga",
+    "or_history_limit"
+  ]),
+  chrome.storage.sync.get([
+    "or_favorites",
+    "or_favorites_naga"
+  ])
 ]).then(([localItems, syncItems]) => {
-    if (localItems.or_api_key) apiKeyInput.value = localItems.or_api_key;
-    if (localItems.or_model) savedModelId = localItems.or_model;
-    if (Array.isArray(syncItems.or_favorites)) {
-      favoriteModels = new Set(syncItems.or_favorites);
-    } else {
-      favoriteModels = new Set();
-    }
-    if (localItems.or_history_limit) {
-      historyLimitInput.value = localItems.or_history_limit;
-    }
-  });
+  const provider = normalizeProvider(localItems.or_provider);
+  applyProviderSettings(provider, localItems, syncItems);
+  initModelDropdown(getProviderSettings(provider));
+});
 
 // ---- Load and render prompt history ----
 async function loadPromptHistory() {
@@ -257,57 +375,31 @@ async function commitDeleteHistoryItem(id) {
 
 // ---- Load models from OpenRouter API ----
 async function loadModels() {
+  const settings = getProviderSettings(currentProvider);
   const apiKey = apiKeyInput.value.trim();
   if (!apiKey) {
-    modelsStatusEl.textContent = "Enter API key to load models.";
+    modelsStatusEl.textContent = `Enter ${settings.label} API key to load models.`;
     return;
   }
 
-  modelsStatusEl.textContent = "Loading models…";
+  modelsStatusEl.textContent = `Loading ${settings.label} models…`;
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/models", {
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      }
-    });
+    const res = await chrome.runtime.sendMessage({ type: "get_models" });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    if (!res?.ok) {
+      throw new Error(res?.error || "Failed to load models");
     }
 
-    const data = await res.json();
-    allModels = (data.data || []).map((m) => ({
+    allModels = (res.models || []).map((m) => ({
       id: m.id,
       raw: m
     }));
 
-    // Initialize ModelDropdownManager if not already created
-    if (!modelDropdown) {
-      modelDropdown = new ModelDropdownManager({
-        inputElement: modelInput,
-        containerType: 'modal',
-        onModelSelect: async (modelId) => {
-          savedModelId = modelId;
-
-          // Update the input field
-          if (modelInput) {
-            modelInput.value = modelId;
-          }
-
-          // Update hidden select for form compatibility
-          if (modelSelect) {
-            modelSelect.value = modelId;
-          }
-
-          return true; // Return true to indicate success
-        }
-      });
-    }
-
     // Update dropdown with models and favorites
+    if (!modelDropdown) {
+      initModelDropdown(settings);
+    }
     modelDropdown.setModels(allModels);
     modelDropdown.setFavorites(Array.from(favoriteModels));
 
@@ -317,7 +409,7 @@ async function loadModels() {
       modelSelect.value = savedModelId;
     }
 
-    modelsStatusEl.textContent = `✓ Loaded ${allModels.length} models.`;
+    modelsStatusEl.textContent = `✓ Loaded ${allModels.length} ${settings.label} models.`;
     modelsStatusEl.style.color = "#10b981";
   } catch (e) {
     console.error("Failed to load models:", e);
@@ -328,9 +420,11 @@ async function loadModels() {
 
 // Auto-load models when page opens if API key exists
 Promise.all([
-  chrome.storage.local.get(["or_api_key"])
+  chrome.storage.local.get(["or_provider", "or_api_key", "naga_api_key"])
 ]).then(([localItems]) => {
-  if (localItems.or_api_key && apiKeyInput.value) {
+  const provider = normalizeProvider(localItems.or_provider);
+  const settings = getProviderSettings(provider);
+  if (localItems[settings.apiKeyKey] && apiKeyInput.value) {
     // Small delay to ensure UI is ready
     setTimeout(() => loadModels(), 100);
   }
@@ -338,24 +432,26 @@ Promise.all([
 
 // ---- Save settings (key + model + history limit) ----
 saveBtn.addEventListener("click", async () => {
+  const settings = getProviderSettings(currentProvider);
   const apiKey = apiKeyInput.value.trim();
   const model = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
 
   if (!apiKey) {
-    statusEl.textContent = "API key is required.";
+    statusEl.textContent = `${settings.label} API key is required.`;
     return;
   }
 
   // Model is optional - if not set, will use default from constants
   const dataToSave = {
-    or_api_key: apiKey,
-    or_history_limit: historyLimit
+    [settings.apiKeyKey]: apiKey,
+    or_history_limit: historyLimit,
+    or_provider: settings.id
   };
 
   // Only save model if one is selected
   if (model) {
-    dataToSave.or_model = model;
+    dataToSave[settings.modelKey] = model;
     savedModelId = model;
   }
 
@@ -363,7 +459,7 @@ saveBtn.addEventListener("click", async () => {
   await Promise.all([
     chrome.storage.local.set(dataToSave),
     chrome.storage.sync.set({
-      or_favorites: Array.from(favoriteModels)
+      [settings.favoritesKey]: Array.from(favoriteModels)
     })
   ]);
 
@@ -381,6 +477,30 @@ apiKeyInput.addEventListener("change", () => {
   modelSelect.innerHTML = "";
   modelsStatusEl.textContent = "";
 });
+
+// ---- Provider change ----
+if (providerSelect) {
+  providerSelect.addEventListener("change", async () => {
+    const provider = normalizeProvider(providerSelect.value);
+    currentProvider = provider;
+
+    await chrome.storage.local.set({ or_provider: provider });
+    try {
+      await chrome.runtime.sendMessage({ type: "set_provider", provider });
+    } catch (e) {
+      console.warn("Failed to notify background of provider change:", e);
+    }
+
+    await loadProviderState(provider);
+    allModels = [];
+    modelSelect.innerHTML = "";
+    modelsStatusEl.textContent = "";
+
+    if (apiKeyInput.value) {
+      setTimeout(() => loadModels(), 100);
+    }
+  });
+}
 
 // ---- Export history functionality ----
 function exportHistoryJSON() {
