@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(tree -L 3 -I 'node_modules' --charset ascii)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:www.perplexity.ai)",
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(dir:*)",
+      "Bash(node -c:*)"
+    ]
+  }
+}
