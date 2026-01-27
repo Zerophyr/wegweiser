@@ -1,14 +1,14 @@
 # 🤖 OpenRouter Buddy v1.1.1
 
-> Your friendly AI companion powered by OpenRouter - chat with any model right from your browser sidebar!
+> Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
 ## ✨ Features
 
 ### Core Functionality
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
-- 🔄 **Model Selection** - Choose from 100+ AI models available on OpenRouter
+- 🔄 **Model Selection** - Choose models from the selected provider
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
-- 📊 **Balance Display** - Real-time OpenRouter account balance tracking
+- 📊 **Balance Display** - OpenRouter account balance tracking (NagaAI not supported)
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 
@@ -70,13 +70,16 @@ _(Coming soon)_
 
 ## 🔑 Setup
 
-1. Get your OpenRouter API key from [openrouter.ai](https://openrouter.ai)
+1. Get your API key:
+   - OpenRouter: [openrouter.ai](https://openrouter.ai)
+   - NagaAI: [naga.ac](https://naga.ac)
 2. Click the extension icon or open the side panel
 3. Click the gear icon (⚙️) to open options
-4. Enter your API key
-5. Click "Load models" to fetch available models
-6. Select your preferred model
-7. Click "Save"
+4. Choose your provider (OpenRouter or NagaAI)
+5. Enter your API key
+6. Click "Load models" to fetch available models
+7. Select your preferred model
+8. Click "Save"
 
 ## 📖 User Guide
 
@@ -280,7 +283,7 @@ MIT License - See LICENSE file for details
 
 ## 🙏 Acknowledgments
 
-- Built with [OpenRouter API](https://openrouter.ai)
+- Built with [OpenRouter API](https://openrouter.ai) and [NagaAI API](https://naga.ac)
 - Inspired by the Chrome Extensions community
 - Thanks to all contributors!
 
@@ -293,10 +296,10 @@ MIT License - See LICENSE file for details
 ## ❓ FAQ
 
 **Q: Is this extension free?**
-A: The extension is free. You only pay for OpenRouter API usage.
+A: The extension is free. You only pay for API usage from your selected provider.
 
 **Q: Which models are supported?**
-A: All models available on OpenRouter (100+ models).
+A: All models available on your selected provider.
 
 **Q: Does it work offline?**
 A: No, internet connection required for API calls.
@@ -305,7 +308,7 @@ A: No, internet connection required for API calls.
 A: Yes, all data stays local. No telemetry or tracking.
 
 **Q: Can I use my own API key?**
-A: Yes, you must use your own OpenRouter API key.
+A: Yes, you must use your own API key for OpenRouter or NagaAI.
 
 ---
 

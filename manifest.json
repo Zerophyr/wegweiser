@@ -14,7 +14,8 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://openrouter.ai/*"
+    "https://openrouter.ai/*",
+    "https://api.naga.ac/*"
   ],
   "optional_host_permissions": [
     "<all_urls>"
