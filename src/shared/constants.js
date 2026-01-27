@@ -2,15 +2,23 @@
 
 // Storage keys
 export const STORAGE_KEYS = {
+  PROVIDER: "or_provider",
   API_KEY: "or_api_key",
+  API_KEY_NAGA: "naga_api_key",
   MODEL: "or_model",
+  MODEL_NAGA: "or_model_naga",
   FAVORITES: "or_favorites",
+  FAVORITES_NAGA: "or_favorites_naga",
+  RECENT_MODELS: "or_recent_models",
+  RECENT_MODELS_NAGA: "or_recent_models_naga",
   HISTORY_LIMIT: "or_history_limit",
   HISTORY: "or_history",
   WEB_SEARCH: "or_web_search",
   REASONING: "or_reasoning",
   MODELS_CACHE: "or_models_cache",
   MODELS_CACHE_TIME: "or_models_cache_time",
+  MODELS_CACHE_NAGA: "or_models_cache_naga",
+  MODELS_CACHE_TIME_NAGA: "or_models_cache_time_naga",
   SPACES: "or_spaces",
   THREADS: "or_threads",
   THEME: "or_theme"
@@ -58,7 +66,7 @@ export const UI_CONSTANTS = {
 
 // Error messages
 export const ERROR_MESSAGES = {
-  NO_API_KEY: "No API key set. Open the extension options and enter your OpenRouter API key.",
+  NO_API_KEY: "No API key set. Open the extension options and enter your API key.",
   NO_PROMPT: "Enter a prompt first.",
   NETWORK_ERROR: "Network error. Please check your connection and try again.",
   API_ERROR: "API error. Please try again later.",
@@ -73,6 +81,28 @@ export const API_CONFIG = {
   TIMEOUT: 120000,  // 120 seconds
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000  // Start with 1 second, will use exponential backoff
+};
+
+// Provider configuration
+export const PROVIDERS = {
+  openrouter: {
+    id: "openrouter",
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    supportsBalance: true,
+    supportsWebSearch: true,
+    headers: {
+      "X-Title": "OpenRouter Buddy Extension"
+    }
+  },
+  naga: {
+    id: "naga",
+    label: "NagaAI",
+    baseUrl: "https://api.naga.ac/v1",
+    supportsBalance: false,
+    supportsWebSearch: false,
+    headers: {}
+  }
 };
 
 // Regex patterns (compiled once)

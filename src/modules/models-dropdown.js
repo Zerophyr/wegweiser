@@ -7,6 +7,8 @@ class ModelDropdownManager {
       inputElement: config.inputElement,
       containerType: config.containerType || 'sidebar', // 'sidebar' or 'modal'
       onModelSelect: config.onModelSelect,
+      favoritesKey: config.favoritesKey || 'or_favorites',
+      recentModelsKey: config.recentModelsKey || 'or_recent_models',
       maxRecentModels: 5,
       ...config
     };
@@ -274,7 +276,7 @@ class ModelDropdownManager {
 
     // Save to storage
     await chrome.storage.sync.set({
-      or_favorites: Array.from(this.state.favoriteModels)
+      [this.config.favoritesKey]: Array.from(this.state.favoriteModels)
     });
 
     // Refresh dropdown
@@ -305,13 +307,13 @@ class ModelDropdownManager {
 
     // Save to storage
     await chrome.storage.local.set({
-      or_recent_models: this.state.recentlyUsedModels
+      [this.config.recentModelsKey]: this.state.recentlyUsedModels
     });
   }
 
   async loadRecentlyUsedModels() {
-    const data = await chrome.storage.local.get(['or_recent_models']);
-    this.state.recentlyUsedModels = data.or_recent_models || [];
+    const data = await chrome.storage.local.get([this.config.recentModelsKey]);
+    this.state.recentlyUsedModels = data[this.config.recentModelsKey] || [];
   }
 
   setModels(models) {
@@ -496,4 +498,8 @@ class ModelDropdownManager {
       this.dropdownElement = null;
     }
   }
+}
+
+if (typeof module !== "undefined") {
+  module.exports = { ModelDropdownManager };
 }
