@@ -115,6 +115,9 @@ function getProviderLabel(providerId) {
  */
 function getProviderStorageKey(baseKey, providerId) {
   const provider = normalizeProviderId(providerId);
+  if (provider === "openrouter") {
+    return baseKey;
+  }
   return `${baseKey}_${provider}`;
 }
 

@@ -81,7 +81,7 @@ describe("provider helpers", () => {
   });
 
   test("getProviderStorageKey returns scoped keys", () => {
-    expect(getProviderStorageKey("or_model", "openrouter")).toBe("or_model_openrouter");
+    expect(getProviderStorageKey("or_model", "openrouter")).toBe("or_model");
     expect(getProviderStorageKey("or_model", "naga")).toBe("or_model_naga");
   });
 
