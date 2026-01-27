@@ -197,6 +197,8 @@ async function createThread(spaceId, title = 'New Thread') {
     spaceId,
     title,
     messages: [],
+    summary: '',
+    summaryUpdatedAt: null,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
@@ -1166,7 +1168,7 @@ function buildAssistantMessage(content, meta) {
   };
 }
 
-function buildStreamMessages(messages, prompt, systemInstruction) {
+function buildStreamMessages(messages, prompt, systemInstruction, summary) {
   const baseMessages = Array.isArray(messages) ? [...messages] : [];
   if (baseMessages.length > 0 && typeof prompt === 'string') {
     const lastMessage = baseMessages[baseMessages.length - 1];
@@ -1178,6 +1180,9 @@ function buildStreamMessages(messages, prompt, systemInstruction) {
   const finalMessages = [];
   if (systemInstruction) {
     finalMessages.push({ role: 'system', content: systemInstruction });
+  }
+  if (summary) {
+    finalMessages.push({ role: 'system', content: `Summary so far:\n${summary}` });
   }
   finalMessages.push(...baseMessages);
   return finalMessages;
@@ -1321,7 +1326,36 @@ async function sendMessage() {
   elements.chatInput.style.height = 'auto';
 
   // Re-render messages
-  const thread = await getThread(currentThreadId);
+  let thread = await getThread(currentThreadId);
+  if (!thread) return;
+
+  const liveWindowSize = getLiveWindowSize(thread.summary);
+  const { historyToSummarize, liveMessages } = splitMessagesForSummary(thread.messages, liveWindowSize);
+  if (historyToSummarize.length > 0) {
+    try {
+      const summaryMessages = typeof buildSummarizerMessages === 'function'
+        ? buildSummarizerMessages(thread.summary, historyToSummarize)
+        : historyToSummarize;
+      const summaryRes = await chrome.runtime.sendMessage({
+        type: 'summarize_thread',
+        messages: summaryMessages,
+        model: space.model || null
+      });
+      if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= 200) {
+        thread.summary = summaryRes.summary.trim();
+        thread.summaryUpdatedAt = Date.now();
+        thread.messages = liveMessages;
+        await updateThread(currentThreadId, {
+          messages: liveMessages,
+          summary: thread.summary,
+          summaryUpdatedAt: thread.summaryUpdatedAt
+        });
+      }
+    } catch (err) {
+      console.warn('Summary update failed:', err);
+    }
+  }
+
   renderChatMessages(thread.messages);
 
   const startTime = Date.now();
@@ -1429,7 +1463,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
     });
 
     // Build messages array with custom instructions
-    const messages = buildStreamMessages(thread.messages, content, space.customInstructions);
+    const messages = buildStreamMessages(thread.messages, content, space.customInstructions, thread.summary);
 
     // Use chat toggles (temporary override) instead of space settings
     const webSearch = elements.chatWebSearch.checked;

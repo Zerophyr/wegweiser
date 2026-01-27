@@ -8,6 +8,12 @@ const win = window as unknown as {
     historyToSummarize: any[];
     liveMessages: any[];
   };
+  buildStreamMessages?: (
+    messages: any[],
+    prompt: string,
+    systemInstruction?: string,
+    summary?: string
+  ) => any[];
 };
 
 function loadSpaces() {
@@ -38,5 +44,13 @@ describe("spaces summarization helpers", () => {
     const result = win.splitMessagesForSummary?.(messages, 12);
     expect(result?.historyToSummarize).toHaveLength(2);
     expect(result?.liveMessages).toHaveLength(12);
+  });
+
+  test("buildStreamMessages includes summary as system message", () => {
+    const result = win.buildStreamMessages?.([], "prompt", "custom", "summary") || [];
+    expect(result[0].role).toBe("system");
+    expect(result[0].content).toMatch(/custom/i);
+    expect(result[1].role).toBe("system");
+    expect(result[1].content).toMatch(/Summary/i);
   });
 });
