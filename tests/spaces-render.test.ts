@@ -1,9 +1,19 @@
 let spacesLoaded = false;
 
+const win = window as unknown as {
+  __TEST__?: boolean;
+  renderChatMessages?: (messages: any[]) => void;
+  buildAssistantMessage?: (content: string, meta: any) => any;
+};
+
+const testGlobal = global as unknown as {
+  applyMarkdownStyles?: (text: string) => string;
+};
+
 function loadSpaces() {
   if (spacesLoaded) return;
-  window.__TEST__ = true;
-  global.applyMarkdownStyles = (text) => text;
+  win.__TEST__ = true;
+  testGlobal.applyMarkdownStyles = (text: string) => text;
   require("../src/spaces/spaces.js");
   spacesLoaded = true;
 }
@@ -15,7 +25,7 @@ describe("renderChatMessages", () => {
   });
 
   test("assistant messages with meta render footer", () => {
-    window.renderChatMessages([
+    win.renderChatMessages?.([
       {
         role: 'assistant',
         content: 'Hi',
@@ -43,7 +53,7 @@ describe("renderChatMessages", () => {
       contextSize: 4
     };
 
-    const msg = window.buildAssistantMessage('Hello', meta);
+    const msg = win.buildAssistantMessage?.('Hello', meta);
     expect(msg.meta).toEqual(meta);
   });
 });
