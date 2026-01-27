@@ -384,6 +384,8 @@ async function askQuestion() {
     const reasoningText = reasoningContent?.querySelector(".reasoning-text");
     const reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
     let fullAnswer = '';
+    let hasCompleted = false;
+    let hasError = false;
     let currentModel = '';
     let finalTokens = null;
     let finalContextSize = contextSize;
@@ -406,6 +408,23 @@ async function askQuestion() {
       activePort = null;
       stopBtn.style.display = 'none';
       askBtn.disabled = false;
+
+      if (!hasCompleted && !hasError) {
+        const fallbackMessage = typeof getStreamingFallbackMessage === 'function'
+          ? getStreamingFallbackMessage(fullAnswer, hasReceivedReasoning)
+          : null;
+        if (fallbackMessage) {
+          answerContent.innerHTML = `<div class="error-content">${escapeHtml(fallbackMessage)}</div>`;
+          const metaSpan = answerMeta.querySelector('span');
+          if (metaSpan) {
+            metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+          }
+          metaEl.textContent = "⚠️ Stream ended without an answer.";
+          hideTypingIndicator();
+          updateAnswerVisibility();
+          answerSection.scrollTop = answerSection.scrollHeight;
+        }
+      }
     });
 
     port.onMessage.addListener((msg) => {
@@ -439,9 +458,10 @@ async function askQuestion() {
           console.error('[UI] Error rendering content:', e);
           answerContent.innerHTML = `<div style="color: red;">Error rendering: ${e.message}</div>`;
         }
-      } else if (msg.type === 'complete') {
-        // Stream complete
-        console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
+        } else if (msg.type === 'complete') {
+          // Stream complete
+          console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
+          hasCompleted = true;
         const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
         currentModel = msg.model || 'default model';
         finalTokens = msg.tokens;
@@ -528,9 +548,10 @@ async function askQuestion() {
         port.disconnect();
         activePort = null;
         stopBtn.style.display = 'none';
-      } else if (msg.type === 'error') {
-        // Handle error
-        answerContent.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
+        } else if (msg.type === 'error') {
+          // Handle error
+          hasError = true;
+          answerContent.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
         const metaSpan = answerMeta.querySelector('span');
         if (metaSpan) {
           metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;

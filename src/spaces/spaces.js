@@ -64,6 +64,7 @@ function generateThreadTitle(firstMessage) {
   return firstMessage.substring(0, 50).trim() + '...';
 }
 
+
 // ============ STORAGE FUNCTIONS ============
 
 async function loadSpaces() {
@@ -692,6 +693,8 @@ async function exportCurrentThread(format) {
 if (typeof window !== 'undefined' && window.__TEST__) {
   window.renderChatMessages = renderChatMessages;
   window.buildAssistantMessage = buildAssistantMessage;
+  window.buildStreamMessages = buildStreamMessages;
+  window.getSourcesData = getSourcesData;
 }
 
 async function renderStorageUsage() {
@@ -1145,6 +1148,30 @@ function buildAssistantMessage(content, meta) {
   };
 }
 
+function buildStreamMessages(messages, prompt, systemInstruction) {
+  const baseMessages = Array.isArray(messages) ? [...messages] : [];
+  if (baseMessages.length > 0 && typeof prompt === 'string') {
+    const lastMessage = baseMessages[baseMessages.length - 1];
+    if (lastMessage?.role === 'user' && lastMessage.content === prompt) {
+      baseMessages.pop();
+    }
+  }
+
+  const finalMessages = [];
+  if (systemInstruction) {
+    finalMessages.push({ role: 'system', content: systemInstruction });
+  }
+  finalMessages.push(...baseMessages);
+  return finalMessages;
+}
+
+function getSourcesData(content) {
+  if (typeof extractSources === 'function') {
+    return extractSources(content);
+  }
+  return { sources: [], cleanText: content };
+}
+
 function createStreamingAssistantMessage() {
   const tokenStyle = typeof getTokenBarStyle === 'function'
     ? getTokenBarStyle(null)
@@ -1336,27 +1363,24 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
 
         updateAssistantFooter(streamingUi, meta);
 
-        // Process sources and clean text
-        if (typeof extractSources === 'function') {
-          const { sources, cleanText } = extractSources(fullContent);
-          if (assistantBubble) {
-            assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+        const { sources, cleanText } = getSourcesData(fullContent);
+        if (assistantBubble) {
+          assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+        }
+
+        if (sources.length > 0) {
+          // Make references clickable
+          if (typeof makeSourceReferencesClickable === 'function') {
+            if (assistantBubble) {
+              makeSourceReferencesClickable(assistantBubble, sources);
+            }
           }
 
-          if (sources.length > 0) {
-            // Make references clickable
-            if (typeof makeSourceReferencesClickable === 'function') {
-              if (assistantBubble) {
-                makeSourceReferencesClickable(assistantBubble, sources);
-              }
-            }
-
-            // Add sources indicator
-            if (typeof createSourcesIndicator === 'function') {
-              const sourcesIndicator = createSourcesIndicator(sources, assistantBubble || messageDiv);
-              if (sourcesIndicator && assistantBubble) {
-                assistantBubble.appendChild(sourcesIndicator);
-              }
+          // Add sources indicator
+          if (typeof createSourcesIndicator === 'function') {
+            const sourcesIndicator = createSourcesIndicator(sources, assistantBubble || messageDiv);
+            if (sourcesIndicator && assistantBubble) {
+              assistantBubble.appendChild(sourcesIndicator);
             }
           }
         }
@@ -1387,11 +1411,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
     });
 
     // Build messages array with custom instructions
-    const messages = [];
-    if (space.customInstructions) {
-      messages.push({ role: 'system', content: space.customInstructions });
-    }
-    messages.push(...thread.messages);
+    const messages = buildStreamMessages(thread.messages, content, space.customInstructions);
 
     // Use chat toggles (temporary override) instead of space settings
     const webSearch = elements.chatWebSearch.checked;

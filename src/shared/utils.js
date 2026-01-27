@@ -215,6 +215,23 @@ function getTokenBarStyle(tokens, maxTokens = 4000) {
   return { percent, gradient };
 }
 
+/**
+ * Builds a fallback error message when a stream ends without an answer.
+ * @param {string} answerText - The accumulated answer text
+ * @param {boolean} hasReasoning - Whether reasoning was streamed
+ * @returns {string|null} Error message to display, or null if answer exists
+ */
+function getStreamingFallbackMessage(answerText, hasReasoning = false) {
+  const trimmed = typeof answerText === "string" ? answerText.trim() : "";
+  if (trimmed.length > 0) {
+    return null;
+  }
+  if (hasReasoning) {
+    return "Stream ended after reasoning but no final answer was returned. Please try again.";
+  }
+  return "Stream ended with no answer received. Please try again.";
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     escapeHtml,
@@ -228,6 +245,7 @@ if (typeof module !== "undefined") {
     deepClone,
     batchStorageOperations,
     renderStreamingText,
-    getTokenBarStyle
+    getTokenBarStyle,
+    getStreamingFallbackMessage
   };
 }

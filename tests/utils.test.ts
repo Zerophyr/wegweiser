@@ -1,4 +1,4 @@
-const { getTokenBarStyle } = require("../src/shared/utils.js");
+const { getTokenBarStyle, getStreamingFallbackMessage } = require("../src/shared/utils.js");
 const { extractSources } = require("../src/modules/sources");
 const { exportMarkdown } = require("../src/modules/exporter");
 
@@ -33,5 +33,22 @@ describe("exportMarkdown", () => {
   test("exportMarkdown formats thread", () => {
     const md = exportMarkdown([{ role: 'user', content: 'Hi' }]);
     expect(md).toContain("## User");
+  });
+});
+
+describe("getStreamingFallbackMessage", () => {
+  test("returns message when stream ends with no answer", () => {
+    const message = getStreamingFallbackMessage("", false);
+    expect(message).toMatch(/no answer/i);
+  });
+
+  test("returns reasoning-specific message when only reasoning was received", () => {
+    const message = getStreamingFallbackMessage("", true);
+    expect(message).toMatch(/reasoning/i);
+  });
+
+  test("returns null when answer exists", () => {
+    const message = getStreamingFallbackMessage("Hello", false);
+    expect(message).toBeNull();
   });
 });
