@@ -10,6 +10,10 @@ import {
   API_CONFIG,
   PROVIDERS
 } from '/src/shared/constants.js';
+import {
+  buildCombinedModelId,
+  buildModelDisplayName
+} from '/src/shared/utils.js';
 
 // Cache management
 const lastBalanceByProvider = {};
@@ -17,6 +21,7 @@ const lastBalanceAtByProvider = {};
 
 let cachedConfig = {
   provider: "openrouter",
+  modelProvider: "openrouter",
   apiKey: null,
   model: DEFAULTS.MODEL
 };
@@ -74,6 +79,44 @@ function parseModelsPayload(payload) {
   }));
 }
 
+async function getProviderModels(providerId, apiKey) {
+  const provider = normalizeProviderId(providerId);
+  if (!apiKey) return [];
+
+  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
+  const cacheData = await chrome.storage.local.get([
+    modelsKey,
+    timeKey
+  ]);
+
+  const now = Date.now();
+  if (cacheData[modelsKey] &&
+      cacheData[timeKey] &&
+      (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
+    return cacheData[modelsKey];
+  }
+
+  const providerConfig = getProviderConfig(provider);
+  const res = await fetch(`${providerConfig.baseUrl}/models`, {
+    headers: buildAuthHeaders(apiKey, providerConfig)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.error?.message || ERROR_MESSAGES.API_ERROR);
+  }
+
+  const data = await res.json();
+  const models = parseModelsPayload(data);
+
+  await chrome.storage.local.set({
+    [modelsKey]: models,
+    [timeKey]: now
+  });
+
+  return models;
+}
+
 async function loadConfig() {
   const now = Date.now();
   if (now - lastConfigLoadAt < CACHE_TTL.CONFIG && cachedConfig.provider) {
@@ -86,16 +129,21 @@ async function loadConfig() {
     STORAGE_KEYS.API_KEY,
     STORAGE_KEYS.API_KEY_NAGA,
     STORAGE_KEYS.MODEL,
-    STORAGE_KEYS.MODEL_NAGA
+    STORAGE_KEYS.MODEL_NAGA,
+    STORAGE_KEYS.MODEL_PROVIDER
   ]);
   const provider = normalizeProviderId(items[STORAGE_KEYS.PROVIDER]);
-  const apiKey = provider === "naga" ? items[STORAGE_KEYS.API_KEY_NAGA] : items[STORAGE_KEYS.API_KEY];
-  const model = provider === "naga"
-    ? (items[STORAGE_KEYS.MODEL_NAGA] || DEFAULTS.MODEL)
-    : (items[STORAGE_KEYS.MODEL] || DEFAULTS.MODEL);
+  const modelProvider = normalizeProviderId(items[STORAGE_KEYS.MODEL_PROVIDER] || provider);
+  const apiKey = modelProvider === "naga" ? items[STORAGE_KEYS.API_KEY_NAGA] : items[STORAGE_KEYS.API_KEY];
+  let model = items[STORAGE_KEYS.MODEL];
+  if (!model && modelProvider === "naga") {
+    model = items[STORAGE_KEYS.MODEL_NAGA];
+  }
+  model = model || DEFAULTS.MODEL;
 
   cachedConfig = {
     provider,
+    modelProvider,
     apiKey: apiKey || "",
     model
   };
@@ -177,7 +225,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === MESSAGE_TYPES.SUMMARIZE_THREAD) {
       (async () => {
         try {
-          const result = await callOpenRouterWithMessages(msg.messages || [], msg.model || null);
+        const result = await callOpenRouterWithMessages(
+          msg.messages || [],
+          msg.model || null,
+          msg.provider || null
+        );
           sendResponse({ ok: true, summary: result.answer, tokens: result.tokens });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || String(e) });
@@ -252,9 +304,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "set_model" && msg.model) {
     (async () => {
       try {
+        const provider = normalizeProviderId(msg.provider || cachedConfig.modelProvider || cachedConfig.provider);
+        const keyItems = await chrome.storage.local.get([
+          STORAGE_KEYS.API_KEY,
+          STORAGE_KEYS.API_KEY_NAGA
+        ]);
+
         // Save to local storage to match loadConfig()
-        await chrome.storage.local.set({ or_model: msg.model });
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.MODEL]: msg.model,
+          [STORAGE_KEYS.MODEL_PROVIDER]: provider
+        });
+
         cachedConfig.model = msg.model;
+        cachedConfig.modelProvider = provider;
+        cachedConfig.apiKey = provider === "naga"
+          ? (keyItems[STORAGE_KEYS.API_KEY_NAGA] || "")
+          : (keyItems[STORAGE_KEYS.API_KEY] || "");
         lastConfigLoadAt = Date.now();
         sendResponse({ ok: true });
       } catch (e) {
@@ -273,50 +339,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
     (async () => {
       try {
-        const cfg = await loadConfig();
-        const { modelsKey, timeKey } = getModelsCacheKeys(cfg.provider);
-
-        // Check cache first (provider-scoped)
-        const cacheData = await chrome.storage.local.get([
-          modelsKey,
-          timeKey
+        const keys = await chrome.storage.local.get([
+          STORAGE_KEYS.API_KEY,
+          STORAGE_KEYS.API_KEY_NAGA
         ]);
 
-        const now = Date.now();
-        if (cacheData[modelsKey] &&
-            cacheData[timeKey] &&
-            (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
-          console.log("Returning cached models");
-          sendResponse({ ok: true, models: cacheData[modelsKey] });
-          return;
-        }
+        const providersToLoad = [
+          { id: "openrouter", apiKey: keys[STORAGE_KEYS.API_KEY] },
+          { id: "naga", apiKey: keys[STORAGE_KEYS.API_KEY_NAGA] }
+        ].filter(entry => entry.apiKey);
 
-        if (!cfg.apiKey) {
+        if (providersToLoad.length === 0) {
           sendResponse({ ok: false, error: ERROR_MESSAGES.NO_API_KEY });
           return;
         }
 
-        const providerConfig = getProviderConfig(cfg.provider);
+        const combinedModels = [];
+        let lastError = null;
 
-        const res = await fetch(`${providerConfig.baseUrl}/models`, {
-          headers: buildAuthHeaders(cfg.apiKey, providerConfig)
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => null);
-          throw new Error(err?.error?.message || ERROR_MESSAGES.API_ERROR);
+        for (const entry of providersToLoad) {
+          try {
+            const models = await getProviderModels(entry.id, entry.apiKey);
+            models.forEach((model) => {
+              const displayName = buildModelDisplayName(entry.id, model.id);
+              combinedModels.push({
+                id: buildCombinedModelId(entry.id, model.id),
+                rawId: model.id,
+                provider: entry.id,
+                displayName,
+                name: displayName
+              });
+            });
+          } catch (e) {
+            console.warn(`Failed to load ${entry.id} models:`, e);
+            lastError = e;
+          }
         }
 
-        const data = await res.json();
-        const models = parseModelsPayload(data);
+        if (!combinedModels.length && lastError) {
+          throw lastError;
+        }
 
-        // Cache the models
-        await chrome.storage.local.set({
-          [modelsKey]: models,
-          [timeKey]: now
-        });
-
-        sendResponse({ ok: true, models });
+        sendResponse({ ok: true, models: combinedModels });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
@@ -333,6 +397,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.storage.local.remove([modelsKey, timeKey]);
         cachedConfig = {
           provider,
+          modelProvider: provider,
           apiKey: null,
           model: DEFAULTS.MODEL
         };
@@ -530,7 +595,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
-  const providerConfig = getProviderConfig(cfg.provider);
+  const providerConfig = getProviderConfig(cfg.modelProvider);
 
   // Get or initialize conversation context for this tab
   if (!conversationContexts.has(tabId)) {
@@ -647,12 +712,12 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   throw lastError || new Error(ERROR_MESSAGES.API_ERROR);
 }
 
-async function callOpenRouterWithMessages(messages, customModel = null) {
+async function callOpenRouterWithMessages(messages, customModel = null, customProvider = null) {
   const cfg = await loadConfig();
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
-  const providerConfig = getProviderConfig(cfg.provider);
+  const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
 
   const requestBody = {
     model: customModel || cfg.model || DEFAULTS.MODEL,
@@ -715,17 +780,17 @@ async function callOpenRouterWithMessages(messages, customModel = null) {
 // GET /api/v1/credits returns { data: { total_credits, total_usage } } [web:29][web:31][web:41]
 async function getProviderBalance() {
   const cfg = await loadConfig();
-  const providerConfig = getProviderConfig(cfg.provider);
+  const providerConfig = getProviderConfig(cfg.modelProvider);
 
   if (!providerConfig.supportsBalance) {
     return { supported: false, balance: null };
   }
 
   const now = Date.now();
-  if (lastBalanceByProvider[cfg.provider] !== null &&
-      lastBalanceByProvider[cfg.provider] !== undefined &&
-      (now - (lastBalanceAtByProvider[cfg.provider] || 0)) < CACHE_TTL.BALANCE) {
-    return { supported: true, balance: lastBalanceByProvider[cfg.provider] };
+  if (lastBalanceByProvider[cfg.modelProvider] !== null &&
+      lastBalanceByProvider[cfg.modelProvider] !== undefined &&
+      (now - (lastBalanceAtByProvider[cfg.modelProvider] || 0)) < CACHE_TTL.BALANCE) {
+    return { supported: true, balance: lastBalanceByProvider[cfg.modelProvider] };
   }
 
   if (!cfg.apiKey) {
@@ -752,8 +817,8 @@ async function getProviderBalance() {
     balance = credits - usage;
   }
 
-  lastBalanceByProvider[cfg.provider] = balance;
-  lastBalanceAtByProvider[cfg.provider] = now;
+  lastBalanceByProvider[cfg.modelProvider] = balance;
+  lastBalanceAtByProvider[cfg.modelProvider] = now;
   return { supported: true, balance };
 }
 
@@ -780,7 +845,8 @@ chrome.runtime.onConnect.addListener((port) => {
           port,
           () => isDisconnected,
           msg.messages,  // Custom messages array (for Spaces)
-          msg.model      // Custom model (for Spaces)
+          msg.model,     // Custom model (for Spaces)
+          msg.provider   // Custom provider (for Spaces)
         );
       } catch (e) {
         // Only send error if port is still connected
@@ -797,12 +863,12 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 // Streaming version of callOpenRouter that sends real-time updates via Port
-async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null) {
+async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null, customProvider = null) {
   const cfg = await loadConfig();
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
-  const providerConfig = getProviderConfig(cfg.provider);
+  const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
 
   // Helper function to safely send port messages
   const safeSendMessage = (message) => {

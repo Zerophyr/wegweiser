@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   API_KEY: "or_api_key",
   API_KEY_NAGA: "naga_api_key",
   MODEL: "or_model",
+  MODEL_PROVIDER: "or_model_provider",
   MODEL_NAGA: "or_model_naga",
   FAVORITES: "or_favorites",
   FAVORITES_NAGA: "or_favorites_naga",
