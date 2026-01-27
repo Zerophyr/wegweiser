@@ -34,4 +34,16 @@ describe("renderChatMessages", () => {
     expect(footer).not.toBeNull();
     expect(meta).not.toBeNull();
   });
+
+  test("assistant messages persist meta on completion", () => {
+    const meta = {
+      model: 'openai/gpt-4o-mini',
+      tokens: 12,
+      responseTimeSec: 0.8,
+      contextSize: 4
+    };
+
+    const msg = window.buildAssistantMessage('Hello', meta);
+    expect(msg.meta).toEqual(meta);
+  });
 });

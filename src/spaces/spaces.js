@@ -605,6 +605,7 @@ function renderChatMessages(messages) {
 
 if (typeof window !== 'undefined' && window.__TEST__) {
   window.renderChatMessages = renderChatMessages;
+  window.buildAssistantMessage = buildAssistantMessage;
 }
 
 async function renderStorageUsage() {
@@ -1019,6 +1020,102 @@ function bindEvents() {
 
 // ============ CHAT FUNCTIONALITY ============
 
+function buildAssistantMessage(content, meta) {
+  return {
+    role: 'assistant',
+    content,
+    meta
+  };
+}
+
+function createStreamingAssistantMessage() {
+  const tokenStyle = typeof getTokenBarStyle === 'function'
+    ? getTokenBarStyle(null)
+    : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'chat-message chat-message-assistant';
+  messageDiv.innerHTML = `
+    <div class="chat-bubble-wrapper">
+      <div class="chat-meta">
+        <span class="chat-meta-text">Streaming...</span>
+      </div>
+      <div class="chat-bubble">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+      <div class="chat-footer">
+        <div class="chat-stats">
+          <span class="chat-time">--s</span>
+          <span class="chat-tokens">-- tokens</span>
+          <span class="chat-context-badge" style="display: none;"></span>
+        </div>
+        <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
+          <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return {
+    messageDiv,
+    wrapper: messageDiv.querySelector('.chat-bubble-wrapper'),
+    bubble: messageDiv.querySelector('.chat-bubble'),
+    metaText: messageDiv.querySelector('.chat-meta-text'),
+    timeEl: messageDiv.querySelector('.chat-time'),
+    tokensEl: messageDiv.querySelector('.chat-tokens'),
+    contextBadgeEl: messageDiv.querySelector('.chat-context-badge'),
+    tokenFillEl: messageDiv.querySelector('.token-usage-fill'),
+    tokenBarEl: messageDiv.querySelector('.token-usage-bar')
+  };
+}
+
+function updateAssistantFooter(ui, meta) {
+  if (!ui || !meta) return;
+
+  const metaTime = meta.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
+  const metaModel = meta.model || 'default model';
+  if (ui.metaText) {
+    ui.metaText.textContent = `${metaTime} - ${metaModel}`;
+  }
+
+  if (ui.timeEl) {
+    ui.timeEl.textContent = typeof meta.responseTimeSec === 'number'
+      ? `${meta.responseTimeSec.toFixed(2)}s`
+      : '--s';
+  }
+
+  if (ui.tokensEl) {
+    ui.tokensEl.textContent = meta.tokens ? `${meta.tokens} tokens` : '-- tokens';
+  }
+
+  if (ui.contextBadgeEl) {
+    if (meta.contextSize > 2) {
+      ui.contextBadgeEl.style.display = 'inline-flex';
+      ui.contextBadgeEl.textContent = `🧠 ${Math.floor(meta.contextSize / 2)} Q&A`;
+      ui.contextBadgeEl.title = `${meta.contextSize} messages in conversation context`;
+    } else {
+      ui.contextBadgeEl.style.display = 'none';
+    }
+  }
+
+  const tokenStyle = typeof getTokenBarStyle === 'function'
+    ? getTokenBarStyle(meta.tokens || null)
+    : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+
+  if (ui.tokenFillEl) {
+    ui.tokenFillEl.style.width = `${tokenStyle.percent}%`;
+    ui.tokenFillEl.style.background = tokenStyle.gradient;
+  }
+
+  if (ui.tokenBarEl) {
+    ui.tokenBarEl.setAttribute('aria-valuenow', tokenStyle.percent);
+  }
+}
+
 async function sendMessage() {
   const content = elements.chatInput.value.trim();
   if (!content || !currentThreadId || !currentSpaceId || isStreaming) return;
@@ -1040,18 +1137,9 @@ async function sendMessage() {
   const thread = await getThread(currentThreadId);
   renderChatMessages(thread.messages);
 
-  // Show typing indicator
-  const typingIndicator = document.createElement('div');
-  typingIndicator.className = 'chat-message chat-message-assistant';
-  typingIndicator.id = 'typing-indicator';
-  typingIndicator.innerHTML = `
-    <div class="typing-indicator">
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-    </div>
-  `;
-  elements.chatMessages.appendChild(typingIndicator);
+  const startTime = Date.now();
+  const streamingUi = createStreamingAssistantMessage();
+  elements.chatMessages.appendChild(streamingUi.messageDiv);
   elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 
   // Show stop button, hide send
@@ -1061,15 +1149,11 @@ async function sendMessage() {
 
   // Start streaming
   try {
-    await streamMessage(content, space, thread);
+    await streamMessage(content, space, thread, streamingUi, startTime);
   } catch (err) {
     console.error('Stream error:', err);
     showToast(err.message || 'Failed to send message', 'error');
   } finally {
-    // Remove typing indicator
-    const indicator = document.getElementById('typing-indicator');
-    if (indicator) indicator.remove();
-
     // Restore buttons
     elements.sendBtn.style.display = 'block';
     elements.stopBtn.style.display = 'none';
@@ -1079,53 +1163,59 @@ async function sendMessage() {
   }
 }
 
-async function streamMessage(content, space, thread) {
+async function streamMessage(content, space, thread, streamingUi, startTime) {
   return new Promise((resolve, reject) => {
     // Create port for streaming
     streamPort = chrome.runtime.connect({ name: 'streaming' });
 
     let fullContent = '';
-    let assistantBubble = null;
-    let messageDiv = null;
-
-    // Remove typing indicator and add empty assistant message
-    const indicator = document.getElementById('typing-indicator');
-    if (indicator) indicator.remove();
-
-    messageDiv = document.createElement('div');
-    messageDiv.className = 'chat-message chat-message-assistant';
-    messageDiv.innerHTML = '<div class="chat-bubble-wrapper"><div class="chat-bubble"></div></div>';
-    assistantBubble = messageDiv.querySelector('.chat-bubble');
-    elements.chatMessages.appendChild(messageDiv);
+    const assistantBubble = streamingUi?.bubble || null;
+    const messageDiv = streamingUi?.messageDiv || null;
 
     streamPort.onMessage.addListener(async (msg) => {
       if (msg.type === 'content') {
         fullContent += msg.content;
-        assistantBubble.innerHTML = applyMarkdownStyles(fullContent);
+        if (assistantBubble) {
+          assistantBubble.innerHTML = applyMarkdownStyles(fullContent);
+        }
         elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
       } else if (msg.type === 'complete') {
+        const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : null;
+        const meta = {
+          model: msg.model || 'default model',
+          tokens: msg.tokens || null,
+          responseTimeSec: typeof elapsedSec === 'number' ? Number(elapsedSec.toFixed(2)) : null,
+          contextSize: msg.contextSize || 0,
+          createdAt: Date.now()
+        };
+
         // Save assistant message to thread
-        await addMessageToThread(currentThreadId, {
-          role: 'assistant',
-          content: fullContent
-        });
+        await addMessageToThread(currentThreadId, buildAssistantMessage(fullContent, meta));
+
+        updateAssistantFooter(streamingUi, meta);
 
         // Process sources and clean text
         if (typeof extractSources === 'function') {
           const { sources, cleanText } = extractSources(fullContent);
-          assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+          if (assistantBubble) {
+            assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+          }
 
           if (sources.length > 0) {
             // Make references clickable
             if (typeof makeSourceReferencesClickable === 'function') {
-              makeSourceReferencesClickable(assistantBubble, sources);
+              if (assistantBubble) {
+                makeSourceReferencesClickable(assistantBubble, sources);
+              }
             }
 
             // Add sources indicator
             if (typeof createSourcesIndicator === 'function') {
               const sourcesIndicator = createSourcesIndicator(sources, messageDiv);
               if (sourcesIndicator) {
-                assistantBubble.appendChild(sourcesIndicator);
+                if (assistantBubble) {
+                  assistantBubble.appendChild(sourcesIndicator);
+                }
               }
             }
           }
@@ -1134,9 +1224,11 @@ async function streamMessage(content, space, thread) {
         // Add copy button
         const copyBtn = document.createElement('button');
         copyBtn.className = 'copy-btn';
-        copyBtn.dataset.content = typeof extractSources === 'function'
-          ? extractSources(fullContent).cleanText
-          : fullContent;
+        if (typeof extractSources === 'function') {
+          copyBtn.dataset.content = extractSources(fullContent).cleanText;
+        } else {
+          copyBtn.dataset.content = fullContent;
+        }
         copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
         copyBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -1152,12 +1244,20 @@ async function streamMessage(content, space, thread) {
             showToast('Failed to copy', 'error');
           }
         });
-        messageDiv.querySelector('.chat-bubble-wrapper').appendChild(copyBtn);
+        if (streamingUi?.wrapper) {
+          streamingUi.wrapper.appendChild(copyBtn);
+        }
 
         streamPort.disconnect();
         streamPort = null;
         resolve();
       } else if (msg.type === 'error') {
+        if (assistantBubble) {
+          assistantBubble.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
+        }
+        if (streamingUi?.metaText) {
+          streamingUi.metaText.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+        }
         streamPort.disconnect();
         streamPort = null;
         reject(new Error(msg.error));
