@@ -52,4 +52,23 @@ describe("ModelDropdownManager storage keys", () => {
       recent_key: ["openai/gpt-4o"]
     });
   });
+
+  test("renders displayName when provided", () => {
+    const globalAny = global as any;
+    globalAny.groupModelsByProvider = jest.fn(() => ({
+      Provider: [{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]
+    }));
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]);
+    dropdown.show("");
+
+    const item = document.querySelector(".model-dropdown-item");
+    expect(item?.textContent).toContain("OR-gpt-4o");
+  });
 });

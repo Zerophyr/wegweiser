@@ -197,11 +197,15 @@ class ModelDropdownManager {
           // Try to find exact or first match
           const searchValue = this.config.inputElement.value;
           const searchLower = searchValue.toLowerCase();
-          const exactMatch = this.state.allModels.find(m => m.id.toLowerCase() === searchLower);
+          const exactMatch = this.state.allModels.find(m =>
+            this.getModelLabel(m).toLowerCase() === searchLower || m.id.toLowerCase() === searchLower
+          );
           if (exactMatch) {
             this.selectModel(exactMatch.id);
           } else {
-            const firstMatch = this.state.allModels.find(m => m.id.toLowerCase().includes(searchLower));
+            const firstMatch = this.state.allModels.find(m =>
+              this.getModelLabel(m).toLowerCase().includes(searchLower) || m.id.toLowerCase().includes(searchLower)
+            );
             if (firstMatch) {
               this.selectModel(firstMatch.id);
             }
@@ -210,6 +214,11 @@ class ModelDropdownManager {
         e.preventDefault();
         break;
     }
+  }
+
+  getModelLabel(model) {
+    if (!model) return '';
+    return model.displayName || model.name || model.id || '';
   }
 
   highlightSelected() {
@@ -274,10 +283,15 @@ class ModelDropdownManager {
       this.state.favoriteModels.add(modelId);
     }
 
-    // Save to storage
-    await chrome.storage.sync.set({
-      [this.config.favoritesKey]: Array.from(this.state.favoriteModels)
-    });
+    const isFavorite = this.state.favoriteModels.has(modelId);
+    if (typeof this.config.onToggleFavorite === 'function') {
+      await this.config.onToggleFavorite(modelId, isFavorite);
+    } else {
+      // Save to storage
+      await chrome.storage.sync.set({
+        [this.config.favoritesKey]: Array.from(this.state.favoriteModels)
+      });
+    }
 
     // Refresh dropdown
     this.show(this.state.filterTerm);
@@ -305,10 +319,14 @@ class ModelDropdownManager {
     // Keep only max items
     this.state.recentlyUsedModels = this.state.recentlyUsedModels.slice(0, this.config.maxRecentModels);
 
-    // Save to storage
-    await chrome.storage.local.set({
-      [this.config.recentModelsKey]: this.state.recentlyUsedModels
-    });
+    if (typeof this.config.onAddRecent === 'function') {
+      await this.config.onAddRecent(modelId, [...this.state.recentlyUsedModels]);
+    } else {
+      // Save to storage
+      await chrome.storage.local.set({
+        [this.config.recentModelsKey]: this.state.recentlyUsedModels
+      });
+    }
   }
 
   async loadRecentlyUsedModels() {
@@ -322,6 +340,10 @@ class ModelDropdownManager {
 
   setFavorites(favorites) {
     this.state.favoriteModels = new Set(favorites);
+  }
+
+  setRecentlyUsed(recentList) {
+    this.state.recentlyUsedModels = Array.isArray(recentList) ? [...recentList] : [];
   }
 
   show(filterTerm = '') {
@@ -343,10 +365,11 @@ class ModelDropdownManager {
   render() {
     const dropdown = this.dropdownElement;
     const searchLower = this.state.filterTerm.toLowerCase();
+    const getLabel = (model) => this.getModelLabel(model).toLowerCase();
 
     // Filter models
     const filteredModels = this.state.filterTerm
-      ? this.state.allModels.filter(m => m.id.toLowerCase().includes(searchLower))
+      ? this.state.allModels.filter(m => getLabel(m).includes(searchLower) || m.id.toLowerCase().includes(searchLower))
       : this.state.allModels;
 
     // Separate into categories
@@ -360,8 +383,8 @@ class ModelDropdownManager {
     );
 
     // Sort
-    const sortById = (a, b) => a.id.toLowerCase().localeCompare(b.id.toLowerCase());
-    favModels.sort(sortById);
+    const sortByLabel = (a, b) => getLabel(a).localeCompare(getLabel(b));
+    favModels.sort(sortByLabel);
 
     // Group non-favorites by provider
     const modelsByProvider = groupModelsByProvider(nonFavModels);
@@ -471,7 +494,7 @@ class ModelDropdownManager {
     item.style.cssText = `padding: ${padding.split(' ')[0]} ${padding.split(' ')[1]} ${padding.split(' ')[0]} ${leftPadding}; cursor: pointer; font-size: ${fontSize}; color: ${color}; border-bottom: 1px solid #27272a; display: flex; justify-content: space-between; align-items: center;`;
 
     const modelName = document.createElement('span');
-    modelName.textContent = model.id;
+    modelName.textContent = this.getModelLabel(model);
     modelName.style.cssText = 'flex: 1;';
 
     const starIcon = document.createElement('span');
