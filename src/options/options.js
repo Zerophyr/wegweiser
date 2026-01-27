@@ -52,6 +52,9 @@ function getProviderStorageKeySafe(baseKey, providerId) {
 
 function getProviderSettings(providerId) {
   const provider = normalizeProvider(providerId);
+  const apiKeyPlaceholder = typeof getProviderApiKeyPlaceholder === "function"
+    ? getProviderApiKeyPlaceholder(provider)
+    : (provider === "naga" ? "ng-..." : "sk-or-...");
   return {
     id: provider,
     label: getProviderLabelSafe(provider),
@@ -59,7 +62,7 @@ function getProviderSettings(providerId) {
     modelKey: getProviderStorageKeySafe("or_model", provider),
     favoritesKey: getProviderStorageKeySafe("or_favorites", provider),
     recentModelsKey: getProviderStorageKeySafe("or_recent_models", provider),
-    apiKeyPlaceholder: provider === "naga" ? "sk-naga-..." : "sk-or-..."
+    apiKeyPlaceholder
   };
 }
 
@@ -119,6 +122,17 @@ function initModelDropdown(settings) {
       return true; // Return true to indicate success
     }
   });
+}
+
+async function notifyProviderSettingsUpdated(providerId) {
+  try {
+    await chrome.runtime.sendMessage({
+      type: "provider_settings_updated",
+      provider: providerId
+    });
+  } catch (e) {
+    console.warn("Failed to notify provider update:", e);
+  }
 }
 
 async function loadProviderState(providerId) {
@@ -465,6 +479,8 @@ saveBtn.addEventListener("click", async () => {
 
   statusEl.textContent = model ? "Saved." : "Saved. (Using default model)";
   statusEl.style.color = "#10b981";
+  await loadModels();
+  await notifyProviderSettingsUpdated(settings.id);
   setTimeout(() => {
     statusEl.textContent = "";
     statusEl.style.color = "";
@@ -490,6 +506,7 @@ if (providerSelect) {
     } catch (e) {
       console.warn("Failed to notify background of provider change:", e);
     }
+    await notifyProviderSettingsUpdated(provider);
 
     await loadProviderState(provider);
     allModels = [];

@@ -130,9 +130,10 @@
         </div>
         <div class="form-group">
           <label for="space-model">Model</label>
-          <select id="space-model">
-            <option value="">Loading models...</option>
-          </select>
+          <div style="position: relative;">
+            <input type="text" id="space-model-input" placeholder="Type to search models..." />
+            <select id="space-model" style="display: none;"></select>
+          </div>
         </div>
         <div class="form-group">
           <label for="space-instructions">Custom Instructions</label>
@@ -212,6 +213,7 @@
   <script src="../modules/exporter.js"></script>
   <script src="../modules/theme.js"></script>
   <script src="../shared/utils.js"></script>
+  <script src="../modules/models-dropdown.js"></script>
   <script src="spaces.js"></script>
 </body>
 </html>

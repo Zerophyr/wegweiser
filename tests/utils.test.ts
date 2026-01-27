@@ -91,4 +91,10 @@ describe("provider helpers", () => {
     expect(or[0].id).toBe("openai/gpt-4o");
     expect(naga[0].id).toBe("naga/gpt-4o");
   });
+
+  test("getProviderApiKeyPlaceholder returns provider-specific prefixes", () => {
+    const { getProviderApiKeyPlaceholder } = require("../src/shared/utils.js");
+    expect(getProviderApiKeyPlaceholder("openrouter")).toBe("sk-or-...");
+    expect(getProviderApiKeyPlaceholder("naga")).toBe("ng-...");
+  });
 });

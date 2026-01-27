@@ -70,6 +70,7 @@ async function loadProviderSetting() {
 }
 // ---- Model dropdown manager ----
 let modelDropdown = null;
+let modelDropdownProvider = null;
 
 // ---- Context visualization ----
 let contextViz = null;
@@ -973,16 +974,20 @@ async function loadModels() {
 
     // Get favorites from storage
     const favoritesKey = getProviderStorageKeySafe("or_favorites", currentProvider);
+    const recentModelsKey = getProviderStorageKeySafe("or_recent_models", currentProvider);
     const favData = await chrome.storage.sync.get([favoritesKey]);
     const favorites = favData[favoritesKey] || [];
 
-    // Initialize ModelDropdownManager if not already done
-    if (!modelDropdown) {
+    // Initialize ModelDropdownManager if not already done or provider changed
+    if (!modelDropdown || modelDropdownProvider !== currentProvider) {
+      if (modelDropdown) {
+        modelDropdown.destroy();
+      }
       modelDropdown = new ModelDropdownManager({
         inputElement: modelInput,
         containerType: 'sidebar',
         favoritesKey,
-        recentModelsKey: getProviderStorageKeySafe("or_recent_models", currentProvider),
+        recentModelsKey,
         onModelSelect: async (modelId) => {
           // Update input field
           if (modelInput) {
@@ -1010,6 +1015,7 @@ async function loadModels() {
           }
         }
       });
+      modelDropdownProvider = currentProvider;
     }
 
     // Set models and favorites in the dropdown manager
@@ -1201,5 +1207,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   const contextVizContainer = document.getElementById('context-viz-section');
   if (contextVizContainer) {
     contextViz = new ContextVisualization(contextVizContainer);
+  }
+});
+
+// ---- Provider update listener ----
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "provider_settings_updated") {
+    (async () => {
+      currentProvider = normalizeProviderSafe(msg.provider);
+      await loadProviderSetting();
+      await loadModels();
+      await refreshBalance();
+    })();
   }
 });

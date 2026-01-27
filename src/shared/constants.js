@@ -32,6 +32,7 @@ export const MESSAGE_TYPES = {
   GET_MODELS: "get_models",
   CLEAR_CONTEXT: "clear_context",
   SET_PROVIDER: "set_provider",
+  PROVIDER_SETTINGS_UPDATED: "provider_settings_updated",
   SUMMARIZE_PAGE: "summarize_page",
   REQUEST_PERMISSION: "request_permission",
   SUMMARIZE_THREAD: "summarize_thread",

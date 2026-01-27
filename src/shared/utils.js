@@ -108,6 +108,15 @@ function getProviderLabel(providerId) {
 }
 
 /**
+ * Returns an API key placeholder for a provider.
+ * @param {string|null} providerId - Provider identifier.
+ * @returns {string} Placeholder prefix.
+ */
+function getProviderApiKeyPlaceholder(providerId) {
+  return normalizeProviderId(providerId) === "naga" ? "ng-..." : "sk-or-...";
+}
+
+/**
  * Builds a provider-scoped storage key.
  * @param {string} baseKey - Base storage key.
  * @param {string|null} providerId - Provider identifier.
@@ -312,6 +321,7 @@ if (typeof module !== "undefined") {
     getProvider,
     normalizeProviderId,
     getProviderLabel,
+    getProviderApiKeyPlaceholder,
     getProviderStorageKey,
     parseModelsResponse,
     groupModelsByProvider,

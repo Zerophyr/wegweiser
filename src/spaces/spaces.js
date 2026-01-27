@@ -18,6 +18,13 @@ function normalizeProviderSafe(providerId) {
   return providerId === 'naga' ? 'naga' : 'openrouter';
 }
 
+function getProviderLabelSafe(providerId) {
+  if (typeof getProviderLabel === 'function') {
+    return getProviderLabel(providerId);
+  }
+  return normalizeProviderSafe(providerId) === 'naga' ? 'NagaAI' : 'OpenRouter';
+}
+
 function getProviderStorageKeySafe(baseKey, providerId) {
   if (typeof getProviderStorageKey === 'function') {
     return getProviderStorageKey(baseKey, providerId);
@@ -301,6 +308,8 @@ let streamPort = null;
 let editingSpaceId = null;
 let renamingThreadId = null;
 let deletingItem = null; // { type: 'space'|'thread', id: string }
+let spaceModelDropdown = null;
+let spaceModelDropdownProvider = null;
 
 // ============ DOM ELEMENTS ============
 
@@ -346,6 +355,7 @@ function initElements() {
   elements.spaceName = document.getElementById('space-name');
   elements.spaceDescription = document.getElementById('space-description');
   elements.spaceModel = document.getElementById('space-model');
+  elements.spaceModelInput = document.getElementById('space-model-input');
   elements.spaceInstructions = document.getElementById('space-instructions');
   elements.spaceIcon = document.getElementById('space-icon');
   elements.iconPreview = document.getElementById('icon-preview');
@@ -981,6 +991,9 @@ async function openEditSpaceModal(spaceId) {
   elements.spaceIcon.value = space.icon || '📁';
   elements.iconPreview.textContent = space.icon || '📁';
   elements.spaceModel.value = space.model;
+  if (elements.spaceModelInput) {
+    elements.spaceModelInput.value = space.model || '';
+  }
   elements.spaceInstructions.value = space.customInstructions;
   elements.spaceWebSearch.checked = space.webSearch || false;
   elements.spaceReasoning.checked = space.reasoning || false;
@@ -1134,11 +1147,50 @@ async function loadModels() {
     if (response.ok && response.models) {
       const modelKey = getProviderStorageKeySafe(STORAGE_KEYS.MODEL, currentProvider);
       const currentModel = (await chrome.storage.local.get([modelKey]))[modelKey] || '';
+      const favoritesKey = getProviderStorageKeySafe('or_favorites', currentProvider);
+      const recentModelsKey = getProviderStorageKeySafe('or_recent_models', currentProvider);
+      const favData = await chrome.storage.sync.get([favoritesKey]);
+      const favorites = favData[favoritesKey] || [];
 
-      elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
-        response.models.map(m =>
-          `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
-        ).join('');
+      if (spaceModelDropdown && spaceModelDropdownProvider !== currentProvider) {
+        spaceModelDropdown.destroy();
+        spaceModelDropdown = null;
+      }
+
+      if (!spaceModelDropdown && elements.spaceModelInput) {
+        spaceModelDropdown = new ModelDropdownManager({
+          inputElement: elements.spaceModelInput,
+          containerType: 'modal',
+          favoritesKey,
+          recentModelsKey,
+          onModelSelect: async (modelId) => {
+            if (elements.spaceModelInput) {
+              elements.spaceModelInput.value = modelId;
+            }
+            if (elements.spaceModel) {
+              elements.spaceModel.value = modelId;
+            }
+            return true;
+          }
+        });
+        spaceModelDropdownProvider = currentProvider;
+      }
+
+      if (spaceModelDropdown) {
+        spaceModelDropdown.setModels(response.models);
+        spaceModelDropdown.setFavorites(favorites);
+      }
+
+      if (elements.spaceModel) {
+        elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
+          response.models.map(m =>
+            `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
+          ).join('');
+      }
+
+      if (elements.spaceModelInput) {
+        elements.spaceModelInput.value = currentModel;
+      }
     }
   } catch (err) {
     console.error('Error loading models:', err);
@@ -1668,3 +1720,18 @@ async function init() {
 
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
+
+// ---- Provider update listener ----
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === 'provider_settings_updated') {
+    (async () => {
+      currentProvider = normalizeProviderSafe(msg.provider);
+      await loadProviderSetting();
+      await loadModels();
+      if (typeof showToast === 'function') {
+        const providerLabel = getProviderLabelSafe(currentProvider);
+        showToast(`Provider changed. Update Space models to use ${providerLabel}.`, 'info');
+      }
+    })();
+  }
+});
