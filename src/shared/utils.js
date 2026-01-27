@@ -87,6 +87,51 @@ function getProvider(modelId) {
 }
 
 /**
+ * Normalizes a provider id to a supported value.
+ * @param {string|null} providerId - Provider identifier.
+ * @returns {string} Normalized provider id.
+ */
+function normalizeProviderId(providerId) {
+  if (providerId === "openrouter" || providerId === "naga") {
+    return providerId;
+  }
+  return "openrouter";
+}
+
+/**
+ * Returns a display label for a provider id.
+ * @param {string|null} providerId - Provider identifier.
+ * @returns {string} Display label.
+ */
+function getProviderLabel(providerId) {
+  return normalizeProviderId(providerId) === "naga" ? "NagaAI" : "OpenRouter";
+}
+
+/**
+ * Builds a provider-scoped storage key.
+ * @param {string} baseKey - Base storage key.
+ * @param {string|null} providerId - Provider identifier.
+ * @returns {string} Provider-scoped key.
+ */
+function getProviderStorageKey(baseKey, providerId) {
+  const provider = normalizeProviderId(providerId);
+  return `${baseKey}_${provider}`;
+}
+
+/**
+ * Parses models API response into a normalized list.
+ * @param {any} payload - Models response payload.
+ * @returns {Array<{id: string, name: string}>} Normalized models.
+ */
+function parseModelsResponse(payload) {
+  const list = Array.isArray(payload) ? payload : (payload?.data || []);
+  return list.map((model) => ({
+    id: model.id,
+    name: model.name || model.id
+  }));
+}
+
+/**
  * Groups models by their provider
  * @param {Array<{id: string}>} models - Array of model objects
  * @returns {Object} Models grouped by provider
@@ -262,6 +307,10 @@ if (typeof module !== "undefined") {
     retryWithBackoff,
     debounce,
     getProvider,
+    normalizeProviderId,
+    getProviderLabel,
+    getProviderStorageKey,
+    parseModelsResponse,
     groupModelsByProvider,
     formatRelativeTime,
     truncateText,

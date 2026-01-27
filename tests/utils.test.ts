@@ -1,4 +1,12 @@
-const { getTokenBarStyle, getStreamingFallbackMessage, buildSummarizerMessages } = require("../src/shared/utils.js");
+const {
+  getTokenBarStyle,
+  getStreamingFallbackMessage,
+  buildSummarizerMessages,
+  getProviderLabel,
+  normalizeProviderId,
+  getProviderStorageKey,
+  parseModelsResponse
+} = require("../src/shared/utils.js");
 const { extractSources } = require("../src/modules/sources");
 const { exportMarkdown } = require("../src/modules/exporter");
 
@@ -58,5 +66,29 @@ describe("buildSummarizerMessages", () => {
     const messages = buildSummarizerMessages("old", [{ role: "user", content: "hi" }]);
     expect(messages[0].role).toBe("system");
     expect(messages[0].content).toMatch(/summarize/i);
+  });
+});
+
+describe("provider helpers", () => {
+  test("normalizeProviderId defaults to openrouter", () => {
+    expect(normalizeProviderId(null)).toBe("openrouter");
+    expect(normalizeProviderId("unknown")).toBe("openrouter");
+  });
+
+  test("getProviderLabel returns readable labels", () => {
+    expect(getProviderLabel("openrouter")).toBe("OpenRouter");
+    expect(getProviderLabel("naga")).toBe("NagaAI");
+  });
+
+  test("getProviderStorageKey returns scoped keys", () => {
+    expect(getProviderStorageKey("or_model", "openrouter")).toBe("or_model_openrouter");
+    expect(getProviderStorageKey("or_model", "naga")).toBe("or_model_naga");
+  });
+
+  test("parseModelsResponse handles OpenRouter and NagaAI shapes", () => {
+    const or = parseModelsResponse({ data: [{ id: "openai/gpt-4o", name: "GPT-4o" }] });
+    const naga = parseModelsResponse([{ id: "naga/gpt-4o", name: "GPT-4o" }]);
+    expect(or[0].id).toBe("openai/gpt-4o");
+    expect(naga[0].id).toBe("naga/gpt-4o");
   });
 });
