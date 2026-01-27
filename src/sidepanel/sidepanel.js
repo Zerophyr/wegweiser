@@ -77,6 +77,58 @@ function setAnswerLoading(isLoading) {
   }
 }
 
+function closeExportMenus() {
+  document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
+}
+
+function renderSourcesSummary(answerItem, sources) {
+  const summary = answerItem?.querySelector('.answer-sources-summary');
+  if (!summary) return;
+  summary.innerHTML = '';
+
+  if (!sources || sources.length === 0 || typeof getUniqueDomains !== 'function') {
+    return;
+  }
+
+  const uniqueDomains = getUniqueDomains(sources);
+  const stack = document.createElement('div');
+  stack.className = 'sources-favicon-stack';
+
+  uniqueDomains.slice(0, 5).forEach((domain, index) => {
+    const favicon = document.createElement('img');
+    favicon.src = domain.favicon;
+    favicon.alt = domain.domain;
+    favicon.style.zIndex = String(5 - index);
+    favicon.onerror = () => {
+      favicon.src = 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"%23888\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>';
+    };
+    stack.appendChild(favicon);
+  });
+
+  const count = document.createElement('span');
+  count.className = 'sources-count';
+  count.textContent = `${sources.length} source${sources.length !== 1 ? 's' : ''}`;
+
+  summary.appendChild(stack);
+  summary.appendChild(count);
+}
+
+function exportAnswer(answerItem, format) {
+  if (!answerItem) return;
+  const answerContent = answerItem.querySelector('.answer-content');
+  const text = answerContent?.innerText || answerContent?.textContent || '';
+  const messages = [{ role: 'assistant', content: text }];
+
+  if (format === 'markdown' && typeof exportMarkdownFile === 'function') {
+    exportMarkdownFile(messages, 'answer.md');
+  } else if (format === 'docx' && typeof exportDocx === 'function') {
+    exportDocx(messages, 'answer.docx');
+  } else if (format === 'pdf' && typeof exportPdf === 'function') {
+    const html = answerContent?.innerHTML || '';
+    exportPdf(html, 'answer');
+  }
+}
+
 answerEl.addEventListener("click", (e) => {
   const target = e.target;
 
@@ -124,6 +176,32 @@ answerEl.addEventListener("click", (e) => {
     return;
   }
 
+  const exportBtn = target.closest('.export-btn');
+  if (exportBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const menu = exportBtn.closest('.export-menu');
+    if (menu) {
+      const isOpen = menu.classList.contains('open');
+      closeExportMenus();
+      if (!isOpen) {
+        menu.classList.add('open');
+      }
+    }
+    return;
+  }
+
+  const exportOption = target.closest('.export-option');
+  if (exportOption) {
+    e.preventDefault();
+    e.stopPropagation();
+    const format = exportOption.getAttribute('data-format');
+    const answerItem = exportOption.closest('.answer-item');
+    exportAnswer(answerItem, format);
+    closeExportMenus();
+    return;
+  }
+
   // Handle link clicks
   if (target && target.tagName === "A") {
     e.preventDefault();
@@ -131,6 +209,12 @@ answerEl.addEventListener("click", (e) => {
     if (href) {
       chrome.tabs.create({ url: href });
     }
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.export-menu')) {
+    closeExportMenus();
   }
 });
 
@@ -240,11 +324,6 @@ async function askQuestion() {
     answerItem.innerHTML = `
       <div class="answer-meta">
         <span>${new Date().toLocaleTimeString()} - Streaming...</span>
-        <button class="copy-answer-btn" title="Copy answer to clipboard" aria-label="Copy answer to clipboard">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-          </svg>
-        </button>
       </div>
       ${reasoningEnabled ? '<div class="reasoning-content" style="margin-bottom: 12px;" role="region" aria-label="Reasoning steps"></div>' : ''}
       <div class="answer-content" role="article" aria-live="polite"></div>
@@ -256,6 +335,28 @@ async function askQuestion() {
         </div>
         <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
           <div class="token-usage-fill" style="width: 0%;"></div>
+        </div>
+        <div class="answer-actions">
+          <div class="answer-actions-left">
+            <button class="action-btn copy-answer-btn" title="Copy answer" aria-label="Copy answer">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+            <div class="export-menu">
+              <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                  <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
+                </svg>
+              </button>
+              <div class="export-menu-items">
+                <button class="export-option" data-format="pdf">Export PDF</button>
+                <button class="export-option" data-format="markdown">Export Markdown</button>
+                <button class="export-option" data-format="docx">Export DOCX</button>
+              </div>
+            </div>
+          </div>
+          <div class="answer-sources-summary"></div>
         </div>
       </div>
     `;
@@ -410,6 +511,8 @@ async function askQuestion() {
               answerContent.appendChild(sourcesIndicator);
             }
           }
+
+          renderSourcesSummary(answerItem, sources);
         }
 
         // Update context viz
@@ -625,11 +728,6 @@ if (summarizeBtn) {
         answerItem.innerHTML = `
           <div class="answer-meta">
             <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${res.model || "default model"}</span>
-            <button class="copy-answer-btn" title="Copy answer to clipboard">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-            </button>
           </div>
           <div class="answer-content"></div>
           <div class="answer-footer">
@@ -640,6 +738,28 @@ if (summarizeBtn) {
             </div>
             <div class="token-usage-bar" role="progressbar" aria-valuenow="${res.tokens ? Math.round(Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100)) : 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
               <div class="token-usage-fill" style="width: ${res.tokens ? Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100) : 0}%; background: ${res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.5 ? 'linear-gradient(90deg, #22c55e, #16a34a)' : res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.8 ? 'linear-gradient(90deg, #eab308, #ca8a04)' : 'linear-gradient(90deg, #ef4444, #dc2626)'};"></div>
+            </div>
+            <div class="answer-actions">
+              <div class="answer-actions-left">
+                <button class="action-btn copy-answer-btn" title="Copy answer" aria-label="Copy answer">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                  </svg>
+                </button>
+                <div class="export-menu">
+                  <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                      <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
+                    </svg>
+                  </button>
+                  <div class="export-menu-items">
+                    <button class="export-option" data-format="pdf">Export PDF</button>
+                    <button class="export-option" data-format="markdown">Export Markdown</button>
+                    <button class="export-option" data-format="docx">Export DOCX</button>
+                  </div>
+                </div>
+              </div>
+              <div class="answer-sources-summary"></div>
             </div>
           </div>
         `;
@@ -676,6 +796,8 @@ if (summarizeBtn) {
             answerItem.appendChild(sourcesIndicator);
           }
         }
+
+        renderSourcesSummary(answerItem, sources);
 
         // Show success toast
         toast.success(`Page summarized using ${res.model || "default model"}`);

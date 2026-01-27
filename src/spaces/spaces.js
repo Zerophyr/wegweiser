@@ -545,11 +545,29 @@ function renderChatMessages(messages) {
             <div class="chat-bubble">
               <div class="chat-content" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
               ${footerHtml}
+              <div class="chat-actions">
+                <div class="chat-actions-left">
+                  <button class="action-btn chat-copy-btn" title="Copy answer" aria-label="Copy answer">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                  </button>
+                  <div class="export-menu">
+                    <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
+                      </svg>
+                    </button>
+                    <div class="export-menu-items">
+                      <button class="export-option" data-format="pdf">Export PDF</button>
+                      <button class="export-option" data-format="markdown">Export Markdown</button>
+                      <button class="export-option" data-format="docx">Export DOCX</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="chat-sources-summary"></div>
+              </div>
             </div>
-            <button class="copy-btn" data-content="${escapeHtml(cleanText).replace(/"/g, '&quot;')}">
-              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              Copy
-            </button>
           </div>
         </div>
       `;
@@ -577,23 +595,28 @@ function renderChatMessages(messages) {
           }
         }
       }
+
+      const messageDiv = contentEl.closest('.chat-message-assistant');
+      if (messageDiv) {
+        renderChatSourcesSummary(messageDiv, sources);
+      }
     } catch (e) {
       console.error('Error processing sources:', e);
     }
   });
 
   // Add copy button handlers
-  document.querySelectorAll('.copy-btn').forEach(btn => {
+  document.querySelectorAll('.chat-copy-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const content = btn.dataset.content;
+      const message = btn.closest('.chat-message-assistant');
+      const contentEl = message?.querySelector('.chat-content');
+      const content = contentEl?.innerText || contentEl?.textContent || '';
       try {
         await navigator.clipboard.writeText(content);
         btn.classList.add('copied');
-        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
         setTimeout(() => {
           btn.classList.remove('copied');
-          btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
         }, 2000);
       } catch (err) {
         showToast('Failed to copy', 'error');
@@ -603,6 +626,67 @@ function renderChatMessages(messages) {
 
   // Scroll to bottom
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function closeExportMenus() {
+  document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
+}
+
+function renderChatSourcesSummary(messageDiv, sources) {
+  const summary = messageDiv?.querySelector('.chat-sources-summary');
+  if (!summary) return;
+  summary.innerHTML = '';
+
+  if (!sources || sources.length === 0 || typeof getUniqueDomains !== 'function') {
+    return;
+  }
+
+  const uniqueDomains = getUniqueDomains(sources);
+  const stack = document.createElement('div');
+  stack.className = 'sources-favicon-stack';
+
+  uniqueDomains.slice(0, 5).forEach((domain, index) => {
+    const favicon = document.createElement('img');
+    favicon.src = domain.favicon;
+    favicon.alt = domain.domain;
+    favicon.style.zIndex = String(5 - index);
+    favicon.onerror = () => {
+      favicon.src = 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"%23888\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>';
+    };
+    stack.appendChild(favicon);
+  });
+
+  const count = document.createElement('span');
+  count.className = 'sources-count';
+  count.textContent = `${sources.length} source${sources.length !== 1 ? 's' : ''}`;
+
+  summary.appendChild(stack);
+  summary.appendChild(count);
+}
+
+function buildThreadHtml(messages) {
+  return (messages || []).map((msg) => {
+    const role = msg.role === 'assistant' ? 'Assistant' : 'User';
+    const content = typeof applyMarkdownStyles === 'function'
+      ? applyMarkdownStyles(msg.content || '')
+      : escapeHtml(msg.content || '');
+    return `<h2>${role}</h2><div>${content}</div>`;
+  }).join('');
+}
+
+async function exportCurrentThread(format) {
+  if (!currentThreadId) return;
+  const thread = await getThread(currentThreadId);
+  const messages = thread?.messages || [];
+
+  if (format === 'markdown' && typeof exportMarkdownFile === 'function') {
+    exportMarkdownFile(messages, `${thread?.title || 'thread'}.md`);
+  } else if (format === 'docx' && typeof exportDocx === 'function') {
+    exportDocx(messages, `${thread?.title || 'thread'}.docx`);
+  } else if (format === 'pdf' && typeof exportPdf === 'function') {
+    const html = buildThreadHtml(messages);
+    exportPdf(html, thread?.title || 'thread');
+  }
 }
 
 if (typeof window !== 'undefined' && window.__TEST__) {
@@ -732,6 +816,10 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll('.menu-items').forEach(menu => {
       menu.style.display = 'none';
     });
+  }
+
+  if (!e.target.closest('.export-menu')) {
+    closeExportMenus();
   }
 });
 
@@ -1001,6 +1089,33 @@ function bindEvents() {
 
   elements.newThreadBtn.addEventListener('click', createNewThread);
 
+  elements.chatMessages.addEventListener('click', async (e) => {
+    const exportBtn = e.target.closest('.export-btn');
+    if (exportBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const menu = exportBtn.closest('.export-menu');
+      if (menu) {
+        const isOpen = menu.classList.contains('open');
+        closeExportMenus();
+        if (!isOpen) {
+          menu.classList.add('open');
+        }
+      }
+      return;
+    }
+
+    const exportOption = e.target.closest('.export-option');
+    if (exportOption) {
+      e.preventDefault();
+      e.stopPropagation();
+      const format = exportOption.getAttribute('data-format');
+      await exportCurrentThread(format);
+      closeExportMenus();
+      return;
+    }
+  });
+
   // Close modals on backdrop click
   [elements.spaceModal, elements.renameModal, elements.deleteModal].forEach(modal => {
     modal.addEventListener('click', (e) => {
@@ -1060,6 +1175,28 @@ function createStreamingAssistantMessage() {
             <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
           </div>
         </div>
+        <div class="chat-actions">
+          <div class="chat-actions-left">
+            <button class="action-btn chat-copy-btn" title="Copy answer" aria-label="Copy answer">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+            </button>
+            <div class="export-menu">
+              <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                  <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
+                </svg>
+              </button>
+              <div class="export-menu-items">
+                <button class="export-option" data-format="pdf">Export PDF</button>
+                <button class="export-option" data-format="markdown">Export Markdown</button>
+                <button class="export-option" data-format="docx">Export DOCX</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-sources-summary"></div>
+        </div>
       </div>
     </div>
   `;
@@ -1073,7 +1210,8 @@ function createStreamingAssistantMessage() {
     tokensEl: messageDiv.querySelector('.chat-tokens'),
     contextBadgeEl: messageDiv.querySelector('.chat-context-badge'),
     tokenFillEl: messageDiv.querySelector('.token-usage-fill'),
-    tokenBarEl: messageDiv.querySelector('.token-usage-bar')
+    tokenBarEl: messageDiv.querySelector('.token-usage-bar'),
+    sourcesSummaryEl: messageDiv.querySelector('.chat-sources-summary')
   };
 }
 
@@ -1223,32 +1361,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
           }
         }
 
-        // Add copy button
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'copy-btn';
-        if (typeof extractSources === 'function') {
-          copyBtn.dataset.content = extractSources(fullContent).cleanText;
-        } else {
-          copyBtn.dataset.content = fullContent;
-        }
-        copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
-        copyBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          try {
-            await navigator.clipboard.writeText(copyBtn.dataset.content);
-            copyBtn.classList.add('copied');
-            copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied`;
-            setTimeout(() => {
-              copyBtn.classList.remove('copied');
-              copyBtn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy`;
-            }, 2000);
-          } catch (err) {
-            showToast('Failed to copy', 'error');
-          }
-        });
-        if (streamingUi?.wrapper) {
-          streamingUi.wrapper.appendChild(copyBtn);
-        }
+        renderChatSourcesSummary(messageDiv, sources);
 
         streamPort.disconnect();
         streamPort = null;

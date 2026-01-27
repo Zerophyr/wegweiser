@@ -1,5 +1,6 @@
 const { getTokenBarStyle } = require("../src/shared/utils.js");
 const { extractSources } = require("../src/modules/sources");
+const { exportMarkdown } = require("../src/modules/exporter");
 
 describe("getTokenBarStyle", () => {
   test("returns 0% and green for null tokens", () => {
@@ -25,5 +26,12 @@ describe("extractSources domain metadata", () => {
   test("extractSources returns domain names", () => {
     const { sources } = extractSources("https://example.com [1]");
     expect(sources[0].domain).toBe("example.com");
+  });
+});
+
+describe("exportMarkdown", () => {
+  test("exportMarkdown formats thread", () => {
+    const md = exportMarkdown([{ role: 'user', content: 'Hi' }]);
+    expect(md).toContain("## User");
   });
 });
