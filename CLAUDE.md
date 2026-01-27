@@ -45,6 +45,8 @@ openrouter-sidepanel-ext/
 │   │   ├── markdown.js          # Markdown rendering
 │   │   ├── toast.js             # Notifications
 │   │   ├── sources.js           # Source extraction
+│   │   ├── source-cards.js      # Source hover cards
+│   │   ├── exporter.js          # Thread export helpers
 │   │   ├── theme.js             # Theme system
 │   │   ├── models-dropdown.js   # Model selection
 │   │   └── context-viz.js       # Context visualization
@@ -104,11 +106,17 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 
 ### File Load Order Dependencies
 The `src/sidepanel/sidepanel.html` loads scripts in this specific order:
-1. `src/modules/toast.js` - Must load first (notifications used by all modules)
-2. `src/modules/markdown.js` - Rendering utilities
-3. `src/modules/sources.js` - Source extraction
-4. `src/modules/theme.js` - Theme system
-5. `src/sidepanel/sidepanel.js` - Main UI logic (depends on all above)
+1. `src/lib/purify.min.js` - DOMPurify for sanitizing markdown output
+2. `src/modules/toast.js` - Must load first (notifications used by all modules)
+3. `src/modules/markdown.js` - Rendering utilities
+4. `src/modules/sources.js` - Source extraction
+5. `src/modules/source-cards.js` - Source hover cards
+6. `src/modules/exporter.js` - Thread export helpers
+7. `src/modules/theme.js` - Theme system
+8. `src/shared/utils.js` - Shared helpers used by UI modules
+9. `src/modules/models-dropdown.js` - Model selection UI
+10. `src/modules/context-viz.js` - Context visualization
+11. `src/sidepanel/sidepanel.js` - Main UI logic (depends on all above)
 
 ## Critical Code Patterns
 
