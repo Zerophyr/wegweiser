@@ -80,6 +80,12 @@ function splitMessagesForSummary(messages, liveWindowSize) {
   };
 }
 
+function shouldSkipSummarization(prompt) {
+  if (typeof prompt !== 'string') return false;
+  const estimatedTokens = Math.ceil(prompt.length / 4);
+  return estimatedTokens > 2000;
+}
+
 
 // ============ STORAGE FUNCTIONS ============
 
@@ -715,6 +721,7 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.getSourcesData = getSourcesData;
   window.getLiveWindowSize = getLiveWindowSize;
   window.splitMessagesForSummary = splitMessagesForSummary;
+  window.shouldSkipSummarization = shouldSkipSummarization;
 }
 
 async function renderStorageUsage() {
@@ -1331,8 +1338,12 @@ async function sendMessage() {
 
   const liveWindowSize = getLiveWindowSize(thread.summary);
   const { historyToSummarize, liveMessages } = splitMessagesForSummary(thread.messages, liveWindowSize);
-  if (historyToSummarize.length > 0) {
+  const skipSummary = shouldSkipSummarization(content);
+  if (historyToSummarize.length > 0 && !skipSummary) {
     try {
+      if (typeof showToast === 'function') {
+        showToast('Updating summary...', 'info');
+      }
       const summaryMessages = typeof buildSummarizerMessages === 'function'
         ? buildSummarizerMessages(thread.summary, historyToSummarize)
         : historyToSummarize;
@@ -1350,9 +1361,14 @@ async function sendMessage() {
           summary: thread.summary,
           summaryUpdatedAt: thread.summaryUpdatedAt
         });
+      } else if (typeof showToast === 'function') {
+        showToast('Summary update failed; continuing without it', 'error');
       }
     } catch (err) {
       console.warn('Summary update failed:', err);
+      if (typeof showToast === 'function') {
+        showToast('Summary update failed; continuing without it', 'error');
+      }
     }
   }
 

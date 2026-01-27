@@ -14,6 +14,7 @@ const win = window as unknown as {
     systemInstruction?: string,
     summary?: string
   ) => any[];
+  shouldSkipSummarization?: (prompt: string) => boolean;
 };
 
 function loadSpaces() {
@@ -52,5 +53,9 @@ describe("spaces summarization helpers", () => {
     expect(result[0].content).toMatch(/custom/i);
     expect(result[1].role).toBe("system");
     expect(result[1].content).toMatch(/Summary/i);
+  });
+
+  test("shouldSkipSummarization returns true for long prompts", () => {
+    expect(win.shouldSkipSummarization?.("a".repeat(10000))).toBe(true);
   });
 });
