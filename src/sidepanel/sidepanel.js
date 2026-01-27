@@ -36,6 +36,38 @@ const estimatedCostEl = document.getElementById("estimated-cost");
 let webSearchEnabled = false;
 let reasoningEnabled = false;
 
+// ---- Provider state ----
+let currentProvider = "openrouter";
+
+function normalizeProviderSafe(providerId) {
+  if (typeof normalizeProviderId === "function") {
+    return normalizeProviderId(providerId);
+  }
+  return providerId === "naga" ? "naga" : "openrouter";
+}
+
+function getProviderLabelSafe(providerId) {
+  if (typeof getProviderLabel === "function") {
+    return getProviderLabel(providerId);
+  }
+  return normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter";
+}
+
+function getProviderStorageKeySafe(baseKey, providerId) {
+  if (typeof getProviderStorageKey === "function") {
+    return getProviderStorageKey(baseKey, providerId);
+  }
+  return normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
+}
+
+async function loadProviderSetting() {
+  try {
+    const stored = await chrome.storage.local.get(["or_provider"]);
+    currentProvider = normalizeProviderSafe(stored.or_provider);
+  } catch (e) {
+    console.warn("Failed to load provider setting:", e);
+  }
+}
 // ---- Model dropdown manager ----
 let modelDropdown = null;
 
@@ -238,6 +270,11 @@ async function refreshBalance() {
     const res = await chrome.runtime.sendMessage({ type: "get_balance" });
     if (!res?.ok) {
       balanceEl.textContent = res?.error || "Error";
+      return;
+    }
+
+    if (res.supported === false) {
+      balanceEl.textContent = "Not supported";
       return;
     }
 
@@ -556,7 +593,7 @@ async function askQuestion() {
         if (metaSpan) {
           metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
         }
-        metaEl.textContent = "❌ Error from OpenRouter.";
+        metaEl.textContent = `❌ Error from ${getProviderLabelSafe(currentProvider)}.`;
         port.disconnect();
         activePort = null;
         stopBtn.style.display = 'none';
@@ -635,8 +672,8 @@ if (summarizeBtn) {
         throw new Error("Could not get active tab");
       }
 
-      // Step 2: Sending to OpenRouter
-      metaEl.textContent = "📤 Sending to OpenRouter for summarization (this may take longer for large pages)...";
+      // Step 2: Sending to provider
+      metaEl.textContent = `📤 Sending to ${getProviderLabelSafe(currentProvider)} for summarization (this may take longer for large pages)...`;
       await new Promise(resolve => setTimeout(resolve, 200)); // Brief pause for UX
 
       const res = await chrome.runtime.sendMessage({
@@ -676,7 +713,7 @@ if (summarizeBtn) {
 
             // Retry the summarization
             showTypingIndicator();
-            metaEl.textContent = "📤 Sending to OpenRouter for summarization...";
+            metaEl.textContent = `📤 Sending to ${getProviderLabelSafe(currentProvider)} for summarization...`;
 
             const retryRes = await chrome.runtime.sendMessage({
               type: "summarize_page",
@@ -935,14 +972,17 @@ async function loadModels() {
     const models = res.models || [];
 
     // Get favorites from storage
-    const favData = await chrome.storage.sync.get(["or_favorites"]);
-    const favorites = favData.or_favorites || [];
+    const favoritesKey = getProviderStorageKeySafe("or_favorites", currentProvider);
+    const favData = await chrome.storage.sync.get([favoritesKey]);
+    const favorites = favData[favoritesKey] || [];
 
     // Initialize ModelDropdownManager if not already done
     if (!modelDropdown) {
       modelDropdown = new ModelDropdownManager({
         inputElement: modelInput,
         containerType: 'sidebar',
+        favoritesKey,
+        recentModelsKey: getProviderStorageKeySafe("or_recent_models", currentProvider),
         onModelSelect: async (modelId) => {
           // Update input field
           if (modelInput) {
@@ -1146,13 +1186,14 @@ function hideTypingIndicator() {
 }
 
 // ---- Initial load ----
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   // Hide answer box initially if empty
   updateAnswerVisibility();
 
   // Load toggle settings
   loadToggleSettings();
 
+  await loadProviderSetting();
   refreshBalance();
   loadModels();
 

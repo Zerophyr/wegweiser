@@ -8,6 +8,32 @@ const STORAGE_KEYS = {
   MODEL: 'or_model'
 };
 
+// Provider state
+let currentProvider = 'openrouter';
+
+function normalizeProviderSafe(providerId) {
+  if (typeof normalizeProviderId === 'function') {
+    return normalizeProviderId(providerId);
+  }
+  return providerId === 'naga' ? 'naga' : 'openrouter';
+}
+
+function getProviderStorageKeySafe(baseKey, providerId) {
+  if (typeof getProviderStorageKey === 'function') {
+    return getProviderStorageKey(baseKey, providerId);
+  }
+  return normalizeProviderSafe(providerId) === 'naga' ? `${baseKey}_naga` : baseKey;
+}
+
+async function loadProviderSetting() {
+  try {
+    const stored = await chrome.storage.local.get(['or_provider']);
+    currentProvider = normalizeProviderSafe(stored.or_provider);
+  } catch (e) {
+    console.warn('Failed to load provider setting:', e);
+  }
+}
+
 const MAX_STORAGE_BYTES = 10485760; // 10MB
 
 // Common emojis for space icons
@@ -1106,7 +1132,8 @@ async function loadModels() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'get_models' });
     if (response.ok && response.models) {
-      const currentModel = (await chrome.storage.local.get([STORAGE_KEYS.MODEL]))[STORAGE_KEYS.MODEL] || '';
+      const modelKey = getProviderStorageKeySafe(STORAGE_KEYS.MODEL, currentProvider);
+      const currentModel = (await chrome.storage.local.get([modelKey]))[modelKey] || '';
 
       elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
         response.models.map(m =>
@@ -1631,6 +1658,7 @@ async function init() {
   }
 
   // Load data
+  await loadProviderSetting();
   await loadModels();
   await renderSpacesList();
   await renderStorageUsage();
