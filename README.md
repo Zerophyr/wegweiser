@@ -1,4 +1,4 @@
-# 🤖 OpenRouter Buddy v1.1.0
+# 🤖 OpenRouter Buddy v1.1.1
 
 > Your friendly AI companion powered by OpenRouter - chat with any model right from your browser sidebar!
 
@@ -12,7 +12,7 @@
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 
-### Spaces (v1.1.0)
+### Spaces (v1.1.1)
 - 🏠 **Spaces** - Organize conversations by project or topic in a full-page experience
 - 🎨 **5-Column Grid Layout** - Beautiful card-based overview with square cards
 - 😀 **Emoji Icons** - Custom emoji picker to easily identify spaces
@@ -24,7 +24,10 @@
 - 🔄 **Chat Toggles** - Temporarily override web search/reasoning per message
 - 🔗 **Source Citations** - Clickable [1], [2] references with clean URL removal
 - 📋 **Copy Answers** - One-click copy button for AI responses in threads
-- 💾 **Persistent Storage** - All conversations saved locally with unlimited history
+- 🧾 **Adaptive Summaries** - Older turns are summarized to keep token usage low
+- 🗂️ **Archived Messages** - Expand “Earlier messages (N)” to view full history
+- 🏷️ **Summary Badge** - “Summary updated” indicator after refresh
+- 💾 **Persistent Storage** - All conversations saved locally with full history archived
 - 📊 **Storage Monitoring** - Visual usage tracking with tiered warnings (70%/85%/95%)
 
 ### Quality of Life Features (v0.9.0)
@@ -192,7 +195,12 @@ openrouter-sidepanel-ext/
 
 ## 📝 Changelog
 
-### v1.1.0 (Latest)
+### v1.1.1 (Latest)
+- 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
+- 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
+- 🏷️ **Summary Badge** - Visual indicator after summary refresh
+
+### v1.1.0
 - 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards
 - 😀 **Emoji Icons** - Custom emoji picker for space icons
 - 🌐 **Web Search Toggle** - Enable/disable web search per space
@@ -303,4 +311,4 @@ A: Yes, you must use your own OpenRouter API key.
 
 **Made with ❤️ by the OpenRouter Buddy team**
 
-*Version 1.1.0 | January 2026*
+*Version 1.1.1 | January 2026*

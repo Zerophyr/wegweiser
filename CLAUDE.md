@@ -88,6 +88,12 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 - Context automatically trimmed with `splice(0, length - MAX_CONTEXT_MESSAGES)`
 - Cleanup on tab close prevents memory leaks
 
+**Spaces Summaries + Archive (Token Control)**:
+- Spaces threads now keep a rolling `thread.summary` and move older messages into `thread.archivedMessages`
+- Live window: 12 messages before summary exists, 8 messages after summary exists
+- Summary is injected as a system message after Space custom instructions; archived messages are never sent to the model
+- Summary refresh uses `MESSAGE_TYPES.SUMMARIZE_THREAD` with `buildSummarizerMessages()` in `src/shared/utils.js`
+
 **Storage Strategy**:
 - **chrome.storage.local**: API keys, history, cache (never synced for security)
 - **chrome.storage.sync**: Favorites, theme preferences (synced across devices)
@@ -121,6 +127,13 @@ Context management happens in `src/background/background.js` at the `callOpenRou
 - Assistant response added: `context.push({ role: "assistant", content })` (line ~455)
 
 The `MAX_CONTEXT_MESSAGES` constant is in `src/shared/constants.js` (currently 16).
+
+### Spaces Summary + Archive Flow
+Spaces uses a separate summarization pipeline in `src/spaces/spaces.js`:
+- `thread.summary` and `thread.summaryUpdatedAt` store the rolling summary
+- `thread.archivedMessages` and `thread.archivedUpdatedAt` store older messages for UI-only viewing
+- Summary updates call background `SUMMARIZE_THREAD` (no history/context side-effects)
+- UI renders an “Earlier messages (N)” toggle and a “Summary updated” badge
 
 ### Adding Features That Access Page Content
 The "Summarize Page" feature demonstrates the pattern for accessing webpage content:
@@ -226,7 +239,8 @@ The extension uses **optional host permissions** for the "Summarize Page" featur
 - Chrome Web Store compliance: preferred over broad `host_permissions`
 
 ## Version History Context
-The codebase is currently at **v1.1.0** with these major milestones:
+The codebase is currently at **v1.1.1** with these major milestones:
+- **v1.1.1**: Spaces adaptive summaries, archived messages toggle, summary badge
 - **v1.1.0**: Spaces UI improvements - 5-column grid layout, emoji icons, web search/reasoning toggles, source citations, copy button, clean URL removal
 - **v1.0.0**: Spaces feature - full-page experience for organizing conversations by project
 - **v0.9.1**: DOMPurify integration, comprehensive unit tests (101 tests)
