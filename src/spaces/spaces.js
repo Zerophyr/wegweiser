@@ -86,6 +86,12 @@ function shouldSkipSummarization(prompt) {
   return estimatedTokens > 2000;
 }
 
+function appendArchivedMessages(currentArchive, newMessages) {
+  const safeCurrent = Array.isArray(currentArchive) ? currentArchive : [];
+  const safeNew = Array.isArray(newMessages) ? newMessages : [];
+  return [...safeCurrent, ...safeNew];
+}
+
 
 // ============ STORAGE FUNCTIONS ============
 
@@ -205,6 +211,8 @@ async function createThread(spaceId, title = 'New Thread') {
     messages: [],
     summary: '',
     summaryUpdatedAt: null,
+    archivedMessages: [],
+    archivedUpdatedAt: null,
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
@@ -510,20 +518,12 @@ async function renderThreadList() {
   });
 }
 
-function renderChatMessages(messages) {
-  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
-  if (!chatMessagesEl) {
-    return;
-  }
+let currentArchivedMessages = [];
 
-  if (!messages || messages.length === 0) {
-    chatMessagesEl.innerHTML = '';
-    return;
-  }
-
-  chatMessagesEl.innerHTML = messages.map((msg, index) => {
+function buildMessageHtml(messages) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  return safeMessages.map((msg, index) => {
     if (msg.role === 'assistant') {
-      // Extract sources and clean text
       const { sources, cleanText } = typeof extractSources === 'function'
         ? extractSources(msg.content)
         : { sources: [], cleanText: msg.content };
@@ -596,23 +596,25 @@ function renderChatMessages(messages) {
           </div>
         </div>
       `;
-    } else {
-      return `
-        <div class="chat-message chat-message-user">
-          <div class="chat-bubble">${escapeHtml(msg.content)}</div>
-        </div>
-      `;
     }
-  }).join('');
 
-  // Make source references clickable and add sources indicators
-  document.querySelectorAll('.chat-message-assistant .chat-content').forEach(contentEl => {
+    return `
+      <div class="chat-message chat-message-user">
+        <div class="chat-bubble">${escapeHtml(msg.content)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function postProcessMessages(root) {
+  const scope = root || document;
+
+  scope.querySelectorAll('.chat-message-assistant .chat-content').forEach(contentEl => {
     try {
       const sources = JSON.parse(contentEl.dataset.sources || '[]');
       if (sources.length > 0 && typeof makeSourceReferencesClickable === 'function') {
         makeSourceReferencesClickable(contentEl, sources);
 
-        // Add sources indicator
         if (typeof createSourcesIndicator === 'function') {
           const indicator = createSourcesIndicator(sources, contentEl);
           if (indicator) {
@@ -630,8 +632,9 @@ function renderChatMessages(messages) {
     }
   });
 
-  // Add copy button handlers
-  document.querySelectorAll('.chat-copy-btn').forEach(btn => {
+  scope.querySelectorAll('.chat-copy-btn').forEach(btn => {
+    if (btn.dataset.bound === 'true') return;
+    btn.dataset.bound = 'true';
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const message = btn.closest('.chat-message-assistant');
@@ -648,9 +651,76 @@ function renderChatMessages(messages) {
       }
     });
   });
+}
 
-  // Scroll to bottom
+function renderChatMessages(messages, thread = null) {
+  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
+  if (!chatMessagesEl) {
+    return;
+  }
+
+  if (!messages || messages.length === 0) {
+    chatMessagesEl.innerHTML = '';
+    return;
+  }
+
+  const archivedMessages = thread?.archivedMessages || [];
+  currentArchivedMessages = archivedMessages;
+  const summaryUpdatedAt = thread?.summaryUpdatedAt || null;
+  const showSummaryBadge = summaryUpdatedAt && Date.now() - summaryUpdatedAt < 30000;
+
+  const archiveHtml = archivedMessages.length > 0
+    ? `
+      <div class="chat-archive-block" data-archive-open="false">
+        <button class="chat-archive-toggle" type="button" aria-expanded="false">
+          Earlier messages (${archivedMessages.length})
+        </button>
+        <div class="chat-archive-content"></div>
+      </div>
+    `
+    : '';
+
+  const summaryBadgeHtml = showSummaryBadge
+    ? '<div class="chat-summary-badge">Summary updated</div>'
+    : '';
+
+  const messagesHtml = buildMessageHtml(messages);
+  chatMessagesEl.innerHTML = `${archiveHtml}${summaryBadgeHtml}${messagesHtml}`;
+
+  postProcessMessages(chatMessagesEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function toggleArchiveSection() {
+  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
+  if (!chatMessagesEl) return;
+  const archiveBlock = chatMessagesEl.querySelector('.chat-archive-block');
+  if (!archiveBlock) return;
+  const contentEl = archiveBlock.querySelector('.chat-archive-content');
+  if (!contentEl) return;
+
+  const isOpen = archiveBlock.getAttribute('data-archive-open') === 'true';
+  const toggleBtn = archiveBlock.querySelector('.chat-archive-toggle');
+
+  if (isOpen) {
+    contentEl.innerHTML = '';
+    archiveBlock.setAttribute('data-archive-open', 'false');
+    archiveBlock.classList.remove('open');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    }
+    return;
+  }
+
+  const archivedHtml = buildMessageHtml(currentArchivedMessages);
+  contentEl.innerHTML = archivedHtml || '<div class="chat-archive-empty">No archived messages.</div>';
+  archiveBlock.setAttribute('data-archive-open', 'true');
+  archiveBlock.classList.add('open');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  postProcessMessages(contentEl);
 }
 
 function closeExportMenus() {
@@ -722,6 +792,7 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.getLiveWindowSize = getLiveWindowSize;
   window.splitMessagesForSummary = splitMessagesForSummary;
   window.shouldSkipSummarization = shouldSkipSummarization;
+  window.appendArchivedMessages = appendArchivedMessages;
 }
 
 async function renderStorageUsage() {
@@ -808,7 +879,7 @@ async function openThread(threadId) {
   elements.chatEmptyState.style.display = 'none';
   elements.chatContainer.style.display = 'flex';
 
-  renderChatMessages(thread.messages);
+    renderChatMessages(thread.messages, thread);
   await renderThreadList(); // Update active state
 }
 
@@ -1120,6 +1191,14 @@ function bindEvents() {
   elements.newThreadBtn.addEventListener('click', createNewThread);
 
   elements.chatMessages.addEventListener('click', async (e) => {
+    const archiveToggle = e.target.closest('.chat-archive-toggle');
+    if (archiveToggle) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleArchiveSection();
+      return;
+    }
+
     const exportBtn = e.target.closest('.export-btn');
     if (exportBtn) {
       e.preventDefault();
@@ -1355,11 +1434,16 @@ async function sendMessage() {
       if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= 200) {
         thread.summary = summaryRes.summary.trim();
         thread.summaryUpdatedAt = Date.now();
+        const updatedArchive = appendArchivedMessages(thread.archivedMessages, historyToSummarize);
+        thread.archivedMessages = updatedArchive;
+        thread.archivedUpdatedAt = Date.now();
         thread.messages = liveMessages;
         await updateThread(currentThreadId, {
           messages: liveMessages,
           summary: thread.summary,
-          summaryUpdatedAt: thread.summaryUpdatedAt
+          summaryUpdatedAt: thread.summaryUpdatedAt,
+          archivedMessages: updatedArchive,
+          archivedUpdatedAt: thread.archivedUpdatedAt
         });
       } else if (typeof showToast === 'function') {
         showToast('Summary update failed; continuing without it', 'error');
@@ -1372,7 +1456,7 @@ async function sendMessage() {
     }
   }
 
-  renderChatMessages(thread.messages);
+    renderChatMessages(thread.messages, thread);
 
   const startTime = Date.now();
   const streamingUi = createStreamingAssistantMessage();
