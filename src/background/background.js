@@ -7,14 +7,16 @@ import {
   CACHE_TTL,
   DEFAULTS,
   ERROR_MESSAGES,
-  API_CONFIG
+  API_CONFIG,
+  PROVIDERS
 } from '/src/shared/constants.js';
 
 // Cache management
-let lastBalance = null;
-let lastBalanceAt = 0;
+const lastBalanceByProvider = {};
+const lastBalanceAtByProvider = {};
 
 let cachedConfig = {
+  provider: "openrouter",
   apiKey: null,
   model: DEFAULTS.MODEL
 };
@@ -30,17 +32,72 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // ---- Config (API key + model) ----
+function normalizeProviderId(providerId) {
+  if (providerId === "openrouter" || providerId === "naga") {
+    return providerId;
+  }
+  return "openrouter";
+}
+
+function getProviderConfig(providerId) {
+  const provider = normalizeProviderId(providerId);
+  return PROVIDERS[provider] || PROVIDERS.openrouter;
+}
+
+function getModelsCacheKeys(providerId) {
+  const provider = normalizeProviderId(providerId);
+  if (provider === "naga") {
+    return {
+      modelsKey: STORAGE_KEYS.MODELS_CACHE_NAGA,
+      timeKey: STORAGE_KEYS.MODELS_CACHE_TIME_NAGA
+    };
+  }
+  return {
+    modelsKey: STORAGE_KEYS.MODELS_CACHE,
+    timeKey: STORAGE_KEYS.MODELS_CACHE_TIME
+  };
+}
+
+function buildAuthHeaders(apiKey, providerConfig) {
+  return {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    ...(providerConfig.headers || {})
+  };
+}
+
+function parseModelsPayload(payload) {
+  const list = Array.isArray(payload) ? payload : (payload?.data || []);
+  return list.map((model) => ({
+    id: model.id,
+    name: model.name || model.id
+  }));
+}
+
 async function loadConfig() {
   const now = Date.now();
-  if (now - lastConfigLoadAt < CACHE_TTL.CONFIG && cachedConfig.apiKey) {
+  if (now - lastConfigLoadAt < CACHE_TTL.CONFIG && cachedConfig.provider) {
     return cachedConfig;
   }
 
   // SECURITY FIX: Use chrome.storage.local instead of sync for API key
-  const items = await chrome.storage.local.get([STORAGE_KEYS.API_KEY, STORAGE_KEYS.MODEL]);
+  const items = await chrome.storage.local.get([
+    STORAGE_KEYS.PROVIDER,
+    STORAGE_KEYS.API_KEY,
+    STORAGE_KEYS.API_KEY_NAGA,
+    STORAGE_KEYS.MODEL,
+    STORAGE_KEYS.MODEL_NAGA
+  ]);
+  const provider = normalizeProviderId(items[STORAGE_KEYS.PROVIDER]);
+  const apiKey = provider === "naga" ? items[STORAGE_KEYS.API_KEY_NAGA] : items[STORAGE_KEYS.API_KEY];
+  const model = provider === "naga"
+    ? (items[STORAGE_KEYS.MODEL_NAGA] || DEFAULTS.MODEL)
+    : (items[STORAGE_KEYS.MODEL] || DEFAULTS.MODEL);
+
   cachedConfig = {
-    apiKey: items[STORAGE_KEYS.API_KEY] || "",
-    model: items[STORAGE_KEYS.MODEL] || DEFAULTS.MODEL
+    provider,
+    apiKey: apiKey || "",
+    model
   };
   lastConfigLoadAt = now;
   return cachedConfig;
@@ -145,8 +202,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.GET_BALANCE) {
     (async () => {
       try {
-        const balance = await getOpenRouterBalance();
-        sendResponse({ ok: true, balance });
+        const result = await getProviderBalance();
+        sendResponse({ ok: true, balance: result.balance, supported: result.supported });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
@@ -216,32 +273,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
     (async () => {
       try {
-        // Check cache first
+        const cfg = await loadConfig();
+        const { modelsKey, timeKey } = getModelsCacheKeys(cfg.provider);
+
+        // Check cache first (provider-scoped)
         const cacheData = await chrome.storage.local.get([
-          STORAGE_KEYS.MODELS_CACHE,
-          STORAGE_KEYS.MODELS_CACHE_TIME
+          modelsKey,
+          timeKey
         ]);
 
         const now = Date.now();
-        if (cacheData[STORAGE_KEYS.MODELS_CACHE] &&
-            cacheData[STORAGE_KEYS.MODELS_CACHE_TIME] &&
-            (now - cacheData[STORAGE_KEYS.MODELS_CACHE_TIME]) < CACHE_TTL.MODELS) {
+        if (cacheData[modelsKey] &&
+            cacheData[timeKey] &&
+            (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
           console.log("Returning cached models");
-          sendResponse({ ok: true, models: cacheData[STORAGE_KEYS.MODELS_CACHE] });
+          sendResponse({ ok: true, models: cacheData[modelsKey] });
           return;
         }
 
-        const cfg = await loadConfig();
         if (!cfg.apiKey) {
           sendResponse({ ok: false, error: ERROR_MESSAGES.NO_API_KEY });
           return;
         }
 
-        const res = await fetch(`${API_CONFIG.BASE_URL}/models`, {
-          headers: {
-            "Authorization": `Bearer ${cfg.apiKey}`,
-            "Content-Type": "application/json"
-          }
+        const providerConfig = getProviderConfig(cfg.provider);
+
+        const res = await fetch(`${providerConfig.baseUrl}/models`, {
+          headers: buildAuthHeaders(cfg.apiKey, providerConfig)
         });
 
         if (!res.ok) {
@@ -250,18 +308,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
         const data = await res.json();
-        const models = (data.data || []).map((m) => ({
-          id: m.id,
-          name: m.name || m.id
-        }));
+        const models = parseModelsPayload(data);
 
         // Cache the models
         await chrome.storage.local.set({
-          [STORAGE_KEYS.MODELS_CACHE]: models,
-          [STORAGE_KEYS.MODELS_CACHE_TIME]: now
+          [modelsKey]: models,
+          [timeKey]: now
         });
 
         sendResponse({ ok: true, models });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg?.type === MESSAGE_TYPES.SET_PROVIDER) {
+    (async () => {
+      try {
+        const provider = normalizeProviderId(msg.provider);
+        await chrome.storage.local.set({ [STORAGE_KEYS.PROVIDER]: provider });
+        cachedConfig = {
+          provider,
+          apiKey: null,
+          model: DEFAULTS.MODEL
+        };
+        lastConfigLoadAt = 0;
+        delete lastBalanceByProvider[provider];
+        delete lastBalanceAtByProvider[provider];
+        sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
@@ -452,6 +528,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  const providerConfig = getProviderConfig(cfg.provider);
 
   // Get or initialize conversation context for this tab
   if (!conversationContexts.has(tabId)) {
@@ -469,9 +546,9 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
 
   console.log(`[Context] Tab ${tabId}: ${context.length} messages in context`);
 
-  // If web search is enabled, append :online to the model
+  // If web search is enabled, append :online to the model (OpenRouter only)
   let modelName = cfg.model;
-  if (webSearch && !modelName.endsWith(':online')) {
+  if (providerConfig.supportsWebSearch && webSearch && !modelName.endsWith(':online')) {
     modelName = `${modelName}:online`;
   }
 
@@ -485,7 +562,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
     context.map((m, i) => `${i}: ${m.role} - ${m.content.substring(0, 50)}...`));
 
   // Add reasoning parameter if enabled
-  if (reasoning) {
+  if (reasoning && providerConfig.id === "openrouter") {
     requestBody.reasoning = {
       enabled: true,
       effort: "medium"
@@ -500,13 +577,9 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-      const res = await fetch(`${API_CONFIG.BASE_URL}/chat/completions`, {
+      const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${cfg.apiKey}`,
-          "Content-Type": "application/json",
-          "X-Title": "OpenRouter Buddy Extension"
-        },
+        headers: buildAuthHeaders(cfg.apiKey, providerConfig),
         body: JSON.stringify(requestBody),
         signal: controller.signal
       });
@@ -577,6 +650,7 @@ async function callOpenRouterWithMessages(messages, customModel = null) {
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  const providerConfig = getProviderConfig(cfg.provider);
 
   const requestBody = {
     model: customModel || cfg.model || DEFAULTS.MODEL,
@@ -589,16 +663,12 @@ async function callOpenRouterWithMessages(messages, customModel = null) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-      const res = await fetch(`${API_CONFIG.BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${cfg.apiKey}`,
-          "Content-Type": "application/json",
-          "X-Title": "OpenRouter Buddy Extension"
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
-      });
+    const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: buildAuthHeaders(cfg.apiKey, providerConfig),
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
 
       clearTimeout(timeoutId);
 
@@ -641,23 +711,28 @@ async function callOpenRouterWithMessages(messages, customModel = null) {
 
 // ---- OpenRouter: credits/balance ----
 // GET /api/v1/credits returns { data: { total_credits, total_usage } } [web:29][web:31][web:41]
-async function getOpenRouterBalance() {
-  const now = Date.now();
-  if (lastBalance !== null && now - lastBalanceAt < CACHE_TTL.BALANCE) {
-    return lastBalance;
+async function getProviderBalance() {
+  const cfg = await loadConfig();
+  const providerConfig = getProviderConfig(cfg.provider);
+
+  if (!providerConfig.supportsBalance) {
+    return { supported: false, balance: null };
   }
 
-  const cfg = await loadConfig();
+  const now = Date.now();
+  if (lastBalanceByProvider[cfg.provider] !== null &&
+      lastBalanceByProvider[cfg.provider] !== undefined &&
+      (now - (lastBalanceAtByProvider[cfg.provider] || 0)) < CACHE_TTL.BALANCE) {
+    return { supported: true, balance: lastBalanceByProvider[cfg.provider] };
+  }
+
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
 
-  const res = await fetch(`${API_CONFIG.BASE_URL}/credits`, {
+  const res = await fetch(`${providerConfig.baseUrl}/credits`, {
     method: "GET",
-    headers: {
-      "Authorization": `Bearer ${cfg.apiKey}`,
-      "Content-Type": "application/json"
-    }
+    headers: buildAuthHeaders(cfg.apiKey, providerConfig)
   });
 
   const data = await res.json();
@@ -675,9 +750,9 @@ async function getOpenRouterBalance() {
     balance = credits - usage;
   }
 
-  lastBalance = balance;
-  lastBalanceAt = now;
-  return balance;
+  lastBalanceByProvider[cfg.provider] = balance;
+  lastBalanceAtByProvider[cfg.provider] = now;
+  return { supported: true, balance };
 }
 
 // ---- Streaming Port Connection ----
@@ -725,6 +800,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  const providerConfig = getProviderConfig(cfg.provider);
 
   // Helper function to safely send port messages
   const safeSendMessage = (message) => {
@@ -764,7 +840,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
 
   // Use custom model if provided, otherwise use config model
   let modelName = customModel || cfg.model || DEFAULTS.MODEL;
-  if (webSearch && !modelName.endsWith(':online')) {
+  if (providerConfig.supportsWebSearch && webSearch && !modelName.endsWith(':online')) {
     modelName = `${modelName}:online`;
   }
 
@@ -774,23 +850,22 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     stream: true
   };
 
-  if (reasoning) {
+  if (reasoning && providerConfig.id === "openrouter") {
     requestBody.reasoning = {
       enabled: true,
       effort: "medium"
     };
   }
+  if (providerConfig.id === "naga") {
+    requestBody.stream_options = { include_usage: true };
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-  const res = await fetch(`${API_CONFIG.BASE_URL}/chat/completions`, {
+  const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${cfg.apiKey}`,
-      "Content-Type": "application/json",
-      "X-Title": "OpenRouter Buddy Extension"
-    },
+    headers: buildAuthHeaders(cfg.apiKey, providerConfig),
     body: JSON.stringify(requestBody),
     signal: controller.signal
   });

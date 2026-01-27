@@ -31,6 +31,7 @@ export const MESSAGE_TYPES = {
   GET_BALANCE: "get_balance",
   GET_MODELS: "get_models",
   CLEAR_CONTEXT: "clear_context",
+  SET_PROVIDER: "set_provider",
   SUMMARIZE_PAGE: "summarize_page",
   REQUEST_PERMISSION: "request_permission",
   SUMMARIZE_THREAD: "summarize_thread",
