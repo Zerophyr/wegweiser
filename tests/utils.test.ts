@@ -1,4 +1,4 @@
-const { getTokenBarStyle, getStreamingFallbackMessage } = require("../src/shared/utils.js");
+const { getTokenBarStyle, getStreamingFallbackMessage, buildSummarizerMessages } = require("../src/shared/utils.js");
 const { extractSources } = require("../src/modules/sources");
 const { exportMarkdown } = require("../src/modules/exporter");
 
@@ -50,5 +50,13 @@ describe("getStreamingFallbackMessage", () => {
   test("returns null when answer exists", () => {
     const message = getStreamingFallbackMessage("Hello", false);
     expect(message).toBeNull();
+  });
+});
+
+describe("buildSummarizerMessages", () => {
+  test("includes system summary prompt", () => {
+    const messages = buildSummarizerMessages("old", [{ role: "user", content: "hi" }]);
+    expect(messages[0].role).toBe("system");
+    expect(messages[0].content).toMatch(/summarize/i);
   });
 });

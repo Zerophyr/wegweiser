@@ -114,8 +114,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
     })();
-    return true;
-  }
+      return true;
+    }
+
+    if (msg?.type === MESSAGE_TYPES.SUMMARIZE_THREAD) {
+      (async () => {
+        try {
+          const result = await callOpenRouterWithMessages(msg.messages || [], msg.model || null);
+          sendResponse({ ok: true, summary: result.answer, tokens: result.tokens });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || String(e) });
+        }
+      })();
+      return true;
+    }
 
   if (msg?.type === "get_context_size") {
     (async () => {
@@ -557,6 +569,73 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   }
 
   // All retries failed
+  throw lastError || new Error(ERROR_MESSAGES.API_ERROR);
+}
+
+async function callOpenRouterWithMessages(messages, customModel = null) {
+  const cfg = await loadConfig();
+  if (!cfg.apiKey) {
+    throw new Error(ERROR_MESSAGES.NO_API_KEY);
+  }
+
+  const requestBody = {
+    model: customModel || cfg.model || DEFAULTS.MODEL,
+    messages: Array.isArray(messages) ? messages : []
+  };
+
+  let lastError;
+  for (let attempt = 0; attempt < API_CONFIG.MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+
+      const res = await fetch(`${API_CONFIG.BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+          "X-Title": "OpenRouter Buddy Extension"
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(ERROR_MESSAGES.RATE_LIMIT);
+        } else if (res.status >= 500) {
+          throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
+        } else {
+          throw new Error(data?.error?.message || ERROR_MESSAGES.INVALID_RESPONSE);
+        }
+      }
+
+      const content = data.choices?.[0]?.message?.content || "(No content returned)";
+      const tokens = data.usage?.total_tokens || null;
+
+      return { answer: content, tokens };
+    } catch (error) {
+      lastError = error;
+
+      if (error.name === 'AbortError') {
+        throw new Error(ERROR_MESSAGES.TIMEOUT);
+      }
+      if (error.message.includes('API key') || error.message.includes('Rate limit')) {
+        throw error;
+      }
+
+      if (attempt < API_CONFIG.MAX_RETRIES - 1) {
+        const delay = API_CONFIG.RETRY_DELAY * Math.pow(2, attempt);
+        console.log(`Retry attempt ${attempt + 1} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
   throw lastError || new Error(ERROR_MESSAGES.API_ERROR);
 }
 

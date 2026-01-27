@@ -25,6 +25,7 @@ export const MESSAGE_TYPES = {
   CLEAR_CONTEXT: "clear_context",
   SUMMARIZE_PAGE: "summarize_page",
   REQUEST_PERMISSION: "request_permission",
+  SUMMARIZE_THREAD: "summarize_thread",
   SPACES_QUERY: "spaces_query",
   SPACES_STREAM: "spaces_stream"
 };

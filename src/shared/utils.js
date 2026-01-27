@@ -232,6 +232,29 @@ function getStreamingFallbackMessage(answerText, hasReasoning = false) {
   return "Stream ended with no answer received. Please try again.";
 }
 
+/**
+ * Builds a summarization prompt for older thread history.
+ * @param {string|null} previousSummary - Existing summary if any
+ * @param {Array<{role: string, content: string}>} historyToSummarize - Messages to summarize
+ * @returns {Array<{role: string, content: string}>}
+ */
+function buildSummarizerMessages(previousSummary, historyToSummarize) {
+  const systemPrompt = [
+    "You are a concise summarizer.",
+    "Capture user goals, decisions, constraints, key facts, and open questions.",
+    "Avoid long quotes and verbosity; keep only durable context."
+  ].join(" ");
+
+  const messages = [{ role: "system", content: systemPrompt }];
+  if (previousSummary) {
+    messages.push({ role: "system", content: `Summary so far:\n${previousSummary}` });
+  }
+  if (Array.isArray(historyToSummarize)) {
+    messages.push(...historyToSummarize);
+  }
+  return messages;
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     escapeHtml,
@@ -246,6 +269,7 @@ if (typeof module !== "undefined") {
     batchStorageOperations,
     renderStreamingText,
     getTokenBarStyle,
-    getStreamingFallbackMessage
+    getStreamingFallbackMessage,
+    buildSummarizerMessages
   };
 }
