@@ -329,6 +329,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         const provider = normalizeProviderId(msg.provider);
         await chrome.storage.local.set({ [STORAGE_KEYS.PROVIDER]: provider });
+        const { modelsKey, timeKey } = getModelsCacheKeys(provider);
+        await chrome.storage.local.remove([modelsKey, timeKey]);
         cachedConfig = {
           provider,
           apiKey: null,
