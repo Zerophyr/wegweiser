@@ -104,7 +104,8 @@ describe("model display helpers", () => {
     getModelBaseName,
     buildModelDisplayName,
     buildCombinedModelId,
-    parseCombinedModelId
+    parseCombinedModelId,
+    resolveNagaVendorLabel
   } = require("../src/shared/utils.js");
 
   test("getModelBaseName strips provider segments", () => {
@@ -122,5 +123,17 @@ describe("model display helpers", () => {
     const id = buildCombinedModelId("naga", "anthropic/claude-3-opus");
     expect(id).toBe("naga:anthropic/claude-3-opus");
     expect(parseCombinedModelId(id)).toEqual({ provider: "naga", modelId: "anthropic/claude-3-opus" });
+  });
+
+  test("resolveNagaVendorLabel prefers startups display name", () => {
+    expect(resolveNagaVendorLabel("qwen", { qwen: "Qwen" })).toBe("Qwen");
+  });
+
+  test("resolveNagaVendorLabel falls back to title case", () => {
+    expect(resolveNagaVendorLabel("deepseek", {})).toBe("Deepseek");
+  });
+
+  test("resolveNagaVendorLabel returns Other for empty input", () => {
+    expect(resolveNagaVendorLabel("", {})).toBe("Other");
   });
 });
