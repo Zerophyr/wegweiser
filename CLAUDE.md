@@ -54,7 +54,10 @@ Wegweiser-extension/
 │   │   └── purify.min.js        # DOMPurify for HTML sanitization
 │   └── shared/
 │       ├── constants.js         # Message types, storage keys
-│       └── utils.js             # Common utilities
+│       ├── debug-log.js         # Streaming debug log helpers
+│       ├── model-utils.js       # Provider/model helpers for background
+│       ├── utils.js             # Common utilities
+│       └── visibility-toggle.js # Options key visibility helpers
 ├── icons/                       # Extension icons
 ├── tests/                       # Jest test files
 ├── docs/                        # Documentation
@@ -74,7 +77,7 @@ This is a **Chrome Manifest V3 extension** with a service worker architecture:
 User Input (src/sidepanel/sidepanel.js)
     ↓ chrome.runtime.sendMessage()
 Service Worker (src/background/background.js) - handles API calls, manages context
-    ↓ fetch() to OpenRouter API
+    ↓ fetch() to provider API (OpenRouter or NagaAI)
 API Response
     ↓ sendResponse()
 Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
@@ -83,6 +86,11 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 ### Key Architectural Patterns
 
 **Message-Based Architecture**: All communication between components uses `chrome.runtime.sendMessage()` with typed message objects defined in `src/shared/constants.js` (e.g., `MESSAGE_TYPES.OPENROUTER_QUERY`).
+
+**Multi-Provider Routing**:
+- Combined model IDs are stored as `provider:modelId`
+- Requests route by the selected model provider (OpenRouter or NagaAI)
+- The Options provider dropdown edits keys only; models are combined when keys exist
 
 **Per-Tab Conversation Context**:
 - `src/background/background.js` maintains a `Map<tabId, messages[]>` for conversation history
@@ -97,10 +105,10 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 - Summary refresh uses `MESSAGE_TYPES.SUMMARIZE_THREAD` with `buildSummarizerMessages()` in `src/shared/utils.js`
 
 **Storage Strategy**:
-- **chrome.storage.local**: API keys, history, cache (never synced for security)
+- **chrome.storage.local**: API keys (OpenRouter + Naga), provisioning key, history, caches, debug log toggle
 - **chrome.storage.sync**: Favorites, theme preferences (synced across devices)
 
-**Caching System**: Models cached for 1 hour, balance for 60 seconds. Cache keys include timestamps to detect expiry.
+**Caching System**: Models cached for 1 hour, balance for 60 seconds. Naga startups metadata cached for vendor labels. Cache keys include timestamps to detect expiry.
 
 **Retry Logic**: Exponential backoff with 3 retries (delay = 1000ms × 2^attempt). Does NOT retry on client errors (4xx) or rate limits (429).
 
@@ -119,13 +127,6 @@ The `src/sidepanel/sidepanel.html` loads scripts in this specific order:
 11. `src/sidepanel/sidepanel.js` - Main UI logic (depends on all above)
 
 ## Critical Code Patterns
-
-### Adding New Features to Context Menu
-Context menu prompts are configured in two places:
-1. **src/options/options.js** (lines ~280-340): UI for editing prompts, saves to `chrome.storage.local`
-2. **src/background/background.js** (lines ~100-150): Creates menu items from stored prompts on startup
-
-After modifying prompts in options, call `syncContextMenusWithBackground()` to update immediately without reloading.
 
 ### Modifying Conversation Context Behavior
 Context management happens in `src/background/background.js` at the `callOpenRouter()` function:
@@ -184,18 +185,31 @@ When modifying markdown support, update both `src/modules/markdown.js` and the p
 - **Sidepanel logs**: Right-click sidebar → Inspect (opens DevTools)
 - **Context size tracking**: Already implemented with console logs at lines src/background/background.js:389, 403-404, 460
 - **Message flow**: Look for `console.log` statements showing message types and payloads
+- **Streaming debug log**: Options → "Streaming Debug Log" (download last 500 stream events)
 
 ## Storage Keys Reference
 All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
+- `PROVIDER` - Selected provider for key editing (OpenRouter/NagaAI)
 - `API_KEY` - OpenRouter API key (local only)
-- `MODEL` - Currently selected model
-- `HISTORY` - Recent prompts array
-- `FAVORITES` - Favorited models (sync)
-- `THEME` - Current theme name (sync)
-- `CUSTOM_PROMPTS` - Context menu prompts (local)
+- `API_KEY_NAGA` - NagaAI API key (local only)
+- `API_KEY_NAGA_PROVISIONAL` - NagaAI provisioning key (local only, for balance)
+- `MODEL` - Selected model id (raw)
+- `MODEL_PROVIDER` - Provider that owns the selected model
+- `FAVORITES` - OpenRouter favorites (sync)
+- `FAVORITES_NAGA` - NagaAI favorites (sync)
+- `RECENT_MODELS` - OpenRouter recent models (local)
+- `RECENT_MODELS_NAGA` - NagaAI recent models (local)
+- `HISTORY` - Recent prompts array (local)
+- `HISTORY_LIMIT` - History limit (local)
+- `WEB_SEARCH` - Web search toggle (local)
+- `REASONING` - Reasoning toggle (local)
+- `MODELS_CACHE` / `MODELS_CACHE_TIME` - OpenRouter model cache
+- `MODELS_CACHE_NAGA` / `MODELS_CACHE_TIME_NAGA` - NagaAI model cache
+- `NAGA_STARTUPS_CACHE` / `NAGA_STARTUPS_CACHE_TIME` - NagaAI vendor label cache
 - `SPACES` - User spaces array (local)
 - `THREADS` - All threads across spaces (local)
-- Cache keys: `MODELS_CACHE`, `BALANCE_CACHE`, `CONFIG_CACHE`
+- `THEME` - Current theme name (sync)
+- `DEBUG_STREAM` - Streaming debug log toggle (local)
 
 ## Common Gotchas
 
@@ -214,7 +228,7 @@ All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
 ## Extension Manifest Notes
 - **Manifest V3**: Uses service workers, not persistent background pages
 - **Side Panel API**: Requires `sidePanel` permission and configuration
-- **Host Permissions**: `https://openrouter.ai/*` for API calls (automatic)
+- **Host Permissions**: `https://openrouter.ai/*` and `https://api.naga.ac/*` for API calls (automatic)
 - **Optional Host Permissions**: `<all_urls>` for page summarization (runtime user grant required)
 - **CSP**: Strict policy prevents inline scripts; all JS must be in separate files
 - **Web Accessible Resources**: Currently none (no resources exposed to web pages)
@@ -248,7 +262,7 @@ The extension uses **optional host permissions** for the "Summarize Page" featur
 
 ## Version History Context
 The codebase is currently at **v1.1.1** with these major milestones:
-- **v1.1.1**: Spaces adaptive summaries, archived messages toggle, summary badge
+- **v1.1.1**: Spaces adaptive summaries, archived messages toggle, summary badge, multi-provider model list + badges, NagaAI balance support, key visibility toggles, streaming debug log
 - **v1.1.0**: Spaces UI improvements - 5-column grid layout, emoji icons, web search/reasoning toggles, source citations, copy button, clean URL removal
 - **v1.0.0**: Spaces feature - full-page experience for organizing conversations by project
 - **v0.9.1**: DOMPurify integration, comprehensive unit tests (101 tests)

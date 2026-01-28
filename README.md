@@ -6,9 +6,9 @@
 
 ### Core Functionality
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
-- 🔄 **Model Selection** - Choose models from the selected provider
+- 🔄 **Model Selection** - Combined model list across OpenRouter + NagaAI (only providers with keys)
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
-- 📊 **Balance Display** - OpenRouter account balance tracking (NagaAI not supported)
+- 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 
@@ -45,9 +45,10 @@
 - 🎨 **Custom Themes** - Choose from Dark, Light, or Ocean themes
 - 🔔 **Toast Notifications** - Visual feedback for all actions
 - 📤 **Export History** - Export conversations as JSON or CSV
-- 🎯 **Custom Context Menus** - Configure up to 5 custom right-click prompts
 - 🔗 **Sources Display** - Clean source citations with favicon indicators and modal view
 - 🔄 **Real-time Streaming** - Server-sent events for live response generation
+- 🧭 **Provider Badges** - OR/NG badges in model lists to show provider availability
+- 🧪 **Streaming Debug Log** - Optional log of the last 500 streaming events (Options)
 
 ### Security & Performance (v0.6.0)
 - 🔒 **Enhanced Security** - API keys stored locally, CSP protection, input validation
@@ -75,11 +76,11 @@ _(Coming soon)_
    - NagaAI: [naga.ac](https://naga.ac)
 2. Click the extension icon or open the side panel
 3. Click the gear icon (⚙️) to open options
-4. Choose your provider (OpenRouter or NagaAI)
-5. Enter your API key
-6. Click "Load models" to fetch available models
-7. Select your preferred model
-8. Click "Save"
+4. Choose your provider (OpenRouter or NagaAI) to edit keys
+5. Enter your API key (NagaAI: add provisioning key to see balance)
+6. Click "Save" (models refresh automatically)
+7. Select your preferred model from the search dropdown
+8. Click "Save" if you changed the model
 
 ## 📖 User Guide
 
@@ -96,14 +97,6 @@ _(Coming soon)_
 | `Shift + Enter` | New line in prompt |
 | `Ctrl/Cmd + K` | Clear answers |
 | `Escape` | Focus prompt input |
-
-### Context Menu
-1. Select text on any webpage
-2. Right-click and choose "Wegweiser: [action]"
-3. Available actions:
-   - Summarize selection
-   - Fact-check selection
-   - Custom prompts (configure in options)
 
 ### Export History
 1. Open Options (gear icon)
@@ -160,27 +153,26 @@ npm run format
 
 ```
 Wegweiser-extension/
-├── manifest.json           # Extension manifest
-├── background.js           # Service worker
-├── sidepanel.html/js       # Side panel UI
-├── options.html/js         # Options page
-├── constants.js            # Shared constants
-├── toast.js                # Toast notifications
-├── markdown.js             # Markdown renderer
-├── theme.js                # Theme system
-├── IMPROVEMENTS.md         # v0.6.0 improvements
-├── README.md              # This file
-├── package.json           # NPM dependencies
-├── tsconfig.json          # TypeScript config
-├── jest.config.js         # Jest test config
-└── tests/                 # Test files
-    ├── toast.test.ts
-    └── markdown.test.ts
+├── src/
+│   ├── background/         # Service worker
+│   ├── sidepanel/          # Sidebar UI
+│   ├── spaces/             # Spaces UI
+│   ├── options/            # Options page
+│   ├── modules/            # UI modules (markdown, toast, models, themes)
+│   ├── lib/                # Vendor libs (DOMPurify)
+│   └── shared/             # Shared helpers + constants
+├── icons/                  # Extension icons
+├── tests/                  # Jest tests
+├── docs/                   # Documentation + plans
+├── manifest.json
+├── README.md
+└── CLAUDE.md
 ```
 
 ## 🔒 Privacy & Security
 
 - **Local API Key Storage** - API keys stored locally only (not synced)
+- **Masked Keys** - API/provisioning keys are hidden by default with a visibility toggle
 - **Content Security Policy** - Strict CSP prevents injection attacks
 - **Input Validation** - All user input sanitized
 - **URL Validation** - Only HTTPS links allowed
@@ -202,6 +194,10 @@ Wegweiser-extension/
 - 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
 - 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
 - 🏷️ **Summary Badge** - Visual indicator after summary refresh
+- 🔁 **Multi-Provider Models** - Combined OpenRouter + NagaAI model list with provider badges
+- 💳 **NagaAI Balance Support** - Provisioning key unlocks balance display
+- 👁️ **Key Visibility Toggle** - Inline eye icons for API/provisioning keys in Options
+- 🧪 **Streaming Debug Log** - Optional log for troubleshooting stuck streams
 
 ### v1.1.0
 - 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards
@@ -299,7 +295,7 @@ MIT License - See LICENSE file for details
 A: The extension is free. You only pay for API usage from your selected provider.
 
 **Q: Which models are supported?**
-A: All models available on your selected provider.
+A: All models available on providers with API keys set.
 
 **Q: Does it work offline?**
 A: No, internet connection required for API calls.
