@@ -72,7 +72,7 @@ describe("ModelDropdownManager storage keys", () => {
     expect(item?.textContent).toContain("OR-openai/gpt-4o");
   });
 
-  test("groups models by provider label", () => {
+  test("groups models by vendor label", () => {
     const input = document.getElementById("model-input");
     const dropdown = new ModelDropdownManager({
       inputElement: input,
@@ -80,14 +80,13 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "openrouter:openai/gpt-4o", provider: "openrouter", displayName: "OR-openai/gpt-4o" },
-      { id: "naga:anthropic/claude-3-opus", provider: "naga", displayName: "NG-anthropic/claude-3-opus" }
+      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "OR-openai/gpt-4-turbo" },
+      { id: "naga:openai/gpt-4-turbo", provider: "naga", rawId: "openai/gpt-4-turbo", displayName: "NG-openai/gpt-4-turbo" }
     ]);
     dropdown.show("");
 
     const headers = Array.from(document.querySelectorAll(".model-dropdown-provider"))
       .map((el) => el.textContent);
-    expect(headers).toContain("NagaAI");
-    expect(headers).toContain("OpenRouter");
+    expect(headers).toContain("OpenAI");
   });
 });

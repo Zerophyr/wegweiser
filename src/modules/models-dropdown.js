@@ -221,24 +221,25 @@ class ModelDropdownManager {
     return model.displayName || model.name || model.id || '';
   }
 
-  getModelProviderId(model) {
+  getModelVendorId(model) {
     if (!model) return '';
-    if (model.provider) return model.provider;
-    if (typeof model.id === 'string') {
-      const match = model.id.match(/^([^:]+):/);
-      if (match) return match[1];
+    let source = '';
+    if (typeof model.rawId === 'string' && model.rawId.trim().length) {
+      source = model.rawId;
+    } else if (typeof model.id === 'string') {
+      const splitIndex = model.id.indexOf(':');
+      source = splitIndex !== -1 ? model.id.slice(splitIndex + 1) : model.id;
     }
-    return '';
+    const match = source.match(/^([^/]+)/);
+    return match ? match[1].toLowerCase() : '';
   }
 
-  getProviderLabelForModel(model) {
-    const providerId = this.getModelProviderId(model);
-    if (providerId && typeof getProviderLabel === 'function') {
-      return getProviderLabel(providerId);
-    }
-    if (providerId === 'naga') return 'NagaAI';
-    if (providerId === 'openrouter') return 'OpenRouter';
-    return providerId || 'Other';
+  getVendorLabelForModel(model) {
+    const vendorId = this.getModelVendorId(model);
+    if (!vendorId) return 'Other';
+    if (vendorId === 'openai') return 'OpenAI';
+    if (vendorId === 'xai') return 'xAI';
+    return vendorId.charAt(0).toUpperCase() + vendorId.slice(1);
   }
 
   highlightSelected() {
@@ -453,7 +454,7 @@ class ModelDropdownManager {
 
       const grouped = {};
       nonFavModels.forEach((model) => {
-        const label = this.getProviderLabelForModel(model);
+        const label = this.getVendorLabelForModel(model);
         if (!grouped[label]) {
           grouped[label] = [];
         }
