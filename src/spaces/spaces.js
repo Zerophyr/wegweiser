@@ -203,6 +203,20 @@ function appendArchivedMessages(currentArchive, newMessages) {
   return [...safeCurrent, ...safeNew];
 }
 
+function buildSpacesContextData(thread) {
+  const summary = typeof thread?.summary === 'string' ? thread.summary : '';
+  const liveMessages = Array.isArray(thread?.messages) ? thread.messages : [];
+  const archivedMessages = Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : [];
+  return { summary, liveMessages, archivedMessages };
+}
+
+function buildContextBadgeLabel(contextSize) {
+  if (!contextSize || contextSize <= 2) {
+    return '';
+  }
+  return `${Math.floor(contextSize / 2)} Q&A`;
+}
+
 
 // ============ STORAGE FUNCTIONS ============
 
@@ -918,6 +932,8 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.splitMessagesForSummary = splitMessagesForSummary;
   window.shouldSkipSummarization = shouldSkipSummarization;
   window.appendArchivedMessages = appendArchivedMessages;
+  window.buildSpacesContextData = buildSpacesContextData;
+  window.buildContextBadgeLabel = buildContextBadgeLabel;
 }
 
 async function renderStorageUsage() {
