@@ -265,6 +265,13 @@
       <div class="form-group">
         <label for="apiKey" id="apiKeyLabel">OpenRouter API key</label>
         <input type="text" id="apiKey" placeholder="sk-or-..." />
+        <div id="naga-provisioning-group" style="margin-top: 12px; display: none;">
+          <label for="nagaProvisioningKey" style="margin-bottom: 8px;">NagaAI provisioning key <span style="font-weight: 400; color: #71717a;">(Optional)</span></label>
+          <input type="text" id="nagaProvisioningKey" placeholder="pk-..." />
+          <div style="font-size: 12px; color: #71717a; margin-top: 6px;">
+            ⚠️ Account balance requires a provisioning key.
+          </div>
+        </div>
         <div style="font-size: 12px; color: #71717a; margin-top: 6px;">
           💡 Models refresh after saving. Providers without keys are hidden.
         </div>

@@ -72,6 +72,18 @@ function buildAuthHeaders(apiKey, providerConfig) {
   };
 }
 
+function buildBalanceHeaders(apiKey, providerConfig, provisioningKey) {
+  if (providerConfig.id !== "naga") {
+    return buildAuthHeaders(apiKey, providerConfig);
+  }
+  return {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    ...(provisioningKey ? { "X-Provisioning-Key": provisioningKey } : {}),
+    ...(providerConfig.headers || {})
+  };
+}
+
 function parseModelsPayload(payload) {
   const list = Array.isArray(payload) ? payload : (payload?.data || []);
   return list.map((model) => ({
@@ -182,6 +194,7 @@ async function loadConfig() {
     STORAGE_KEYS.PROVIDER,
     STORAGE_KEYS.API_KEY,
     STORAGE_KEYS.API_KEY_NAGA,
+    STORAGE_KEYS.API_KEY_NAGA_PROVISIONAL,
     STORAGE_KEYS.MODEL,
     STORAGE_KEYS.MODEL_NAGA,
     STORAGE_KEYS.MODEL_PROVIDER
@@ -199,6 +212,7 @@ async function loadConfig() {
     provider,
     modelProvider,
     apiKey: apiKey || "",
+    provisioningKey: items[STORAGE_KEYS.API_KEY_NAGA_PROVISIONAL] || "",
     model
   };
   lastConfigLoadAt = now;
@@ -855,11 +869,14 @@ async function getProviderBalance() {
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  if (providerConfig.id === "naga" && !cfg.provisioningKey) {
+    return { supported: false, balance: null };
+  }
 
   const balanceEndpoint = providerConfig.balanceEndpoint || "/credits";
   const res = await fetch(`${providerConfig.baseUrl}${balanceEndpoint}`, {
     method: "GET",
-    headers: buildAuthHeaders(cfg.apiKey, providerConfig)
+    headers: buildBalanceHeaders(cfg.apiKey, providerConfig, cfg.provisioningKey)
   });
 
   const data = await res.json();

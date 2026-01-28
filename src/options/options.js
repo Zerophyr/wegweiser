@@ -7,6 +7,8 @@ if (typeof initTheme === 'function') {
 
 const apiKeyInput = document.getElementById("apiKey");
 const apiKeyLabel = document.getElementById("apiKeyLabel");
+const nagaProvisioningKeyInput = document.getElementById("nagaProvisioningKey");
+const nagaProvisioningGroup = document.getElementById("naga-provisioning-group");
 const providerSelect = document.getElementById("provider");
 const modelSelect = document.getElementById("model");
 const modelInput = document.getElementById("model-input");
@@ -94,6 +96,7 @@ function getProviderSettings(providerId) {
     id: provider,
     label: getProviderLabelSafe(provider),
     apiKeyKey: provider === "naga" ? "naga_api_key" : "or_api_key",
+    provisioningKeyKey: provider === "naga" ? "naga_provisioning_key" : null,
     favoritesKey: getProviderStorageKeySafe("or_favorites", provider),
     recentModelsKey: getProviderStorageKeySafe("or_recent_models", provider),
     apiKeyPlaceholder
@@ -114,6 +117,15 @@ function applyProviderSettings(providerId, localItems) {
   if (apiKeyInput) {
     apiKeyInput.value = localItems[settings.apiKeyKey] || "";
     apiKeyInput.placeholder = settings.apiKeyPlaceholder;
+  }
+  if (nagaProvisioningGroup && nagaProvisioningKeyInput) {
+    if (settings.id === "naga") {
+      nagaProvisioningGroup.style.display = "block";
+      nagaProvisioningKeyInput.value = localItems[settings.provisioningKeyKey] || "";
+    } else {
+      nagaProvisioningGroup.style.display = "none";
+      nagaProvisioningKeyInput.value = "";
+    }
   }
 
   if (localItems.or_history_limit) {
@@ -252,6 +264,7 @@ async function loadProviderState(providerId) {
     "or_provider",
     "or_api_key",
     "naga_api_key",
+    "naga_provisioning_key",
     "or_model",
     "or_model_provider",
     "or_recent_models",
@@ -276,6 +289,7 @@ Promise.all([
     "or_provider",
     "or_api_key",
     "naga_api_key",
+    "naga_provisioning_key",
     "or_model",
     "or_model_provider",
     "or_recent_models",
@@ -556,7 +570,7 @@ async function loadModels() {
 
 // Auto-load models when page opens if API key exists
 Promise.all([
-  chrome.storage.local.get(["or_provider", "or_api_key", "naga_api_key"])
+  chrome.storage.local.get(["or_provider", "or_api_key", "naga_api_key", "naga_provisioning_key"])
 ]).then(([localItems]) => {
   if (localItems.or_api_key || localItems.naga_api_key) {
     // Small delay to ensure UI is ready
@@ -568,6 +582,7 @@ Promise.all([
 saveBtn.addEventListener("click", async () => {
   const settings = getProviderSettings(currentProvider);
   const apiKey = apiKeyInput.value.trim();
+  const nagaProvisioningKey = nagaProvisioningKeyInput ? nagaProvisioningKeyInput.value.trim() : "";
   const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
 
@@ -577,6 +592,9 @@ saveBtn.addEventListener("click", async () => {
     or_history_limit: historyLimit,
     or_provider: settings.id
   };
+  if (settings.id === "naga") {
+    dataToSave[settings.provisioningKeyKey] = nagaProvisioningKey;
+  }
 
   // Only save model if one is selected
   if (combinedModelId) {
@@ -630,6 +648,7 @@ if (providerSelect) {
       "or_provider",
       "or_api_key",
       "naga_api_key",
+      "naga_provisioning_key",
       "or_history_limit"
     ]);
     applyProviderSettings(provider, localItems);
