@@ -250,7 +250,7 @@ class ModelDropdownManager {
     if (startsWith('gemini')) return 'google';
     if (startsWith('llama')) return 'meta';
     if (startsWith('mistral') || startsWith('mixtral')) return 'mistral';
-    if (startsWith('qwen')) return 'alibaba';
+    if (startsWith('qwen')) return 'qwen';
     if (startsWith('deepseek')) return 'deepseek';
     if (startsWith('grok')) return 'xai';
     if (startsWith('command')) return 'cohere';
@@ -260,11 +260,43 @@ class ModelDropdownManager {
   }
 
   getVendorLabelForModel(model) {
+    if (model?.vendorLabel && typeof model.vendorLabel === 'string') {
+      const label = model.vendorLabel.trim();
+      if (label.length) return label;
+    }
     const vendorId = this.getModelVendorId(model);
     if (!vendorId) return 'Other';
     if (vendorId === 'openai') return 'OpenAI';
     if (vendorId === 'xai') return 'xAI';
+    if (vendorId === 'qwen') return 'Qwen';
     return vendorId.charAt(0).toUpperCase() + vendorId.slice(1);
+  }
+
+  getModelBaseNameForSort(model) {
+    if (!model) return '';
+    let source = '';
+    if (typeof model.rawId === 'string' && model.rawId.trim().length) {
+      source = model.rawId;
+    } else if (typeof model.id === 'string') {
+      const splitIndex = model.id.indexOf(':');
+      source = splitIndex !== -1 ? model.id.slice(splitIndex + 1) : model.id;
+    }
+    const lastSlash = source.lastIndexOf('/');
+    const lastColon = source.lastIndexOf(':');
+    const cutIndex = Math.max(lastSlash, lastColon);
+    const base = cutIndex >= 0 ? source.slice(cutIndex + 1) : source;
+    return base.toLowerCase();
+  }
+
+  getModelProviderId(model) {
+    if (model?.provider) return model.provider;
+    if (typeof model?.id === 'string') {
+      const splitIndex = model.id.indexOf(':');
+      if (splitIndex !== -1) {
+        return model.id.slice(0, splitIndex);
+      }
+    }
+    return '';
   }
 
   highlightSelected() {
@@ -430,6 +462,19 @@ class ModelDropdownManager {
 
     // Sort
     const sortByLabel = (a, b) => getLabel(a).localeCompare(getLabel(b));
+    const sortByBaseAndProvider = (a, b) => {
+      const baseA = this.getModelBaseNameForSort(a);
+      const baseB = this.getModelBaseNameForSort(b);
+      if (baseA !== baseB) {
+        return baseA.localeCompare(baseB);
+      }
+      const providerA = this.getModelProviderId(a);
+      const providerB = this.getModelProviderId(b);
+      const rank = (provider) => (provider === 'naga' ? 0 : provider === 'openrouter' ? 1 : 2);
+      const rankDiff = rank(providerA) - rank(providerB);
+      if (rankDiff !== 0) return rankDiff;
+      return getLabel(a).localeCompare(getLabel(b));
+    };
     favModels.sort(sortByLabel);
 
     // Build HTML
@@ -488,7 +533,7 @@ class ModelDropdownManager {
 
       const providerLabels = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
       providerLabels.forEach((label) => {
-        const models = grouped[label].sort(sortByLabel);
+        const models = grouped[label].sort(sortByBaseAndProvider);
         this.renderProviderGroup(dropdown, label, models);
       });
     }
