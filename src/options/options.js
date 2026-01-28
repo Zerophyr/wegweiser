@@ -17,9 +17,17 @@ const historyLimitInput = document.getElementById("history-limit");
 const promptHistoryEl = document.getElementById("prompt-history");
 
 // In-memory copies
-let allModels = []; // [{ id, raw }]
-let favoriteModels = new Set(); // Set of model IDs
-let savedModelId = null;
+let combinedModels = []; // [{ id, rawId, provider, displayName }]
+let modelMap = new Map(); // combinedId -> model
+let favoriteModelsByProvider = {
+  openrouter: new Set(),
+  naga: new Set()
+};
+let recentModelsByProvider = {
+  openrouter: [],
+  naga: []
+};
+let selectedCombinedModelId = null;
 let currentHistory = []; // Current history data for detail view
 let modelDropdown = null; // ModelDropdownManager instance
 
@@ -50,6 +58,33 @@ function getProviderStorageKeySafe(baseKey, providerId) {
   return normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
 }
 
+function buildCombinedModelIdSafe(providerId, modelId) {
+  if (typeof buildCombinedModelId === "function") {
+    return buildCombinedModelId(providerId, modelId);
+  }
+  return `${normalizeProvider(providerId)}:${modelId}`;
+}
+
+function parseCombinedModelIdSafe(combinedId) {
+  if (typeof parseCombinedModelId === "function") {
+    return parseCombinedModelId(combinedId);
+  }
+  if (!combinedId || typeof combinedId !== "string") {
+    return { provider: "openrouter", modelId: "" };
+  }
+  const splitIndex = combinedId.indexOf(":");
+  if (splitIndex === -1) {
+    return { provider: "openrouter", modelId: combinedId };
+  }
+  const provider = normalizeProvider(combinedId.slice(0, splitIndex));
+  const modelId = combinedId.slice(splitIndex + 1);
+  return { provider, modelId };
+}
+
+function getModelDisplayName(model) {
+  return model?.displayName || model?.name || model?.id || "";
+}
+
 function getProviderSettings(providerId) {
   const provider = normalizeProvider(providerId);
   const apiKeyPlaceholder = typeof getProviderApiKeyPlaceholder === "function"
@@ -59,14 +94,13 @@ function getProviderSettings(providerId) {
     id: provider,
     label: getProviderLabelSafe(provider),
     apiKeyKey: provider === "naga" ? "naga_api_key" : "or_api_key",
-    modelKey: getProviderStorageKeySafe("or_model", provider),
     favoritesKey: getProviderStorageKeySafe("or_favorites", provider),
     recentModelsKey: getProviderStorageKeySafe("or_recent_models", provider),
     apiKeyPlaceholder
   };
 }
 
-function applyProviderSettings(providerId, localItems, syncItems) {
+function applyProviderSettings(providerId, localItems) {
   const settings = getProviderSettings(providerId);
   currentProvider = settings.id;
 
@@ -82,20 +116,12 @@ function applyProviderSettings(providerId, localItems, syncItems) {
     apiKeyInput.placeholder = settings.apiKeyPlaceholder;
   }
 
-  savedModelId = localItems[settings.modelKey] || null;
-
-  if (Array.isArray(syncItems[settings.favoritesKey])) {
-    favoriteModels = new Set(syncItems[settings.favoritesKey]);
-  } else {
-    favoriteModels = new Set();
-  }
-
   if (localItems.or_history_limit) {
     historyLimitInput.value = localItems.or_history_limit;
   }
 }
 
-function initModelDropdown(settings) {
+function initModelDropdown() {
   if (modelDropdown) {
     modelDropdown.destroy();
     modelDropdown = null;
@@ -104,14 +130,14 @@ function initModelDropdown(settings) {
   modelDropdown = new ModelDropdownManager({
     inputElement: modelInput,
     containerType: 'modal',
-    favoritesKey: settings.favoritesKey,
-    recentModelsKey: settings.recentModelsKey,
     onModelSelect: async (modelId) => {
-      savedModelId = modelId;
+      selectedCombinedModelId = modelId;
+      const selectedModel = modelMap.get(modelId);
+      const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
 
       // Update the input field
       if (modelInput) {
-        modelInput.value = modelId;
+        modelInput.value = displayName;
       }
 
       // Update hidden select for form compatibility
@@ -120,8 +146,87 @@ function initModelDropdown(settings) {
       }
 
       return true; // Return true to indicate success
+    },
+    onToggleFavorite: async (modelId, isFavorite) => {
+      const parsed = parseCombinedModelIdSafe(modelId);
+      const provider = normalizeProvider(parsed.provider);
+      const rawId = parsed.modelId;
+
+      if (!favoriteModelsByProvider[provider]) {
+        favoriteModelsByProvider[provider] = new Set();
+      }
+
+      if (isFavorite) {
+        favoriteModelsByProvider[provider].add(rawId);
+      } else {
+        favoriteModelsByProvider[provider].delete(rawId);
+      }
+
+      await chrome.storage.sync.set({
+        [getProviderStorageKeySafe("or_favorites", provider)]: Array.from(favoriteModelsByProvider[provider])
+      });
+    },
+    onAddRecent: async (modelId) => {
+      const parsed = parseCombinedModelIdSafe(modelId);
+      const provider = normalizeProvider(parsed.provider);
+      const rawId = parsed.modelId;
+
+      const current = recentModelsByProvider[provider] || [];
+      const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
+      recentModelsByProvider[provider] = next;
+
+      await chrome.storage.local.set({
+        [getProviderStorageKeySafe("or_recent_models", provider)]: next
+      });
+
+      modelDropdown.setRecentlyUsed(buildCombinedRecentList());
     }
   });
+}
+
+function buildCombinedFavoritesList() {
+  const combined = [];
+  ["openrouter", "naga"].forEach((provider) => {
+    const favorites = favoriteModelsByProvider[provider] || new Set();
+    favorites.forEach((modelId) => {
+      combined.push(buildCombinedModelIdSafe(provider, modelId));
+    });
+  });
+  return combined;
+}
+
+function buildCombinedRecentList() {
+  const combined = [];
+  ["openrouter", "naga"].forEach((provider) => {
+    const recents = recentModelsByProvider[provider] || [];
+    recents.forEach((modelId) => {
+      const combinedId = buildCombinedModelIdSafe(provider, modelId);
+      if (!combined.includes(combinedId)) {
+        combined.push(combinedId);
+      }
+    });
+  });
+  return combined;
+}
+
+function loadFavoritesAndRecents(localItems, syncItems) {
+  favoriteModelsByProvider = {
+    openrouter: new Set(syncItems.or_favorites || []),
+    naga: new Set(syncItems.or_favorites_naga || [])
+  };
+
+  recentModelsByProvider = {
+    openrouter: localItems.or_recent_models || [],
+    naga: localItems.or_recent_models_naga || []
+  };
+}
+
+function loadSelectedModel(localItems) {
+  const modelProvider = normalizeProvider(localItems.or_model_provider || localItems.or_provider);
+  const rawModelId = localItems.or_model || "";
+  selectedCombinedModelId = rawModelId
+    ? buildCombinedModelIdSafe(modelProvider, rawModelId)
+    : null;
 }
 
 async function notifyProviderSettingsUpdated(providerId) {
@@ -142,7 +247,9 @@ async function loadProviderState(providerId) {
     "or_api_key",
     "naga_api_key",
     "or_model",
-    "or_model_naga",
+    "or_model_provider",
+    "or_recent_models",
+    "or_recent_models_naga",
     "or_history_limit"
   ]);
   const syncItems = await chrome.storage.sync.get([
@@ -150,8 +257,10 @@ async function loadProviderState(providerId) {
     "or_favorites_naga"
   ]);
 
-  applyProviderSettings(settings.id, localItems, syncItems);
-  initModelDropdown(settings);
+  applyProviderSettings(settings.id, localItems);
+  loadFavoritesAndRecents(localItems, syncItems);
+  loadSelectedModel(localItems);
+  initModelDropdown();
 }
 
 // ---- Load stored settings (API key, model, favorites, history limit) ----
@@ -162,7 +271,9 @@ Promise.all([
     "or_api_key",
     "naga_api_key",
     "or_model",
-    "or_model_naga",
+    "or_model_provider",
+    "or_recent_models",
+    "or_recent_models_naga",
     "or_history_limit"
   ]),
   chrome.storage.sync.get([
@@ -171,8 +282,10 @@ Promise.all([
   ])
 ]).then(([localItems, syncItems]) => {
   const provider = normalizeProvider(localItems.or_provider);
-  applyProviderSettings(provider, localItems, syncItems);
-  initModelDropdown(getProviderSettings(provider));
+  applyProviderSettings(provider, localItems);
+  loadFavoritesAndRecents(localItems, syncItems);
+  loadSelectedModel(localItems);
+  initModelDropdown();
 });
 
 // ---- Load and render prompt history ----
@@ -389,14 +502,7 @@ async function commitDeleteHistoryItem(id) {
 
 // ---- Load models from OpenRouter API ----
 async function loadModels() {
-  const settings = getProviderSettings(currentProvider);
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey) {
-    modelsStatusEl.textContent = `Enter ${settings.label} API key to load models.`;
-    return;
-  }
-
-  modelsStatusEl.textContent = `Loading ${settings.label} models…`;
+  modelsStatusEl.textContent = "Loading models…";
 
   try {
     const res = await chrome.runtime.sendMessage({ type: "get_models" });
@@ -405,29 +511,39 @@ async function loadModels() {
       throw new Error(res?.error || "Failed to load models");
     }
 
-    allModels = (res.models || []).map((m) => ({
-      id: m.id,
-      raw: m
+    combinedModels = (res.models || []).map((model) => ({
+      id: model.id,
+      rawId: model.rawId || model.id,
+      provider: model.provider,
+      displayName: getModelDisplayName(model),
+      name: model.name || model.displayName || model.id
     }));
+    modelMap = new Map(combinedModels.map((model) => [model.id, model]));
 
     // Update dropdown with models and favorites
     if (!modelDropdown) {
-      initModelDropdown(settings);
+      initModelDropdown();
     }
-    modelDropdown.setModels(allModels);
-    modelDropdown.setFavorites(Array.from(favoriteModels));
+    modelDropdown.setModels(combinedModels);
+    modelDropdown.setFavorites(buildCombinedFavoritesList());
+    modelDropdown.setRecentlyUsed(buildCombinedRecentList());
 
     // Set initial model value in input if we have a saved model
-    if (savedModelId && modelInput) {
-      modelInput.value = savedModelId;
-      modelSelect.value = savedModelId;
+    if (selectedCombinedModelId && modelInput) {
+      const selected = modelMap.get(selectedCombinedModelId);
+      modelInput.value = selected ? getModelDisplayName(selected) : selectedCombinedModelId;
+      modelSelect.value = selectedCombinedModelId;
     }
 
-    modelsStatusEl.textContent = `✓ Loaded ${allModels.length} ${settings.label} models.`;
+    modelsStatusEl.textContent = `✓ Loaded ${combinedModels.length} models.`;
     modelsStatusEl.style.color = "#10b981";
   } catch (e) {
     console.error("Failed to load models:", e);
-    modelsStatusEl.textContent = `Error: ${e.message}`;
+    if (typeof e?.message === "string" && e.message.toLowerCase().includes("no api key")) {
+      modelsStatusEl.textContent = "Set at least one API key to load models.";
+    } else {
+      modelsStatusEl.textContent = `Error: ${e.message}`;
+    }
     modelsStatusEl.style.color = "#ef4444";
   }
 }
@@ -436,9 +552,7 @@ async function loadModels() {
 Promise.all([
   chrome.storage.local.get(["or_provider", "or_api_key", "naga_api_key"])
 ]).then(([localItems]) => {
-  const provider = normalizeProvider(localItems.or_provider);
-  const settings = getProviderSettings(provider);
-  if (localItems[settings.apiKeyKey] && apiKeyInput.value) {
+  if (localItems.or_api_key || localItems.naga_api_key) {
     // Small delay to ensure UI is ready
     setTimeout(() => loadModels(), 100);
   }
@@ -448,13 +562,8 @@ Promise.all([
 saveBtn.addEventListener("click", async () => {
   const settings = getProviderSettings(currentProvider);
   const apiKey = apiKeyInput.value.trim();
-  const model = modelSelect.value.trim();
+  const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
-
-  if (!apiKey) {
-    statusEl.textContent = `${settings.label} API key is required.`;
-    return;
-  }
 
   // Model is optional - if not set, will use default from constants
   const dataToSave = {
@@ -464,20 +573,22 @@ saveBtn.addEventListener("click", async () => {
   };
 
   // Only save model if one is selected
-  if (model) {
-    dataToSave[settings.modelKey] = model;
-    savedModelId = model;
+  if (combinedModelId) {
+    const parsed = parseCombinedModelIdSafe(combinedModelId);
+    dataToSave.or_model = parsed.modelId;
+    dataToSave.or_model_provider = normalizeProvider(parsed.provider);
+    selectedCombinedModelId = combinedModelId;
   }
 
   // SECURITY FIX: Store API key in local storage (not synced)
   await Promise.all([
     chrome.storage.local.set(dataToSave),
     chrome.storage.sync.set({
-      [settings.favoritesKey]: Array.from(favoriteModels)
+      [settings.favoritesKey]: Array.from(favoriteModelsByProvider[settings.id] || [])
     })
   ]);
 
-  statusEl.textContent = model ? "Saved." : "Saved. (Using default model)";
+  statusEl.textContent = combinedModelId ? "Saved." : "Saved. (Using default model)";
   statusEl.style.color = "#10b981";
   await loadModels();
   await notifyProviderSettingsUpdated(settings.id);
@@ -489,7 +600,8 @@ saveBtn.addEventListener("click", async () => {
 
 // Reset models when API key changes.
 apiKeyInput.addEventListener("change", () => {
-  allModels = [];
+  combinedModels = [];
+  modelMap = new Map();
   modelSelect.innerHTML = "";
   modelsStatusEl.textContent = "";
 });
@@ -508,14 +620,13 @@ if (providerSelect) {
     }
     await notifyProviderSettingsUpdated(provider);
 
-    await loadProviderState(provider);
-    allModels = [];
-    modelSelect.innerHTML = "";
-    modelsStatusEl.textContent = "";
-
-    if (apiKeyInput.value) {
-      setTimeout(() => loadModels(), 100);
-    }
+    const localItems = await chrome.storage.local.get([
+      "or_provider",
+      "or_api_key",
+      "naga_api_key",
+      "or_history_limit"
+    ]);
+    applyProviderSettings(provider, localItems);
   });
 }
 
