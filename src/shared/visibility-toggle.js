@@ -1,3 +1,4 @@
+(function () {
 const initVisibilityToggle = ({ input, button, iconOn, iconOff, label }) => {
   if (!input || !button) {
     return false;
@@ -60,3 +61,4 @@ if (root) {
   root.initVisibilityToggle = initVisibilityToggle;
   root.bindVisibilityToggles = bindVisibilityToggles;
 }
+})();
