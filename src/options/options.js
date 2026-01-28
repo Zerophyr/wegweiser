@@ -165,6 +165,12 @@ function initModelDropdown() {
       await chrome.storage.sync.set({
         [getProviderStorageKeySafe("or_favorites", provider)]: Array.from(favoriteModelsByProvider[provider])
       });
+
+      try {
+        await chrome.runtime.sendMessage({ type: "favorites_updated" });
+      } catch (e) {
+        console.warn("Failed to notify favorites update:", e);
+      }
     },
     onAddRecent: async (modelId) => {
       const parsed = parseCombinedModelIdSafe(modelId);

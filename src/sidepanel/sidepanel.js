@@ -135,6 +135,22 @@ function loadFavoritesAndRecents(localItems, syncItems) {
   };
 }
 
+async function refreshFavoritesOnly() {
+  try {
+    const syncItems = await chrome.storage.sync.get(["or_favorites", "or_favorites_naga"]);
+    favoriteModelsByProvider = {
+      openrouter: new Set(syncItems.or_favorites || []),
+      naga: new Set(syncItems.or_favorites_naga || [])
+    };
+
+    if (modelDropdown) {
+      modelDropdown.setFavorites(buildCombinedFavoritesList());
+    }
+  } catch (e) {
+    console.warn("Failed to refresh favorites:", e);
+  }
+}
+
 async function loadProviderSetting() {
   try {
     const stored = await chrome.storage.local.get(["or_provider", "or_model_provider"]);
@@ -1334,5 +1350,8 @@ chrome.runtime.onMessage.addListener((msg) => {
       await loadModels();
       await refreshBalance();
     })();
+  }
+  if (msg?.type === "favorites_updated") {
+    refreshFavoritesOnly();
   }
 });
