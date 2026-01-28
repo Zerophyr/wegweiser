@@ -112,6 +112,12 @@ _(Coming soon)_
    - **Ocean** - Blue/teal theme
 3. Theme applies immediately
 
+### Options Highlights
+1. **Provider keys**: Switch provider to edit OpenRouter or NagaAI keys
+2. **Provisioning key**: Optional NagaAI key to enable balance display
+3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
+4. **Streaming debug log**: Toggle logging and download the last 500 stream events
+
 ## 🛠️ Development
 
 ### Prerequisites
