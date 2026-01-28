@@ -56,7 +56,7 @@ describe("ModelDropdownManager storage keys", () => {
   test("renders displayName when provided", () => {
     const globalAny = global as any;
     globalAny.groupModelsByProvider = jest.fn(() => ({
-      Provider: [{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]
+      Provider: [{ id: "openrouter:openai/gpt-4o", displayName: "OR-openai/gpt-4o" }]
     }));
 
     const input = document.getElementById("model-input");
@@ -65,14 +65,14 @@ describe("ModelDropdownManager storage keys", () => {
       onModelSelect: jest.fn()
     });
 
-    dropdown.setModels([{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]);
+    dropdown.setModels([{ id: "openrouter:openai/gpt-4o", displayName: "OR-openai/gpt-4o" }]);
     dropdown.show("");
 
     const item = document.querySelector(".model-dropdown-item");
-    expect(item?.textContent).toContain("OR-gpt-4o");
+    expect(item?.textContent).toContain("OR-openai/gpt-4o");
   });
 
-  test("sorts models by displayName", () => {
+  test("groups models by provider label", () => {
     const input = document.getElementById("model-input");
     const dropdown = new ModelDropdownManager({
       inputElement: input,
@@ -80,13 +80,14 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "openrouter:openai/gpt-4o", displayName: "OR-b-model" },
-      { id: "naga:anthropic/claude-3-opus", displayName: "NG-a-model" }
+      { id: "openrouter:openai/gpt-4o", provider: "openrouter", displayName: "OR-openai/gpt-4o" },
+      { id: "naga:anthropic/claude-3-opus", provider: "naga", displayName: "NG-anthropic/claude-3-opus" }
     ]);
     dropdown.show("");
 
-    const items = Array.from(document.querySelectorAll(".model-dropdown-item"));
-    expect(items[0]?.textContent).toContain("NG-a-model");
-    expect(items[1]?.textContent).toContain("OR-b-model");
+    const headers = Array.from(document.querySelectorAll(".model-dropdown-provider"))
+      .map((el) => el.textContent);
+    expect(headers).toContain("NagaAI");
+    expect(headers).toContain("OpenRouter");
   });
 });

@@ -221,6 +221,26 @@ class ModelDropdownManager {
     return model.displayName || model.name || model.id || '';
   }
 
+  getModelProviderId(model) {
+    if (!model) return '';
+    if (model.provider) return model.provider;
+    if (typeof model.id === 'string') {
+      const match = model.id.match(/^([^:]+):/);
+      if (match) return match[1];
+    }
+    return '';
+  }
+
+  getProviderLabelForModel(model) {
+    const providerId = this.getModelProviderId(model);
+    if (providerId && typeof getProviderLabel === 'function') {
+      return getProviderLabel(providerId);
+    }
+    if (providerId === 'naga') return 'NagaAI';
+    if (providerId === 'openrouter') return 'OpenRouter';
+    return providerId || 'Other';
+  }
+
   highlightSelected() {
     const items = this.dropdownElement.querySelectorAll('.model-dropdown-item');
     items.forEach((item, index) => {
@@ -431,10 +451,19 @@ class ModelDropdownManager {
       allHeader.style.cssText = `padding: ${headerPadding}; font-size: ${headerFontSize}; color: #71717a; font-weight: 600; background: #0f0f0f; position: sticky; top: 0;`;
       dropdown.appendChild(allHeader);
 
-      const sortedModels = [...nonFavModels].sort(sortByLabel);
-      sortedModels.forEach((model) => {
-        const item = this.createModelItem(model, '#e4e4e7', '☆', true);
-        dropdown.appendChild(item);
+      const grouped = {};
+      nonFavModels.forEach((model) => {
+        const label = this.getProviderLabelForModel(model);
+        if (!grouped[label]) {
+          grouped[label] = [];
+        }
+        grouped[label].push(model);
+      });
+
+      const providerLabels = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+      providerLabels.forEach((label) => {
+        const models = grouped[label].sort(sortByLabel);
+        this.renderProviderGroup(dropdown, label, models);
       });
     }
 
@@ -464,6 +493,7 @@ class ModelDropdownManager {
 
   renderProviderGroup(dropdown, provider, models) {
     const providerHeader = document.createElement('div');
+    providerHeader.className = 'model-dropdown-provider';
     const padding = this.config.containerType === 'sidebar' ? '8px 12px 4px 12px' : '10px 16px 6px 16px';
     const fontSize = this.config.containerType === 'sidebar' ? '11px' : '12px';
 

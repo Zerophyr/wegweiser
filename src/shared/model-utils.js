@@ -34,7 +34,8 @@ export function getModelBaseName(modelId) {
 export function buildModelDisplayName(providerId, modelId) {
   const provider = normalizeProviderId(providerId);
   const prefix = provider === "naga" ? "NG" : "OR";
-  return `${prefix}-${getModelBaseName(modelId)}`;
+  const raw = typeof modelId === "string" ? modelId : "";
+  return `${prefix}-${raw}`;
 }
 
 /**
