@@ -421,6 +421,32 @@ function getStreamingFallbackMessage(answerText, hasReasoning = false) {
 }
 
 /**
+ * Removes reasoning bubble elements from a container.
+ * @param {HTMLElement|Document} container - Container to clean.
+ */
+function removeReasoningBubbles(container) {
+  if (!container || typeof container.querySelectorAll !== "function") return;
+  container.querySelectorAll('.reasoning-content, .chat-reasoning-bubble').forEach((el) => {
+    el.remove();
+  });
+}
+
+/**
+ * Formats the active model label for a thread/space.
+ * @param {{model?: string, modelDisplayName?: string}} space
+ * @returns {string}
+ */
+function formatThreadModelLabel(space = {}) {
+  if (space && typeof space.modelDisplayName === "string" && space.modelDisplayName.trim()) {
+    return `Model: ${space.modelDisplayName.trim()}`;
+  }
+  if (space && typeof space.model === "string" && space.model.trim()) {
+    return `Model: ${space.model.trim()}`;
+  }
+  return "Model: Default";
+}
+
+/**
  * Builds a summarization prompt for older thread history.
  * @param {string|null} previousSummary - Existing summary if any
  * @param {Array<{role: string, content: string}>} historyToSummarize - Messages to summarize
@@ -469,6 +495,8 @@ if (typeof module !== "undefined") {
     extractReasoningFromStreamChunk,
     getTokenBarStyle,
     getStreamingFallbackMessage,
+    removeReasoningBubbles,
+    formatThreadModelLabel,
     buildSummarizerMessages
   };
 }

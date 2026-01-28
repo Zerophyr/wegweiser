@@ -997,6 +997,12 @@ body {
   gap: 12px;
 }
 
+.chat-model-indicator {
+  padding: 0 24px 12px;
+  font-size: 11px;
+  color: #71717a;
+}
+
 #chat-input {
   flex: 1;
   padding: 12px;
@@ -1521,6 +1527,10 @@ body.theme-light .toggle-label input:checked ~ .toggle-text {
 body.theme-light .chat-input-wrapper {
   background: #f9fafb;
   border-top-color: #e5e7eb;
+}
+
+body.theme-light .chat-model-indicator {
+  color: #6b7280;
 }
 
 body.theme-light .chat-toggles {

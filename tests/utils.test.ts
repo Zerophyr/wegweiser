@@ -131,6 +131,41 @@ describe("extractReasoningFromStreamChunk", () => {
   });
 });
 
+describe("removeReasoningBubbles", () => {
+  test("removes reasoning nodes from a container", () => {
+    const { removeReasoningBubbles } = require("../src/shared/utils.js");
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <div class="reasoning-content">Reasoning A</div>
+      <div class="chat-reasoning-bubble">Reasoning B</div>
+      <div class="keep">Keep</div>
+    `;
+
+    removeReasoningBubbles(container);
+
+    expect(container.querySelector(".reasoning-content")).toBeNull();
+    expect(container.querySelector(".chat-reasoning-bubble")).toBeNull();
+    expect(container.querySelector(".keep")).not.toBeNull();
+  });
+});
+
+describe("formatThreadModelLabel", () => {
+  test("returns default when no model is set", () => {
+    const { formatThreadModelLabel } = require("../src/shared/utils.js");
+    expect(formatThreadModelLabel({})).toBe("Model: Default");
+  });
+
+  test("prefers display name when provided", () => {
+    const { formatThreadModelLabel } = require("../src/shared/utils.js");
+    expect(formatThreadModelLabel({ modelDisplayName: "NG-claude-3-opus" })).toBe("Model: NG-claude-3-opus");
+  });
+
+  test("falls back to raw model id", () => {
+    const { formatThreadModelLabel } = require("../src/shared/utils.js");
+    expect(formatThreadModelLabel({ model: "anthropic/claude-3-opus" })).toBe("Model: anthropic/claude-3-opus");
+  });
+});
+
 describe("model display helpers", () => {
   const {
     getModelBaseName,

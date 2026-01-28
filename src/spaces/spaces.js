@@ -94,6 +94,22 @@ function getSpaceModelLabel(space) {
   return space.model.split('/').pop() || space.model;
 }
 
+function updateChatModelIndicator(space) {
+  if (!elements.chatModelIndicator) return;
+  if (!space) {
+    elements.chatModelIndicator.textContent = '';
+    return;
+  }
+  if (typeof formatThreadModelLabel === 'function') {
+    elements.chatModelIndicator.textContent = formatThreadModelLabel({
+      model: space.model || '',
+      modelDisplayName: space.modelDisplayName || ''
+    });
+    return;
+  }
+  elements.chatModelIndicator.textContent = `Model: ${getSpaceModelLabel(space)}`;
+}
+
 async function loadProviderSetting() {
   try {
     const stored = await chrome.storage.local.get(['or_provider', 'or_model_provider']);
@@ -416,6 +432,7 @@ function initElements() {
   elements.chatInput = document.getElementById('chat-input');
   elements.sendBtn = document.getElementById('send-btn');
   elements.stopBtn = document.getElementById('stop-btn');
+  elements.chatModelIndicator = document.getElementById('chat-model-indicator');
   elements.chatWebSearch = document.getElementById('chat-web-search');
   elements.chatReasoning = document.getElementById('chat-reasoning');
 
@@ -963,6 +980,7 @@ async function openSpace(spaceId) {
   elements.spaceTitle.textContent = space.name;
   elements.chatEmptyState.style.display = 'flex';
   elements.chatContainer.style.display = 'none';
+  updateChatModelIndicator(null);
 
   showView('space');
   await renderThreadList();
@@ -982,6 +1000,7 @@ async function openThread(threadId) {
   if (space) {
     elements.chatWebSearch.checked = space.webSearch || false;
     elements.chatReasoning.checked = space.reasoning || false;
+    updateChatModelIndicator(space);
   }
 
   elements.chatEmptyState.style.display = 'none';
@@ -1120,6 +1139,7 @@ async function handleSpaceFormSubmit(e) {
       // Update title if viewing this space
       if (currentSpaceId === editingSpaceId) {
         elements.spaceTitle.textContent = data.name;
+        updateChatModelIndicator(data);
       }
     } else {
       await createSpace(data);
@@ -1708,6 +1728,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
       const bubble = messageDiv?.querySelector('.chat-bubble');
       if (!bubble) return;
       const wrapper = document.createElement('div');
+      wrapper.className = 'chat-reasoning-bubble';
       wrapper.style.marginBottom = '12px';
       wrapper.innerHTML = `
         <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
@@ -1803,6 +1824,10 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
 
         renderChatSourcesSummary(messageDiv, sources);
 
+        if (typeof removeReasoningBubbles === 'function') {
+          removeReasoningBubbles(messageDiv);
+        }
+
         streamPort.disconnect();
         streamPort = null;
         resolve();
@@ -1812,6 +1837,9 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
         }
         if (streamingUi?.metaText) {
           streamingUi.metaText.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+        }
+        if (typeof removeReasoningBubbles === 'function') {
+          removeReasoningBubbles(messageDiv);
         }
         streamPort.disconnect();
         streamPort = null;

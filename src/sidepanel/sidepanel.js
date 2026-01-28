@@ -694,10 +694,8 @@ async function askQuestion() {
           }
         }
 
-        // Hide reasoning section if no reasoning was received (it was just a loading indicator)
-        // Otherwise keep it visible to show the reasoning that was streamed
-        if (reasoningContent && !hasReceivedReasoning) {
-          reasoningContent.style.display = 'none';
+        if (typeof removeReasoningBubbles === "function") {
+          removeReasoningBubbles(answerItem);
         }
 
         // Ensure answer content is visible (final render)
