@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   MODELS_CACHE_TIME: "or_models_cache_time",
   MODELS_CACHE_NAGA: "or_models_cache_naga",
   MODELS_CACHE_TIME_NAGA: "or_models_cache_time_naga",
+  NAGA_STARTUPS_CACHE: "naga_startups_cache",
+  NAGA_STARTUPS_CACHE_TIME: "naga_startups_cache_time",
   SPACES: "or_spaces",
   THREADS: "or_threads",
   THEME: "or_theme"
