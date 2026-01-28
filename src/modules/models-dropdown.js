@@ -386,9 +386,6 @@ class ModelDropdownManager {
     const sortByLabel = (a, b) => getLabel(a).localeCompare(getLabel(b));
     favModels.sort(sortByLabel);
 
-    // Group non-favorites by provider
-    const modelsByProvider = groupModelsByProvider(nonFavModels);
-
     // Build HTML
     dropdown.innerHTML = '';
 
@@ -434,10 +431,10 @@ class ModelDropdownManager {
       allHeader.style.cssText = `padding: ${headerPadding}; font-size: ${headerFontSize}; color: #71717a; font-weight: 600; background: #0f0f0f; position: sticky; top: 0;`;
       dropdown.appendChild(allHeader);
 
-      // Render by provider
-      const providers = Object.keys(modelsByProvider).sort();
-      providers.forEach(provider => {
-        this.renderProviderGroup(dropdown, provider, modelsByProvider[provider]);
+      const sortedModels = [...nonFavModels].sort(sortByLabel);
+      sortedModels.forEach((model) => {
+        const item = this.createModelItem(model, '#e4e4e7', '☆', true);
+        dropdown.appendChild(item);
       });
     }
 

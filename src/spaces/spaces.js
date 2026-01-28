@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   SPACES: 'or_spaces',
   THREADS: 'or_threads',
   API_KEY: 'or_api_key',
-  MODEL: 'or_model'
+  MODEL: 'or_model',
+  MODEL_PROVIDER: 'or_model_provider'
 };
 
 // Provider state
@@ -32,10 +33,71 @@ function getProviderStorageKeySafe(baseKey, providerId) {
   return normalizeProviderSafe(providerId) === 'naga' ? `${baseKey}_naga` : baseKey;
 }
 
+function buildCombinedModelIdSafe(providerId, modelId) {
+  if (typeof buildCombinedModelId === 'function') {
+    return buildCombinedModelId(providerId, modelId);
+  }
+  return `${normalizeProviderSafe(providerId)}:${modelId}`;
+}
+
+function parseCombinedModelIdSafe(combinedId) {
+  if (typeof parseCombinedModelId === 'function') {
+    return parseCombinedModelId(combinedId);
+  }
+  if (!combinedId || typeof combinedId !== 'string') {
+    return { provider: 'openrouter', modelId: '' };
+  }
+  const splitIndex = combinedId.indexOf(':');
+  if (splitIndex === -1) {
+    return { provider: 'openrouter', modelId: combinedId };
+  }
+  const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
+  const modelId = combinedId.slice(splitIndex + 1);
+  return { provider, modelId };
+}
+
+function getModelDisplayName(model) {
+  return model?.displayName || model?.name || model?.id || '';
+}
+
+function buildCombinedFavoritesList(favoritesByProvider) {
+  const combined = [];
+  ['openrouter', 'naga'].forEach((provider) => {
+    const favorites = favoritesByProvider[provider] || new Set();
+    favorites.forEach((modelId) => {
+      combined.push(buildCombinedModelIdSafe(provider, modelId));
+    });
+  });
+  return combined;
+}
+
+function buildCombinedRecentList(recentsByProvider) {
+  const combined = [];
+  ['openrouter', 'naga'].forEach((provider) => {
+    const recents = recentsByProvider[provider] || [];
+    recents.forEach((modelId) => {
+      const combinedId = buildCombinedModelIdSafe(provider, modelId);
+      if (!combined.includes(combinedId)) {
+        combined.push(combinedId);
+      }
+    });
+  });
+  return combined;
+}
+
+function getSpaceModelLabel(space) {
+  if (!space || !space.model) return 'Default';
+  if (space.modelDisplayName) return space.modelDisplayName;
+  if (typeof buildModelDisplayName === 'function') {
+    return buildModelDisplayName(space.modelProvider || 'openrouter', space.model);
+  }
+  return space.model.split('/').pop() || space.model;
+}
+
 async function loadProviderSetting() {
   try {
-    const stored = await chrome.storage.local.get(['or_provider']);
-    currentProvider = normalizeProviderSafe(stored.or_provider);
+    const stored = await chrome.storage.local.get(['or_provider', 'or_model_provider']);
+    currentProvider = normalizeProviderSafe(stored.or_model_provider || stored.or_provider);
   } catch (e) {
     console.warn('Failed to load provider setting:', e);
   }
@@ -192,6 +254,8 @@ async function createSpace(data) {
     description: data.description || '',
     icon: data.icon || '📁',
     model: data.model || '',
+    modelProvider: data.modelProvider || null,
+    modelDisplayName: data.modelDisplayName || '',
     customInstructions: data.customInstructions || '',
     webSearch: data.webSearch || false,
     reasoning: data.reasoning || false,
@@ -309,7 +373,15 @@ let editingSpaceId = null;
 let renamingThreadId = null;
 let deletingItem = null; // { type: 'space'|'thread', id: string }
 let spaceModelDropdown = null;
-let spaceModelDropdownProvider = null;
+let spaceModelMap = new Map();
+let spaceFavoriteModelsByProvider = {
+  openrouter: new Set(),
+  naga: new Set()
+};
+let spaceRecentModelsByProvider = {
+  openrouter: [],
+  naga: []
+};
 
 // ============ DOM ELEMENTS ============
 
@@ -415,7 +487,7 @@ async function renderSpacesList() {
   spaces.sort((a, b) => b.updatedAt - a.updatedAt);
 
   const cardsHtml = await Promise.all(spaces.map(async space => {
-    const modelName = space.model ? space.model.split('/').pop() : 'Default';
+    const modelName = getSpaceModelLabel(space);
     const spaceIcon = space.icon || '📁';
     const dateStr = formatDate(space.updatedAt);
 
@@ -990,10 +1062,12 @@ async function openEditSpaceModal(spaceId) {
   elements.spaceDescription.value = space.description;
   elements.spaceIcon.value = space.icon || '📁';
   elements.iconPreview.textContent = space.icon || '📁';
-  elements.spaceModel.value = space.model;
-  if (elements.spaceModelInput) {
-    elements.spaceModelInput.value = space.model || '';
-  }
+    const modelProvider = normalizeProviderSafe(space.modelProvider || currentProvider);
+    const combinedId = space.model ? buildCombinedModelIdSafe(modelProvider, space.model) : '';
+    elements.spaceModel.value = combinedId;
+    if (elements.spaceModelInput) {
+      elements.spaceModelInput.value = space.model ? getSpaceModelLabel(space) : '';
+    }
   elements.spaceInstructions.value = space.customInstructions;
   elements.spaceWebSearch.checked = space.webSearch || false;
   elements.spaceReasoning.checked = space.reasoning || false;
@@ -1011,15 +1085,27 @@ function closeSpaceModal() {
 async function handleSpaceFormSubmit(e) {
   e.preventDefault();
 
-  const data = {
-    name: elements.spaceName.value.trim(),
-    description: elements.spaceDescription.value.trim(),
-    icon: elements.spaceIcon.value || '📁',
-    model: elements.spaceModel.value,
-    customInstructions: elements.spaceInstructions.value.trim(),
-    webSearch: elements.spaceWebSearch.checked,
-    reasoning: elements.spaceReasoning.checked
-  };
+    const combinedModelId = elements.spaceModel.value;
+    const parsedModel = parseCombinedModelIdSafe(combinedModelId);
+    const modelProvider = combinedModelId ? normalizeProviderSafe(parsedModel.provider) : null;
+    const modelId = combinedModelId ? parsedModel.modelId : '';
+    const modelDisplayName = combinedModelId
+      ? (elements.spaceModelInput?.value || (typeof buildModelDisplayName === 'function'
+        ? buildModelDisplayName(modelProvider, modelId)
+        : modelId))
+      : '';
+
+    const data = {
+      name: elements.spaceName.value.trim(),
+      description: elements.spaceDescription.value.trim(),
+      icon: elements.spaceIcon.value || '📁',
+      model: modelId,
+      modelProvider,
+      modelDisplayName,
+      customInstructions: elements.spaceInstructions.value.trim(),
+      webSearch: elements.spaceWebSearch.checked,
+      reasoning: elements.spaceReasoning.checked
+    };
 
   if (!data.name) {
     showToast('Name is required', 'error');
@@ -1145,51 +1231,93 @@ async function loadModels() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'get_models' });
     if (response.ok && response.models) {
-      const modelKey = getProviderStorageKeySafe(STORAGE_KEYS.MODEL, currentProvider);
-      const currentModel = (await chrome.storage.local.get([modelKey]))[modelKey] || '';
-      const favoritesKey = getProviderStorageKeySafe('or_favorites', currentProvider);
-      const recentModelsKey = getProviderStorageKeySafe('or_recent_models', currentProvider);
-      const favData = await chrome.storage.sync.get([favoritesKey]);
-      const favorites = favData[favoritesKey] || [];
+      spaceModelMap = new Map(response.models.map((model) => [model.id, model]));
 
-      if (spaceModelDropdown && spaceModelDropdownProvider !== currentProvider) {
-        spaceModelDropdown.destroy();
-        spaceModelDropdown = null;
-      }
+      const [localItems, syncItems] = await Promise.all([
+        chrome.storage.local.get(['or_recent_models', 'or_recent_models_naga']),
+        chrome.storage.sync.get(['or_favorites', 'or_favorites_naga'])
+      ]);
+
+      spaceFavoriteModelsByProvider = {
+        openrouter: new Set(syncItems.or_favorites || []),
+        naga: new Set(syncItems.or_favorites_naga || [])
+      };
+      spaceRecentModelsByProvider = {
+        openrouter: localItems.or_recent_models || [],
+        naga: localItems.or_recent_models_naga || []
+      };
 
       if (!spaceModelDropdown && elements.spaceModelInput) {
         spaceModelDropdown = new ModelDropdownManager({
           inputElement: elements.spaceModelInput,
           containerType: 'modal',
-          favoritesKey,
-          recentModelsKey,
           onModelSelect: async (modelId) => {
+            const selectedModel = spaceModelMap.get(modelId);
+            const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
             if (elements.spaceModelInput) {
-              elements.spaceModelInput.value = modelId;
+              elements.spaceModelInput.value = displayName;
             }
             if (elements.spaceModel) {
               elements.spaceModel.value = modelId;
             }
             return true;
+          },
+          onToggleFavorite: async (modelId, isFavorite) => {
+            const parsed = parseCombinedModelIdSafe(modelId);
+            const provider = normalizeProviderSafe(parsed.provider);
+            const rawId = parsed.modelId;
+
+            if (!spaceFavoriteModelsByProvider[provider]) {
+              spaceFavoriteModelsByProvider[provider] = new Set();
+            }
+
+            if (isFavorite) {
+              spaceFavoriteModelsByProvider[provider].add(rawId);
+            } else {
+              spaceFavoriteModelsByProvider[provider].delete(rawId);
+            }
+
+            await chrome.storage.sync.set({
+              [getProviderStorageKeySafe('or_favorites', provider)]: Array.from(spaceFavoriteModelsByProvider[provider])
+            });
+          },
+          onAddRecent: async (modelId) => {
+            const parsed = parseCombinedModelIdSafe(modelId);
+            const provider = normalizeProviderSafe(parsed.provider);
+            const rawId = parsed.modelId;
+
+            const current = spaceRecentModelsByProvider[provider] || [];
+            const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
+            spaceRecentModelsByProvider[provider] = next;
+
+            await chrome.storage.local.set({
+              [getProviderStorageKeySafe('or_recent_models', provider)]: next
+            });
+
+            spaceModelDropdown.setRecentlyUsed(buildCombinedRecentList(spaceRecentModelsByProvider));
           }
         });
-        spaceModelDropdownProvider = currentProvider;
       }
 
       if (spaceModelDropdown) {
         spaceModelDropdown.setModels(response.models);
-        spaceModelDropdown.setFavorites(favorites);
+        spaceModelDropdown.setFavorites(buildCombinedFavoritesList(spaceFavoriteModelsByProvider));
+        spaceModelDropdown.setRecentlyUsed(buildCombinedRecentList(spaceRecentModelsByProvider));
       }
 
       if (elements.spaceModel) {
+        const currentCombinedId = elements.spaceModel.value || '';
         elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
           response.models.map(m =>
-            `<option value="${m.id}" ${m.id === currentModel ? 'selected' : ''}>${m.name}</option>`
+            `<option value="${m.id}" ${m.id === currentCombinedId ? 'selected' : ''}>${getModelDisplayName(m)}</option>`
           ).join('');
       }
 
-      if (elements.spaceModelInput) {
-        elements.spaceModelInput.value = currentModel;
+      if (elements.spaceModelInput && elements.spaceModel?.value) {
+        const selected = spaceModelMap.get(elements.spaceModel.value);
+        if (selected) {
+          elements.spaceModelInput.value = getModelDisplayName(selected);
+        }
       }
     }
   } catch (err) {
@@ -1508,7 +1636,8 @@ async function sendMessage() {
       const summaryRes = await chrome.runtime.sendMessage({
         type: 'summarize_thread',
         messages: summaryMessages,
-        model: space.model || null
+        model: space.model || null,
+        provider: space.modelProvider || currentProvider
       });
       if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= 200) {
         thread.summary = summaryRes.summary.trim();
@@ -1581,8 +1710,14 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
         elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
       } else if (msg.type === 'complete') {
         const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : null;
+        let metaModel = msg.model || 'default model';
+        if (space.modelDisplayName) {
+          metaModel = space.modelDisplayName;
+        } else if (space.model && typeof buildModelDisplayName === 'function') {
+          metaModel = buildModelDisplayName(space.modelProvider || currentProvider, space.model);
+        }
         const meta = {
-          model: msg.model || 'default model',
+          model: metaModel,
           tokens: msg.tokens || null,
           responseTimeSec: typeof elapsedSec === 'number' ? Number(elapsedSec.toFixed(2)) : null,
           contextSize: msg.contextSize || 0,
@@ -1654,6 +1789,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
       prompt: content,
       messages: messages,
       model: space.model || null,
+      provider: space.modelProvider || currentProvider,
       webSearch: webSearch,
       reasoning: reasoning,
       tabId: `space_${space.id}`
@@ -1725,12 +1861,11 @@ document.addEventListener('DOMContentLoaded', init);
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'provider_settings_updated') {
     (async () => {
-      currentProvider = normalizeProviderSafe(msg.provider);
       await loadProviderSetting();
       await loadModels();
       if (typeof showToast === 'function') {
-        const providerLabel = getProviderLabelSafe(currentProvider);
-        showToast(`Provider changed. Update Space models to use ${providerLabel}.`, 'info');
+        const providerLabel = getProviderLabelSafe(msg.provider);
+        showToast(`Provider updated. Update Space models to use ${providerLabel}.`, 'info');
       }
     })();
   }

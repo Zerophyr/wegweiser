@@ -71,4 +71,22 @@ describe("ModelDropdownManager storage keys", () => {
     const item = document.querySelector(".model-dropdown-item");
     expect(item?.textContent).toContain("OR-gpt-4o");
   });
+
+  test("sorts models by displayName", () => {
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      { id: "openrouter:openai/gpt-4o", displayName: "OR-b-model" },
+      { id: "naga:anthropic/claude-3-opus", displayName: "NG-a-model" }
+    ]);
+    dropdown.show("");
+
+    const items = Array.from(document.querySelectorAll(".model-dropdown-item"));
+    expect(items[0]?.textContent).toContain("NG-a-model");
+    expect(items[1]?.textContent).toContain("OR-b-model");
+  });
 });

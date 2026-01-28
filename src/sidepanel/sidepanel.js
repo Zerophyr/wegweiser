@@ -38,6 +38,17 @@ let reasoningEnabled = false;
 
 // ---- Provider state ----
 let currentProvider = "openrouter";
+let combinedModels = [];
+let modelMap = new Map();
+let favoriteModelsByProvider = {
+  openrouter: new Set(),
+  naga: new Set()
+};
+let recentModelsByProvider = {
+  openrouter: [],
+  naga: []
+};
+let selectedCombinedModelId = null;
 
 function normalizeProviderSafe(providerId) {
   if (typeof normalizeProviderId === "function") {
@@ -60,17 +71,80 @@ function getProviderStorageKeySafe(baseKey, providerId) {
   return normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
 }
 
+function buildCombinedModelIdSafe(providerId, modelId) {
+  if (typeof buildCombinedModelId === "function") {
+    return buildCombinedModelId(providerId, modelId);
+  }
+  return `${normalizeProviderSafe(providerId)}:${modelId}`;
+}
+
+function parseCombinedModelIdSafe(combinedId) {
+  if (typeof parseCombinedModelId === "function") {
+    return parseCombinedModelId(combinedId);
+  }
+  if (!combinedId || typeof combinedId !== "string") {
+    return { provider: "openrouter", modelId: "" };
+  }
+  const splitIndex = combinedId.indexOf(":");
+  if (splitIndex === -1) {
+    return { provider: "openrouter", modelId: combinedId };
+  }
+  const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
+  const modelId = combinedId.slice(splitIndex + 1);
+  return { provider, modelId };
+}
+
+function getModelDisplayName(model) {
+  return model?.displayName || model?.name || model?.id || "";
+}
+
+function buildCombinedFavoritesList() {
+  const combined = [];
+  ["openrouter", "naga"].forEach((provider) => {
+    const favorites = favoriteModelsByProvider[provider] || new Set();
+    favorites.forEach((modelId) => {
+      combined.push(buildCombinedModelIdSafe(provider, modelId));
+    });
+  });
+  return combined;
+}
+
+function buildCombinedRecentList() {
+  const combined = [];
+  ["openrouter", "naga"].forEach((provider) => {
+    const recents = recentModelsByProvider[provider] || [];
+    recents.forEach((modelId) => {
+      const combinedId = buildCombinedModelIdSafe(provider, modelId);
+      if (!combined.includes(combinedId)) {
+        combined.push(combinedId);
+      }
+    });
+  });
+  return combined;
+}
+
+function loadFavoritesAndRecents(localItems, syncItems) {
+  favoriteModelsByProvider = {
+    openrouter: new Set(syncItems.or_favorites || []),
+    naga: new Set(syncItems.or_favorites_naga || [])
+  };
+
+  recentModelsByProvider = {
+    openrouter: localItems.or_recent_models || [],
+    naga: localItems.or_recent_models_naga || []
+  };
+}
+
 async function loadProviderSetting() {
   try {
-    const stored = await chrome.storage.local.get(["or_provider"]);
-    currentProvider = normalizeProviderSafe(stored.or_provider);
+    const stored = await chrome.storage.local.get(["or_provider", "or_model_provider"]);
+    currentProvider = normalizeProviderSafe(stored.or_model_provider || stored.or_provider);
   } catch (e) {
     console.warn("Failed to load provider setting:", e);
   }
 }
 // ---- Model dropdown manager ----
 let modelDropdown = null;
-let modelDropdownProvider = null;
 
 // ---- Context visualization ----
 let contextViz = null;
@@ -501,7 +575,8 @@ async function askQuestion() {
           console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
           hasCompleted = true;
         const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        currentModel = msg.model || 'default model';
+        const selectedModel = selectedCombinedModelId ? modelMap.get(selectedCombinedModelId) : null;
+        currentModel = selectedModel ? getModelDisplayName(selectedModel) : (msg.model || 'default model');
         finalTokens = msg.tokens;
         finalContextSize = msg.contextSize;
 
@@ -784,9 +859,10 @@ if (summarizeBtn) {
         const answerItem = document.createElement("div");
         answerItem.className = "answer-item";
         const contextBadge = res.contextSize > 2 ? `<span class="answer-context-badge" title="${res.contextSize} messages in conversation context">🧠 ${Math.floor(res.contextSize / 2)} Q&A</span>` : '';
+        const summaryModel = selectedCombinedModelId ? getModelDisplayName(modelMap.get(selectedCombinedModelId)) : (res.model || "default model");
         answerItem.innerHTML = `
           <div class="answer-meta">
-            <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${res.model || "default model"}</span>
+            <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${summaryModel}</span>
           </div>
           <div class="answer-content"></div>
           <div class="answer-footer">
@@ -837,7 +913,7 @@ if (summarizeBtn) {
 
         // Display context info in meta
         const contextInfo = res.contextSize > 2 ? ` (${Math.floor(res.contextSize / 2)} previous Q&A in context)` : '';
-        metaEl.textContent = `✅ Page summarized using ${res.model || "default model"}${contextInfo}.`;
+        metaEl.textContent = `✅ Page summarized using ${summaryModel}${contextInfo}.`;
 
         // Update context visualization
         if (contextViz && res.contextSize) {
@@ -859,7 +935,7 @@ if (summarizeBtn) {
         renderSourcesSummary(answerItem, sources);
 
         // Show success toast
-        toast.success(`Page summarized using ${res.model || "default model"}`);
+        toast.success(`Page summarized using ${summaryModel}`);
 
         // Scroll to bottom to show newest answer
         answerSection.scrollTop = answerSection.scrollHeight;
@@ -970,65 +1046,105 @@ async function loadModels() {
       return;
     }
 
-    const models = res.models || [];
+    combinedModels = res.models || [];
+    modelMap = new Map(combinedModels.map((model) => [model.id, model]));
 
-    // Get favorites from storage
-    const favoritesKey = getProviderStorageKeySafe("or_favorites", currentProvider);
-    const recentModelsKey = getProviderStorageKeySafe("or_recent_models", currentProvider);
-    const favData = await chrome.storage.sync.get([favoritesKey]);
-    const favorites = favData[favoritesKey] || [];
+    const [localItems, syncItems] = await Promise.all([
+      chrome.storage.local.get(["or_recent_models", "or_recent_models_naga"]),
+      chrome.storage.sync.get(["or_favorites", "or_favorites_naga"])
+    ]);
+    loadFavoritesAndRecents(localItems, syncItems);
 
-    // Initialize ModelDropdownManager if not already done or provider changed
-    if (!modelDropdown || modelDropdownProvider !== currentProvider) {
-      if (modelDropdown) {
-        modelDropdown.destroy();
-      }
+    if (!modelDropdown) {
       modelDropdown = new ModelDropdownManager({
         inputElement: modelInput,
         containerType: 'sidebar',
-        favoritesKey,
-        recentModelsKey,
         onModelSelect: async (modelId) => {
-          // Update input field
+          const selectedModel = modelMap.get(modelId);
+          const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
+          const parsed = parseCombinedModelIdSafe(modelId);
+          const provider = normalizeProviderSafe(parsed.provider);
+
           if (modelInput) {
-            modelInput.value = modelId;
+            modelInput.value = displayName;
           }
 
-          // Send to background
           try {
             const res = await chrome.runtime.sendMessage({
               type: "set_model",
-              model: modelId
+              model: parsed.modelId,
+              provider
             });
 
             if (res?.ok) {
-              modelStatusEl.textContent = `Using: ${modelId}`;
-              return true; // Indicate success
-            } else {
-              modelStatusEl.textContent = "Failed to set model";
-              return false;
+              selectedCombinedModelId = modelId;
+              currentProvider = provider;
+              modelStatusEl.textContent = `Using: ${displayName}`;
+              return true;
             }
+
+            modelStatusEl.textContent = "Failed to set model";
+            return false;
           } catch (e) {
             console.error("Error setting model:", e);
             modelStatusEl.textContent = "Error setting model";
             return false;
           }
+        },
+        onToggleFavorite: async (modelId, isFavorite) => {
+          const parsed = parseCombinedModelIdSafe(modelId);
+          const provider = normalizeProviderSafe(parsed.provider);
+          const rawId = parsed.modelId;
+
+          if (!favoriteModelsByProvider[provider]) {
+            favoriteModelsByProvider[provider] = new Set();
+          }
+
+          if (isFavorite) {
+            favoriteModelsByProvider[provider].add(rawId);
+          } else {
+            favoriteModelsByProvider[provider].delete(rawId);
+          }
+
+          await chrome.storage.sync.set({
+            [getProviderStorageKeySafe("or_favorites", provider)]: Array.from(favoriteModelsByProvider[provider])
+          });
+        },
+        onAddRecent: async (modelId) => {
+          const parsed = parseCombinedModelIdSafe(modelId);
+          const provider = normalizeProviderSafe(parsed.provider);
+          const rawId = parsed.modelId;
+
+          const current = recentModelsByProvider[provider] || [];
+          const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
+          recentModelsByProvider[provider] = next;
+
+          await chrome.storage.local.set({
+            [getProviderStorageKeySafe("or_recent_models", provider)]: next
+          });
+
+          modelDropdown.setRecentlyUsed(buildCombinedRecentList());
         }
       });
-      modelDropdownProvider = currentProvider;
     }
 
-    // Set models and favorites in the dropdown manager
-    modelDropdown.setModels(models);
-    modelDropdown.setFavorites(favorites);
+    modelDropdown.setModels(combinedModels);
+    modelDropdown.setFavorites(buildCombinedFavoritesList());
+    modelDropdown.setRecentlyUsed(buildCombinedRecentList());
 
-    // Get and set current model from storage
     const cfgRes = await chrome.runtime.sendMessage({ type: "get_config" });
     if (cfgRes?.ok && cfgRes.config?.model) {
+      const provider = normalizeProviderSafe(cfgRes.config.modelProvider || cfgRes.config.provider);
+      const combinedId = buildCombinedModelIdSafe(provider, cfgRes.config.model);
+      const selected = modelMap.get(combinedId);
+      const displayName = selected ? getModelDisplayName(selected) : combinedId;
+
+      currentProvider = provider;
+      selectedCombinedModelId = combinedId;
       if (modelInput) {
-        modelInput.value = cfgRes.config.model;
+        modelInput.value = displayName;
       }
-      modelStatusEl.textContent = `Using: ${cfgRes.config.model}`;
+      modelStatusEl.textContent = `Using: ${displayName}`;
     } else {
       modelStatusEl.textContent = "Ready";
     }
@@ -1214,7 +1330,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "provider_settings_updated") {
     (async () => {
-      currentProvider = normalizeProviderSafe(msg.provider);
       await loadProviderSetting();
       await loadModels();
       await refreshBalance();
