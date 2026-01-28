@@ -1098,6 +1098,13 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
           });
           if (!sent) break; // Stop if port disconnected
         }
+        if (delta?.reasoning_content) {
+          const sent = safeSendMessage({
+            type: 'reasoning',
+            reasoning: delta.reasoning_content
+          });
+          if (!sent) break; // Stop if port disconnected
+        }
 
         // Extract usage
         if (chunk.usage) {

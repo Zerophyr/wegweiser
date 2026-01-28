@@ -99,6 +99,38 @@ describe("provider helpers", () => {
   });
 });
 
+describe("extractReasoningFromStreamChunk", () => {
+  test("separates reasoning tags from content in a single chunk", () => {
+    const { extractReasoningFromStreamChunk } = require("../src/shared/utils.js");
+    const state = { inReasoning: false, carry: "" };
+    const res = extractReasoningFromStreamChunk(state, "Hello <think>reason</think> world");
+    expect(res.content).toBe("Hello  world");
+    expect(res.reasoning).toBe("reason");
+  });
+
+  test("handles reasoning tags split across chunks", () => {
+    const { extractReasoningFromStreamChunk } = require("../src/shared/utils.js");
+    const state = { inReasoning: false, carry: "" };
+    const first = extractReasoningFromStreamChunk(state, "<think>rea");
+    const second = extractReasoningFromStreamChunk(state, "son</think>done");
+    expect(first.content).toBe("");
+    expect(first.reasoning).toBe("rea");
+    expect(second.content).toBe("done");
+    expect(second.reasoning).toBe("son");
+  });
+
+  test("keeps partial tags until completed", () => {
+    const { extractReasoningFromStreamChunk } = require("../src/shared/utils.js");
+    const state = { inReasoning: false, carry: "" };
+    const first = extractReasoningFromStreamChunk(state, "Hello <thi");
+    const second = extractReasoningFromStreamChunk(state, "nk>R</think>!");
+    expect(first.content).toBe("Hello ");
+    expect(first.reasoning).toBe("");
+    expect(second.content).toBe("!");
+    expect(second.reasoning).toBe("R");
+  });
+});
+
 describe("model display helpers", () => {
   const {
     getModelBaseName,

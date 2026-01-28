@@ -1700,14 +1700,64 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
     let fullContent = '';
     const assistantBubble = streamingUi?.content || null;
     const messageDiv = streamingUi?.messageDiv || null;
+    const reasoningStreamState = { inReasoning: false, carry: "" };
+    let reasoningTextEl = null;
+
+    const ensureReasoningBubble = () => {
+      if (reasoningTextEl) return;
+      const bubble = messageDiv?.querySelector('.chat-bubble');
+      if (!bubble) return;
+      const wrapper = document.createElement('div');
+      wrapper.style.marginBottom = '12px';
+      wrapper.innerHTML = `
+        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>💭</span>
+            <span>Reasoning:</span>
+          </div>
+          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+        </div>
+      `;
+      const contentEl = assistantBubble || bubble.querySelector('.chat-content');
+      if (contentEl) {
+        bubble.insertBefore(wrapper, contentEl);
+      } else {
+        bubble.appendChild(wrapper);
+      }
+      reasoningTextEl = wrapper.querySelector('.reasoning-text');
+    };
 
     streamPort.onMessage.addListener(async (msg) => {
       if (msg.type === 'content') {
-        fullContent += msg.content;
+        let contentChunk = msg.content || '';
+        let reasoningChunk = '';
+        if (typeof extractReasoningFromStreamChunk === 'function') {
+          const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
+          contentChunk = parsed.content;
+          reasoningChunk = parsed.reasoning;
+        }
+
+        if (reasoningChunk) {
+          ensureReasoningBubble();
+          if (reasoningTextEl) {
+            reasoningTextEl.textContent += reasoningChunk;
+          }
+        }
+
+        if (!contentChunk) {
+          return;
+        }
+
+        fullContent += contentChunk;
         if (assistantBubble) {
           assistantBubble.innerHTML = applyMarkdownStyles(fullContent);
         }
         elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+      } else if (msg.type === 'reasoning' && msg.reasoning) {
+        ensureReasoningBubble();
+        if (reasoningTextEl) {
+          reasoningTextEl.textContent += msg.reasoning;
+        }
       } else if (msg.type === 'complete') {
         const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : null;
         let metaModel = msg.model || 'default model';

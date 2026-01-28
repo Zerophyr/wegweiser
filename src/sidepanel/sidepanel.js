@@ -493,8 +493,33 @@ async function askQuestion() {
     answerEl.appendChild(answerItem);
 
     const answerContent = answerItem.querySelector(".answer-content");
-    const reasoningContent = answerItem.querySelector(".reasoning-content");
+    let reasoningContent = answerItem.querySelector(".reasoning-content");
     const answerMeta = answerItem.querySelector(".answer-meta");
+
+    const ensureReasoningSection = () => {
+      if (reasoningContent) return;
+      const wrapper = document.createElement("div");
+      wrapper.className = "reasoning-content";
+      wrapper.style.marginBottom = "12px";
+      wrapper.setAttribute("role", "region");
+      wrapper.setAttribute("aria-label", "Reasoning steps");
+      wrapper.innerHTML = `
+        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>💭</span>
+            <span>Thinking...</span>
+          </div>
+          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+        </div>
+      `;
+      const answerContentEl = answerItem.querySelector(".answer-content");
+      if (answerContentEl) {
+        answerContentEl.before(wrapper);
+      } else {
+        answerItem.appendChild(wrapper);
+      }
+      reasoningContent = wrapper;
+    };
 
     // Setup reasoning display if enabled
     if (reasoningEnabled && reasoningContent) {
@@ -509,8 +534,8 @@ async function askQuestion() {
       `;
     }
 
-    const reasoningText = reasoningContent?.querySelector(".reasoning-text");
-    const reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+    let reasoningText = reasoningContent?.querySelector(".reasoning-text");
+    let reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
     let fullAnswer = '';
     let hasCompleted = false;
     let hasError = false;
@@ -518,6 +543,7 @@ async function askQuestion() {
     let finalTokens = null;
     let finalContextSize = contextSize;
     let hasReceivedReasoning = false;
+    const reasoningStreamState = { inReasoning: false, carry: "" };
 
     // Connect via Port for streaming
     const port = chrome.runtime.connect({ name: 'streaming' });
@@ -557,19 +583,50 @@ async function askQuestion() {
 
     port.onMessage.addListener((msg) => {
       console.log('[Port] Received message type:', msg.type, 'fullAnswer length:', fullAnswer.length);
-      if (msg.type === 'reasoning' && reasoningText && msg.reasoning) {
-        // Stream reasoning in real-time
-        hasReceivedReasoning = true;
-        // Change "Thinking..." to "Reasoning:" once we receive content
-        if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
-          reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
+      if (msg.type === 'reasoning' && msg.reasoning) {
+        ensureReasoningSection();
+        reasoningText = reasoningContent?.querySelector(".reasoning-text");
+        reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+        if (reasoningText) {
+          // Stream reasoning in real-time
+          hasReceivedReasoning = true;
+          // Change "Thinking..." to "Reasoning:" once we receive content
+          if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
+            reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
+          }
+          reasoningText.textContent += msg.reasoning;
+          answerSection.scrollTop = answerSection.scrollHeight;
         }
-        reasoningText.textContent += msg.reasoning;
-        answerSection.scrollTop = answerSection.scrollHeight;
       } else if (msg.type === 'content' && msg.content) {
         try {
           // Stream content in real-time
-          fullAnswer += msg.content;
+          let contentChunk = msg.content;
+          let reasoningChunk = "";
+          if (typeof extractReasoningFromStreamChunk === "function") {
+            const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
+            contentChunk = parsed.content;
+            reasoningChunk = parsed.reasoning;
+          }
+
+          if (reasoningChunk) {
+            ensureReasoningSection();
+            reasoningText = reasoningContent?.querySelector(".reasoning-text");
+            reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+            if (reasoningText) {
+              hasReceivedReasoning = true;
+              if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
+                reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
+              }
+              reasoningText.textContent += reasoningChunk;
+              answerSection.scrollTop = answerSection.scrollHeight;
+            }
+          }
+
+          if (!contentChunk) {
+            return;
+          }
+
+          fullAnswer += contentChunk;
 
           // Extract sources and render
           const { sources, cleanText } = extractSources(fullAnswer);

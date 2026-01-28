@@ -321,6 +321,69 @@ async function renderStreamingText(container, text, chunkSize = 10, delay = 30) 
 }
 
 /**
+ * Extracts reasoning wrapped in <think> tags from a streaming chunk.
+ * Keeps tag fragments between chunks via state.carry.
+ * @param {{inReasoning?: boolean, carry?: string}} state - Streaming parser state (mutated).
+ * @param {string} chunk - Incoming chunk text.
+ * @returns {{content: string, reasoning: string}} Parsed deltas.
+ */
+function extractReasoningFromStreamChunk(state, chunk) {
+  const target = (state && typeof state === "object") ? state : {};
+  if (typeof target.inReasoning !== "boolean") {
+    target.inReasoning = false;
+  }
+  if (typeof target.carry !== "string") {
+    target.carry = "";
+  }
+
+  const startTag = "<think>";
+  const endTag = "</think>";
+  let input = target.carry + (typeof chunk === "string" ? chunk : "");
+  target.carry = "";
+
+  let contentOut = "";
+  let reasoningOut = "";
+
+  while (input.length > 0) {
+    if (target.inReasoning) {
+      const endIdx = input.indexOf(endTag);
+      if (endIdx === -1) {
+        const partialIdx = input.lastIndexOf("</");
+        if (partialIdx !== -1 && partialIdx > input.length - endTag.length) {
+          reasoningOut += input.slice(0, partialIdx);
+          target.carry = input.slice(partialIdx);
+        } else {
+          reasoningOut += input;
+        }
+        input = "";
+      } else {
+        reasoningOut += input.slice(0, endIdx);
+        input = input.slice(endIdx + endTag.length);
+        target.inReasoning = false;
+      }
+    } else {
+      const startIdx = input.indexOf(startTag);
+      if (startIdx === -1) {
+        const partialIdx = input.lastIndexOf("<");
+        if (partialIdx !== -1 && partialIdx > input.length - startTag.length) {
+          contentOut += input.slice(0, partialIdx);
+          target.carry = input.slice(partialIdx);
+        } else {
+          contentOut += input;
+        }
+        input = "";
+      } else {
+        contentOut += input.slice(0, startIdx);
+        input = input.slice(startIdx + startTag.length);
+        target.inReasoning = true;
+      }
+    }
+  }
+
+  return { content: contentOut, reasoning: reasoningOut };
+}
+
+/**
  * Computes token bar percentage and gradient
  * @param {number|null} tokens - Token count
  * @param {number} maxTokens - Maximum token count for the bar
@@ -403,6 +466,7 @@ if (typeof module !== "undefined") {
     deepClone,
     batchStorageOperations,
     renderStreamingText,
+    extractReasoningFromStreamChunk,
     getTokenBarStyle,
     getStreamingFallbackMessage,
     buildSummarizerMessages
