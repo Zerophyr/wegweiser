@@ -12,7 +12,8 @@ import {
 } from '/src/shared/constants.js';
 import {
   buildCombinedModelId,
-  buildModelDisplayName
+  buildModelDisplayName,
+  resolveNagaVendorLabel
 } from '/src/shared/model-utils.js';
 
 // Cache management
@@ -75,8 +76,55 @@ function parseModelsPayload(payload) {
   const list = Array.isArray(payload) ? payload : (payload?.data || []);
   return list.map((model) => ({
     id: model.id,
-    name: model.name || model.id
+    name: model.name || model.id,
+    ownedBy: model.owned_by || model.ownedBy || model.owner || ""
   }));
+}
+
+function getNagaStartupsCacheKeys() {
+  return {
+    startupsKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE,
+    timeKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME
+  };
+}
+
+async function getNagaStartupsMap() {
+  const { startupsKey, timeKey } = getNagaStartupsCacheKeys();
+  const cacheData = await chrome.storage.local.get([
+    startupsKey,
+    timeKey
+  ]);
+
+  const now = Date.now();
+  if (cacheData[startupsKey] &&
+      cacheData[timeKey] &&
+      (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
+    return cacheData[startupsKey];
+  }
+
+  const providerConfig = getProviderConfig("naga");
+  const res = await fetch(`${providerConfig.baseUrl}/startups`);
+  if (!res.ok) {
+    return {};
+  }
+
+  const data = await res.json().catch(() => null);
+  const list = Array.isArray(data) ? data : (data?.data || []);
+  const map = {};
+  list.forEach((startup) => {
+    const id = startup?.id || startup?.slug || startup?.name;
+    const label = startup?.display_name || startup?.displayName || startup?.name;
+    if (id && label) {
+      map[id] = label;
+    }
+  });
+
+  await chrome.storage.local.set({
+    [startupsKey]: map,
+    [timeKey]: now
+  });
+
+  return map;
 }
 
 async function getProviderModels(providerId, apiKey) {
@@ -108,6 +156,12 @@ async function getProviderModels(providerId, apiKey) {
 
   const data = await res.json();
   const models = parseModelsPayload(data);
+  if (provider === "naga") {
+    const startupsMap = await getNagaStartupsMap().catch(() => ({}));
+    models.forEach((model) => {
+      model.vendorLabel = resolveNagaVendorLabel(model.ownedBy, startupsMap);
+    });
+  }
 
   await chrome.storage.local.set({
     [modelsKey]: models,
@@ -367,7 +421,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 rawId: model.id,
                 provider: entry.id,
                 displayName,
-                name: displayName
+                name: displayName,
+                vendorLabel: model.vendorLabel
               });
             });
           } catch (e) {
