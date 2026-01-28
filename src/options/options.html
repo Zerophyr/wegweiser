@@ -177,14 +177,14 @@
       border: none;
       border-radius: 8px;
       background: transparent;
-      color: #71717a;
+      color: #f4f4f5;
       cursor: pointer;
       transition: color 0.2s ease, background 0.2s ease;
       padding: 0;
     }
 
     .key-toggle:hover {
-      color: #d4d4d8;
+      color: #ffffff;
       background: rgba(255, 255, 255, 0.05);
       box-shadow: none;
       transform: translateY(-50%);
@@ -198,6 +198,10 @@
     .key-toggle svg {
       width: 18px;
       height: 18px;
+    }
+
+    .key-toggle svg[hidden] {
+      display: none;
     }
 
     select {

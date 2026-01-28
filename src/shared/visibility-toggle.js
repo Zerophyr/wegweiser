@@ -10,14 +10,18 @@ const initVisibilityToggle = ({ input, button, iconOn, iconOff, label }) => {
   const showLabel = `Show ${safeLabel}`;
   const hideLabel = `Hide ${safeLabel}`;
 
+  const setIconVisibility = (icon, visible) => {
+    if (!icon) return;
+    icon.toggleAttribute("hidden", !visible);
+    icon.style.display = visible ? "" : "none";
+  };
+
   const setState = (visible) => {
     input.type = visible ? "text" : "password";
     button.setAttribute("aria-pressed", visible ? "true" : "false");
     button.setAttribute("aria-label", visible ? hideLabel : showLabel);
-    if (iconOn && iconOff) {
-      iconOn.toggleAttribute("hidden", !visible);
-      iconOff.toggleAttribute("hidden", visible);
-    }
+    setIconVisibility(iconOn, visible);
+    setIconVisibility(iconOff, !visible);
   };
 
   setState(false);

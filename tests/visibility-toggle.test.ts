@@ -27,6 +27,8 @@ test("toggle switches input type and aria state", () => {
   }
 
   const inputEl = input as HTMLInputElement;
+  const iconOnEl = iconOn as HTMLElement;
+  const iconOffEl = iconOff as HTMLElement;
 
   initVisibilityToggle({ input: inputEl, button, iconOn, iconOff, label: "API key" });
 
@@ -34,6 +36,8 @@ test("toggle switches input type and aria state", () => {
   expect(button.getAttribute("aria-pressed")).toBe("false");
   expect(iconOn.hasAttribute("hidden")).toBe(true);
   expect(iconOff.hasAttribute("hidden")).toBe(false);
+  expect(iconOnEl.style.display).toBe("none");
+  expect(iconOffEl.style.display).toBe("");
 
   button.click();
 
@@ -41,6 +45,8 @@ test("toggle switches input type and aria state", () => {
   expect(button.getAttribute("aria-pressed")).toBe("true");
   expect(iconOn.hasAttribute("hidden")).toBe(false);
   expect(iconOff.hasAttribute("hidden")).toBe(true);
+  expect(iconOnEl.style.display).toBe("");
+  expect(iconOffEl.style.display).toBe("none");
 });
 
 test("toggle returns false when required elements are missing", () => {
