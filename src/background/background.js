@@ -77,9 +77,8 @@ function buildBalanceHeaders(apiKey, providerConfig, provisioningKey) {
     return buildAuthHeaders(apiKey, providerConfig);
   }
   return {
-    "Authorization": `Bearer ${apiKey}`,
+    "Authorization": `Bearer ${provisioningKey}`,
     "Content-Type": "application/json",
-    ...(provisioningKey ? { "X-Provisioning-Key": provisioningKey } : {}),
     ...(providerConfig.headers || {})
   };
 }
@@ -866,11 +865,11 @@ async function getProviderBalance() {
     return { supported: true, balance: lastBalanceByProvider[cfg.modelProvider] };
   }
 
-  if (!cfg.apiKey) {
-    throw new Error(ERROR_MESSAGES.NO_API_KEY);
-  }
   if (providerConfig.id === "naga" && !cfg.provisioningKey) {
     return { supported: false, balance: null };
+  }
+  if (!cfg.apiKey && providerConfig.id !== "naga") {
+    throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
 
   const balanceEndpoint = providerConfig.balanceEndpoint || "/credits";
