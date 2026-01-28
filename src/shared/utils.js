@@ -166,11 +166,7 @@ function resolveNagaVendorLabel(ownedBy, startupsMap = {}) {
  * @returns {string} Display name.
  */
 function buildModelDisplayName(providerId, modelId) {
-  const provider = normalizeProviderId(providerId);
-  const prefix = provider === "naga" ? "NG" : "OR";
-  const raw = typeof modelId === "string" ? modelId : "";
-  const baseName = getModelBaseName(raw);
-  return `${prefix}-${baseName}`;
+  return typeof modelId === "string" ? modelId : "";
 }
 
 /**

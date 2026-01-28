@@ -115,8 +115,8 @@ describe("model display helpers", () => {
   });
 
   test("buildModelDisplayName prefixes NG-/OR-", () => {
-    expect(buildModelDisplayName("naga", "anthropic/claude-3-opus")).toBe("NG-claude-3-opus");
-    expect(buildModelDisplayName("openrouter", "openai/gpt-4o")).toBe("OR-gpt-4o");
+    expect(buildModelDisplayName("naga", "anthropic/claude-3-opus")).toBe("anthropic/claude-3-opus");
+    expect(buildModelDisplayName("openrouter", "openai/gpt-4o")).toBe("openai/gpt-4o");
   });
 
   test("combined model IDs round-trip", () => {
