@@ -10,15 +10,35 @@ import {
   API_CONFIG,
   PROVIDERS
 } from '/src/shared/constants.js';
+import '/src/shared/debug-log.js';
 import {
   buildCombinedModelId,
   buildModelDisplayName,
   resolveNagaVendorLabel
 } from '/src/shared/model-utils.js';
 
+const {
+  createDebugStreamLog = () => ({ entries: [], maxEntries: 0 }),
+  pushDebugStreamEntry = () => null,
+  buildDebugLogMeta = () => ({ count: 0, startAt: null, endAt: null })
+} = globalThis;
+
 // Cache management
 const lastBalanceByProvider = {};
 const lastBalanceAtByProvider = {};
+const debugStreamLog = createDebugStreamLog();
+let debugStreamEnabled = false;
+
+chrome.storage.local.get([STORAGE_KEYS.DEBUG_STREAM]).then((items) => {
+  debugStreamEnabled = Boolean(items[STORAGE_KEYS.DEBUG_STREAM]);
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes[STORAGE_KEYS.DEBUG_STREAM]) {
+    debugStreamEnabled = Boolean(changes[STORAGE_KEYS.DEBUG_STREAM].newValue);
+  }
+});
 
 let cachedConfig = {
   provider: "openrouter",
@@ -254,6 +274,37 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // ---- Message bridge: chat, balance, history ----
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === MESSAGE_TYPES.DEBUG_SET_ENABLED) {
+    (async () => {
+      try {
+        debugStreamEnabled = Boolean(msg.enabled);
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.DEBUG_STREAM]: debugStreamEnabled
+        });
+        sendResponse({ ok: true, enabled: debugStreamEnabled });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg?.type === MESSAGE_TYPES.DEBUG_GET_STREAM_LOG) {
+    sendResponse({
+      ok: true,
+      enabled: debugStreamEnabled,
+      meta: buildDebugLogMeta(debugStreamLog),
+      entries: debugStreamLog.entries
+    });
+    return false;
+  }
+
+  if (msg?.type === MESSAGE_TYPES.DEBUG_CLEAR_STREAM_LOG) {
+    debugStreamLog.entries.length = 0;
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (msg?.type === MESSAGE_TYPES.OPENROUTER_QUERY) {
     (async () => {
       try {
@@ -954,6 +1005,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
   const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
+  const streamStartedAt = Date.now();
 
   // Helper function to safely send port messages
   const safeSendMessage = (message) => {
@@ -1021,17 +1073,64 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-  const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: buildAuthHeaders(cfg.apiKey, providerConfig),
-    body: JSON.stringify(requestBody),
-    signal: controller.signal
-  });
+  if (debugStreamEnabled) {
+    pushDebugStreamEntry(debugStreamLog, {
+      type: "stream_start",
+      provider: providerConfig.id,
+      model: modelName,
+      tabId: tabId || null,
+      spacesMode: isSpacesMode,
+      promptChars: typeof prompt === "string" ? prompt.length : 0,
+      messageCount: Array.isArray(context) ? context.length : 0,
+      webSearch: Boolean(webSearch),
+      reasoning: Boolean(reasoning),
+      startedAt: new Date(streamStartedAt).toISOString()
+    });
+  }
+
+  let res;
+  try {
+    res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: buildAuthHeaders(cfg.apiKey, providerConfig),
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
+  } catch (e) {
+    if (debugStreamEnabled) {
+      pushDebugStreamEntry(debugStreamLog, {
+        type: "stream_error",
+        stage: "fetch",
+        message: e?.message || String(e),
+        elapsedMs: Date.now() - streamStartedAt
+      });
+    }
+    throw e;
+  }
 
   clearTimeout(timeoutId);
 
+  if (debugStreamEnabled) {
+    pushDebugStreamEntry(debugStreamLog, {
+      type: "stream_response",
+      status: res.status,
+      ok: res.ok,
+      contentType: res.headers.get("content-type") || null,
+      elapsedMs: Date.now() - streamStartedAt
+    });
+  }
+
   if (!res.ok) {
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (debugStreamEnabled) {
+      pushDebugStreamEntry(debugStreamLog, {
+        type: "stream_error",
+        stage: "response",
+        status: res.status,
+        message: data?.error?.message || ERROR_MESSAGES.API_ERROR,
+        elapsedMs: Date.now() - streamStartedAt
+      });
+    }
     throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
   }
 
@@ -1040,6 +1139,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   let buffer = '';
   let fullContent = '';
   let tokens = null;
+  let firstChunkLogged = false;
 
   console.log('[Streaming] Starting real-time stream...');
 
@@ -1047,13 +1147,34 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     const { done, value } = await reader.read();
     if (done) {
       console.log('[Streaming] Reader reported done, exiting loop');
+      if (debugStreamEnabled) {
+        pushDebugStreamEntry(debugStreamLog, {
+          type: "stream_reader_done",
+          elapsedMs: Date.now() - streamStartedAt,
+          contentLength: fullContent.length
+        });
+      }
       break;
     }
 
     // Check if port was disconnected
     if (isDisconnectedFn && isDisconnectedFn()) {
       console.log('[Streaming] Port disconnected, stopping stream');
+      if (debugStreamEnabled) {
+        pushDebugStreamEntry(debugStreamLog, {
+          type: "stream_port_disconnected",
+          elapsedMs: Date.now() - streamStartedAt
+        });
+      }
       break;
+    }
+
+    if (debugStreamEnabled && !firstChunkLogged) {
+      firstChunkLogged = true;
+      pushDebugStreamEntry(debugStreamLog, {
+        type: "stream_first_chunk",
+        elapsedMs: Date.now() - streamStartedAt
+      });
     }
 
     buffer += decoder.decode(value, { stream: true });
@@ -1064,6 +1185,12 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
       if (line.trim() === '') continue;
       if (line.trim() === 'data: [DONE]') {
         console.log('[Streaming] Received [DONE] signal');
+        if (debugStreamEnabled) {
+          pushDebugStreamEntry(debugStreamLog, {
+            type: "stream_done_signal",
+            elapsedMs: Date.now() - streamStartedAt
+          });
+        }
         continue;
       }
       if (!line.startsWith('data: ')) continue;
@@ -1072,6 +1199,22 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
         const jsonStr = line.slice(6);
         const chunk = JSON.parse(jsonStr);
         const delta = chunk.choices?.[0]?.delta;
+
+        if (debugStreamEnabled) {
+          const contentLength = typeof delta?.content === "string" ? delta.content.length : 0;
+          const reasoningLength = typeof delta?.reasoning === "string"
+            ? delta.reasoning.length
+            : (typeof delta?.reasoning_content === "string" ? delta.reasoning_content.length : 0);
+          pushDebugStreamEntry(debugStreamLog, {
+            type: "stream_chunk",
+            deltaKeys: delta ? Object.keys(delta) : [],
+            contentLength,
+            reasoningLength,
+            hasUsage: Boolean(chunk.usage),
+            totalTokens: chunk.usage?.total_tokens ?? null,
+            elapsedMs: Date.now() - streamStartedAt
+          });
+        }
 
         // Debug: Log the full delta structure to understand web search response format
         if (delta && Object.keys(delta).length > 0) {
@@ -1112,6 +1255,13 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
         }
       } catch (e) {
         console.error('[Streaming] Error parsing chunk:', e);
+        if (debugStreamEnabled) {
+          pushDebugStreamEntry(debugStreamLog, {
+            type: "stream_parse_error",
+            message: e?.message || String(e),
+            elapsedMs: Date.now() - streamStartedAt
+          });
+        }
       }
     }
   }
@@ -1121,6 +1271,13 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   // Handle case where no content was received (e.g., only reasoning, or stream error)
   if (!fullContent || fullContent.length === 0) {
     console.warn('[Streaming] Warning: Stream completed with no content');
+    if (debugStreamEnabled) {
+      pushDebugStreamEntry(debugStreamLog, {
+        type: "stream_no_content",
+        elapsedMs: Date.now() - streamStartedAt,
+        tokens
+      });
+    }
     safeSendMessage({
       type: 'error',
       error: 'No response content received from the model. The model may have only produced reasoning without a final answer. Please try again.'
@@ -1152,5 +1309,13 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     contextSize: context.length,
     model: customModel || cfg.model
   });
+  if (debugStreamEnabled) {
+    pushDebugStreamEntry(debugStreamLog, {
+      type: "stream_complete",
+      elapsedMs: Date.now() - streamStartedAt,
+      contentLength: fullContent.length,
+      tokens
+    });
+  }
   console.log('[Streaming] Completion message sent:', completeSent);
 }

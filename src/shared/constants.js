@@ -25,7 +25,8 @@ export const STORAGE_KEYS = {
   NAGA_STARTUPS_CACHE_TIME: "naga_startups_cache_time",
   SPACES: "or_spaces",
   THREADS: "or_threads",
-  THEME: "or_theme"
+  THEME: "or_theme",
+  DEBUG_STREAM: "or_debug_stream"
 };
 
 // Message types for chrome.runtime.sendMessage
@@ -41,7 +42,10 @@ export const MESSAGE_TYPES = {
   REQUEST_PERMISSION: "request_permission",
   SUMMARIZE_THREAD: "summarize_thread",
   SPACES_QUERY: "spaces_query",
-  SPACES_STREAM: "spaces_stream"
+  SPACES_STREAM: "spaces_stream",
+  DEBUG_GET_STREAM_LOG: "debug_get_stream_log",
+  DEBUG_CLEAR_STREAM_LOG: "debug_clear_stream_log",
+  DEBUG_SET_ENABLED: "debug_set_enabled"
 };
 
 // Cache TTL values (in milliseconds)

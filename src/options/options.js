@@ -17,6 +17,9 @@ const saveBtn = document.getElementById("save");
 const statusEl = document.getElementById("status");
 const historyLimitInput = document.getElementById("history-limit");
 const promptHistoryEl = document.getElementById("prompt-history");
+const debugStreamToggle = document.getElementById("debug-stream-toggle");
+const downloadDebugLogBtn = document.getElementById("download-debug-log-btn");
+const clearDebugLogBtn = document.getElementById("clear-debug-log-btn");
 
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
@@ -37,6 +40,7 @@ let modelDropdown = null; // ModelDropdownManager instance
 let pendingDeleteItem = null; // { item, timeout }
 let pendingClearAllHistory = null; // { items, timeout }
 let currentProvider = "openrouter";
+const DEBUG_STREAM_KEY = "or_debug_stream";
 
 // ---- Provider helpers ----
 function normalizeProvider(providerId) {
@@ -294,7 +298,8 @@ Promise.all([
     "or_model_provider",
     "or_recent_models",
     "or_recent_models_naga",
-    "or_history_limit"
+    "or_history_limit",
+    "or_debug_stream"
   ]),
   chrome.storage.sync.get([
     "or_favorites",
@@ -306,6 +311,17 @@ Promise.all([
   loadFavoritesAndRecents(localItems, syncItems);
   loadSelectedModel(localItems);
   initModelDropdown();
+
+  const debugEnabled = Boolean(localItems.or_debug_stream);
+  if (debugStreamToggle) {
+    debugStreamToggle.checked = debugEnabled;
+  }
+  if (downloadDebugLogBtn) {
+    downloadDebugLogBtn.disabled = !debugEnabled;
+  }
+  if (clearDebugLogBtn) {
+    clearDebugLogBtn.disabled = !debugEnabled;
+  }
 });
 
 // ---- Load and render prompt history ----
@@ -770,6 +786,70 @@ async function clearAllHistory() {
 document.getElementById("export-history-btn")?.addEventListener("click", exportHistoryJSON);
 document.getElementById("export-history-csv-btn")?.addEventListener("click", exportHistoryCSV);
 document.getElementById("clear-all-history-btn")?.addEventListener("click", clearAllHistory);
+
+// ---- Streaming debug log ----
+if (debugStreamToggle) {
+  debugStreamToggle.addEventListener("change", async () => {
+    const enabled = Boolean(debugStreamToggle.checked);
+    await chrome.storage.local.set({ [DEBUG_STREAM_KEY]: enabled });
+    if (downloadDebugLogBtn) {
+      downloadDebugLogBtn.disabled = !enabled;
+    }
+    if (clearDebugLogBtn) {
+      clearDebugLogBtn.disabled = !enabled;
+    }
+    try {
+      await chrome.runtime.sendMessage({ type: "debug_set_enabled", enabled });
+    } catch (e) {
+      console.warn("Failed to notify debug toggle:", e);
+    }
+  });
+}
+
+if (downloadDebugLogBtn) {
+  downloadDebugLogBtn.addEventListener("click", async () => {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "debug_get_stream_log" });
+      if (!res?.ok) {
+        throw new Error(res?.error || "Failed to fetch debug log");
+      }
+      const payload = {
+        meta: res.meta || {},
+        entries: res.entries || []
+      };
+      const dataStr = JSON.stringify(payload, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = typeof buildDebugLogFilename === "function"
+        ? buildDebugLogFilename()
+        : `wegweiser-stream-debug-${Date.now()}.json`;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${payload.entries.length} debug entries`);
+    } catch (e) {
+      console.error("Failed to download debug log:", e);
+      toast.error("Failed to download debug log");
+    }
+  });
+}
+
+if (clearDebugLogBtn) {
+  clearDebugLogBtn.addEventListener("click", async () => {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "debug_clear_stream_log" });
+      if (!res?.ok) {
+        throw new Error(res?.error || "Failed to clear debug log");
+      }
+      toast.success("Debug log cleared");
+    } catch (e) {
+      console.error("Failed to clear debug log:", e);
+      toast.error("Failed to clear debug log");
+    }
+  });
+}
 
 // ---- Theme selector ----
 const themeSelect = document.getElementById("theme-select");
