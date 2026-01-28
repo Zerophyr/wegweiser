@@ -26,7 +26,7 @@ npm run format      # Format with Prettier
 ## Directory Structure
 
 ```
-openrouter-sidepanel-ext/
+Wegweiser-extension/
 ├── src/
 │   ├── background/
 │   │   └── background.js        # Service worker
@@ -259,3 +259,4 @@ The codebase is currently at **v1.1.1** with these major milestones:
 - **v0.5.0**: Initial release with basic chat
 
 See README.md for detailed changelog.
+

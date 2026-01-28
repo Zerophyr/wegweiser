@@ -177,7 +177,7 @@ Centered message: "Create your first Space to organize conversations by project"
 
 ```
 ┌─────────────────────────────────┐
-│ OpenRouter Buddy      🏠  ⚙️    │
+│ Wegweiser Extension      🏠  ⚙️    │
 ├─────────────────────────────────┤
 │ ...existing sidebar content...  │
 ```
@@ -326,3 +326,4 @@ function generateId(prefix) {
 // Usage: generateId('space') -> "space_1706300000000_abc123xyz"
 // Usage: generateId('thread') -> "thread_1706300000000_def456uvw"
 ```
+

@@ -1,4 +1,4 @@
-# 🤖 OpenRouter Buddy v1.1.1
+# 🤖 Wegweiser Extension v1.1.1
 
 > Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
@@ -99,7 +99,7 @@ _(Coming soon)_
 
 ### Context Menu
 1. Select text on any webpage
-2. Right-click and choose "OpenRouter: [action]"
+2. Right-click and choose "Wegweiser: [action]"
 3. Available actions:
    - Summarize selection
    - Fact-check selection
@@ -159,7 +159,7 @@ npm run format
 ## 📁 Project Structure
 
 ```
-openrouter-sidepanel-ext/
+Wegweiser-extension/
 ├── manifest.json           # Extension manifest
 ├── background.js           # Service worker
 ├── sidepanel.html/js       # Side panel UI
@@ -312,6 +312,7 @@ A: Yes, you must use your own API key for OpenRouter or NagaAI.
 
 ---
 
-**Made with ❤️ by the OpenRouter Buddy team**
+**Made with ❤️ by the Wegweiser Extension team**
 
 *Version 1.1.1 | January 2026*
+
