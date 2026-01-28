@@ -1,4 +1,4 @@
-// constants.js - Shared constants for OpenRouter Buddy extension
+// constants.js - Shared constants for Wegweiser
 
 // Storage keys
 export const STORAGE_KEYS = {
@@ -97,7 +97,7 @@ export const PROVIDERS = {
     supportsBalance: true,
     supportsWebSearch: true,
     headers: {
-      "X-Title": "OpenRouter Buddy Extension"
+      "X-Title": "Wegweiser"
     }
   },
   naga: {
@@ -115,3 +115,4 @@ export const PATTERNS = {
   URL: /(https?:\/\/[^\s<>"]+)/g,
   EMAIL: /[\w.-]+@[\w.-]+\.\w+/g
 };
+

@@ -1,4 +1,4 @@
-/* sidepanel.css - Styles for OpenRouter Buddy sidebar */
+/* sidepanel.css - Styles for Wegweiser sidebar */
 
 * {
   box-sizing: border-box;
@@ -798,3 +798,4 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
+

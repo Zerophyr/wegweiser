@@ -1,4 +1,4 @@
-# 🤖 Wegweiser Extension v1.1.1
+# 🤖 Wegweiser v1.1.1
 
 > Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
@@ -312,7 +312,8 @@ A: Yes, you must use your own API key for OpenRouter or NagaAI.
 
 ---
 
-**Made with ❤️ by the Wegweiser Extension team**
+**Made with ❤️ by the Wegweiser team**
 
 *Version 1.1.1 | January 2026*
+
 

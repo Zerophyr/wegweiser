@@ -60,7 +60,7 @@ Find the `#header` div (around line 11-18) and add the Home button before the se
 
 ```html
 <div id="header" role="banner">
-  <h1 style="font-size: inherit; margin: 0; font-weight: inherit;">Wegweiser Extension</h1>
+  <h1 style="font-size: inherit; margin: 0; font-weight: inherit;">Wegweiser</h1>
   <div style="display: flex; gap: 8px;">
     <div id="spaces-btn" title="Spaces" aria-label="Open Spaces" role="button" tabindex="0">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
@@ -213,7 +213,7 @@ git commit -m "feat(spaces): add click handler to open spaces page"
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Spaces - Wegweiser Extension</title>
+  <title>Spaces - Wegweiser</title>
   <link rel="stylesheet" href="spaces.css">
 </head>
 <body>
@@ -2558,4 +2558,5 @@ This implementation plan covers:
 Total: 14 tasks, ~50 individual steps
 
 Each task is atomic and can be committed independently. The implementation follows TDD principles where applicable and maintains the existing codebase patterns.
+
 
