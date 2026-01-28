@@ -299,6 +299,17 @@ class ModelDropdownManager {
     return '';
   }
 
+  getProviderBadge(model) {
+    const provider = this.getModelProviderId(model);
+    if (provider === 'openrouter') {
+      return { label: 'OR', background: '#1d4ed8', color: '#e2e8f0' };
+    }
+    if (provider === 'naga') {
+      return { label: 'NG', background: '#15803d', color: '#e2e8f0' };
+    }
+    return { label: '?', background: '#3f3f46', color: '#e4e4e7' };
+  }
+
   highlightSelected() {
     const items = this.dropdownElement.querySelectorAll('.model-dropdown-item');
     items.forEach((item, index) => {
@@ -595,14 +606,25 @@ class ModelDropdownManager {
     modelName.textContent = this.getModelLabel(model);
     modelName.style.cssText = 'flex: 1;';
 
+    const badgeInfo = this.getProviderBadge(model);
+    const badge = document.createElement('span');
+    badge.className = 'model-provider-badge';
+    badge.textContent = badgeInfo.label;
+    badge.style.cssText = `display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 999px; background: ${badgeInfo.background}; color: ${badgeInfo.color}; text-transform: uppercase;`;
+
     const starIcon = document.createElement('span');
     starIcon.textContent = starType;
     starIcon.className = 'model-star-icon';
     starIcon.style.cssText = `color: ${starType === '★' ? '#fbbf24' : '#52525b'}; font-size: 16px; padding: 0 8px; cursor: pointer; ${starType === '☆' ? 'opacity: 0; transition: opacity 0.2s;' : ''}`;
     starIcon.title = starType === '★' ? 'Remove from favorites' : 'Add to favorites';
 
+    const rightControls = document.createElement('span');
+    rightControls.style.cssText = 'display: inline-flex; align-items: center; gap: 6px;';
+    rightControls.appendChild(badge);
+    rightControls.appendChild(starIcon);
+
     item.appendChild(modelName);
-    item.appendChild(starIcon);
+    item.appendChild(rightControls);
 
     return item;
   }

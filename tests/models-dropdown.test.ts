@@ -56,7 +56,7 @@ describe("ModelDropdownManager storage keys", () => {
   test("renders displayName when provided", () => {
     const globalAny = global as any;
     globalAny.groupModelsByProvider = jest.fn(() => ({
-      Provider: [{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]
+      Provider: [{ id: "openrouter:openai/gpt-4o", displayName: "openai/gpt-4o" }]
     }));
 
     const input = document.getElementById("model-input");
@@ -65,11 +65,11 @@ describe("ModelDropdownManager storage keys", () => {
       onModelSelect: jest.fn()
     });
 
-    dropdown.setModels([{ id: "openrouter:openai/gpt-4o", displayName: "OR-gpt-4o" }]);
+    dropdown.setModels([{ id: "openrouter:openai/gpt-4o", displayName: "openai/gpt-4o" }]);
     dropdown.show("");
 
     const item = document.querySelector(".model-dropdown-item");
-    expect(item?.textContent).toContain("OR-gpt-4o");
+    expect(item?.textContent).toContain("openai/gpt-4o");
   });
 
   test("groups models by vendor label", () => {
@@ -80,8 +80,8 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "OR-gpt-4-turbo" },
-      { id: "naga:openai/gpt-4-turbo", provider: "naga", rawId: "openai/gpt-4-turbo", displayName: "NG-gpt-4-turbo" }
+      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "openai/gpt-4-turbo" },
+      { id: "naga:openai/gpt-4-turbo", provider: "naga", rawId: "openai/gpt-4-turbo", displayName: "openai/gpt-4-turbo" }
     ]);
     dropdown.show("");
 
@@ -98,8 +98,8 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "naga:gpt-image-1", provider: "naga", rawId: "gpt-image-1", displayName: "NG-gpt-image-1" },
-      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "OR-gpt-4-turbo" }
+      { id: "naga:gpt-image-1", provider: "naga", rawId: "gpt-image-1", displayName: "gpt-image-1" },
+      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "openai/gpt-4-turbo" }
     ]);
     dropdown.show("");
 
@@ -118,7 +118,7 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "naga:alibaba/qwen-2.5", provider: "naga", rawId: "alibaba/qwen-2.5", vendorLabel: "Qwen", displayName: "NG-qwen-2.5" }
+      { id: "naga:alibaba/qwen-2.5", provider: "naga", rawId: "alibaba/qwen-2.5", vendorLabel: "Qwen", displayName: "alibaba/qwen-2.5" }
     ]);
     dropdown.show("");
 
@@ -135,7 +135,7 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "openrouter:qwen-2.5", provider: "openrouter", rawId: "qwen-2.5", displayName: "OR-qwen-2.5" }
+      { id: "openrouter:qwen-2.5", provider: "openrouter", rawId: "qwen-2.5", displayName: "qwen-2.5" }
     ]);
     dropdown.show("");
 
@@ -152,16 +152,35 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     dropdown.setModels([
-      { id: "naga:openai/zzz-model", provider: "naga", rawId: "openai/zzz-model", displayName: "NG-zzz-model" },
-      { id: "openrouter:openai/aaa-model", provider: "openrouter", rawId: "openai/aaa-model", displayName: "OR-aaa-model" },
-      { id: "openrouter:openai/zzz-model", provider: "openrouter", rawId: "openai/zzz-model", displayName: "OR-zzz-model" }
+      { id: "naga:openai/zzz-model", provider: "naga", rawId: "openai/zzz-model", displayName: "openai/zzz-model" },
+      { id: "openrouter:openai/aaa-model", provider: "openrouter", rawId: "openai/aaa-model", displayName: "openai/aaa-model" },
+      { id: "openrouter:openai/zzz-model", provider: "openrouter", rawId: "openai/zzz-model", displayName: "openai/zzz-model" }
     ]);
     dropdown.show("");
 
     const items = Array.from(document.querySelectorAll(".model-dropdown-item"))
       .map((el) => el.textContent);
-    expect(items[0]).toContain("OR-aaa-model");
-    expect(items[1]).toContain("NG-zzz-model");
-    expect(items[2]).toContain("OR-zzz-model");
+    expect(items[0]).toContain("openai/aaa-model");
+    expect(items[1]).toContain("openai/zzz-model");
+    expect(items[2]).toContain("openai/zzz-model");
+  });
+
+  test("renders provider badges", () => {
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      { id: "openrouter:openai/gpt-4o", provider: "openrouter", rawId: "openai/gpt-4o", displayName: "openai/gpt-4o" },
+      { id: "naga:openai/gpt-4o", provider: "naga", rawId: "openai/gpt-4o", displayName: "openai/gpt-4o" }
+    ]);
+    dropdown.show("");
+
+    const badges = Array.from(document.querySelectorAll(".model-provider-badge"))
+      .map((el) => el.textContent);
+    expect(badges).toContain("OR");
+    expect(badges).toContain("NG");
   });
 });
