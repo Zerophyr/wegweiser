@@ -96,6 +96,7 @@ export const PROVIDERS = {
     baseUrl: "https://openrouter.ai/api/v1",
     supportsBalance: true,
     supportsWebSearch: true,
+    balanceEndpoint: "/credits",
     headers: {
       "X-Title": "Wegweiser"
     }
@@ -104,8 +105,9 @@ export const PROVIDERS = {
     id: "naga",
     label: "NagaAI",
     baseUrl: "https://api.naga.ac/v1",
-    supportsBalance: false,
+    supportsBalance: true,
     supportsWebSearch: false,
+    balanceEndpoint: "/account/balance",
     headers: {}
   }
 };

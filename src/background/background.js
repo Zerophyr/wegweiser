@@ -690,6 +690,11 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
       effort: "medium"
     };
     console.log('[Reasoning] Reasoning parameter added to request:', requestBody.reasoning);
+  } else if (reasoning && providerConfig.id === "naga") {
+    requestBody.reasoning_effort = "medium";
+  }
+  if (webSearch && providerConfig.id === "naga") {
+    requestBody.web_search_options = {};
   }
 
   // Retry logic with exponential backoff
@@ -831,8 +836,7 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
   throw lastError || new Error(ERROR_MESSAGES.API_ERROR);
 }
 
-// ---- OpenRouter: credits/balance ----
-// GET /api/v1/credits returns { data: { total_credits, total_usage } } [web:29][web:31][web:41]
+// ---- Provider: credits/balance ----
 async function getProviderBalance() {
   const cfg = await loadConfig();
   const providerConfig = getProviderConfig(cfg.modelProvider);
@@ -852,7 +856,8 @@ async function getProviderBalance() {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
 
-  const res = await fetch(`${providerConfig.baseUrl}/credits`, {
+  const balanceEndpoint = providerConfig.balanceEndpoint || "/credits";
+  const res = await fetch(`${providerConfig.baseUrl}${balanceEndpoint}`, {
     method: "GET",
     headers: buildAuthHeaders(cfg.apiKey, providerConfig)
   });
@@ -862,14 +867,23 @@ async function getProviderBalance() {
     throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
   }
 
-  console.log("Credits response:", data);
-
-  const credits = data?.data?.total_credits;
-  const usage = data?.data?.total_usage;
-
   let balance = null;
-  if (typeof credits === "number" && typeof usage === "number") {
-    balance = credits - usage;
+  if (providerConfig.id === "naga") {
+    const rawBalance = data?.balance;
+    if (typeof rawBalance === "number") {
+      balance = rawBalance;
+    } else if (typeof rawBalance === "string") {
+      const parsed = Number.parseFloat(rawBalance);
+      balance = Number.isNaN(parsed) ? null : parsed;
+    }
+  } else {
+    console.log("Credits response:", data);
+
+    const credits = data?.data?.total_credits;
+    const usage = data?.data?.total_usage;
+    if (typeof credits === "number" && typeof usage === "number") {
+      balance = credits - usage;
+    }
   }
 
   lastBalanceByProvider[cfg.modelProvider] = balance;
@@ -978,6 +992,11 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
       enabled: true,
       effort: "medium"
     };
+  } else if (reasoning && providerConfig.id === "naga") {
+    requestBody.reasoning_effort = "medium";
+  }
+  if (webSearch && providerConfig.id === "naga") {
+    requestBody.web_search_options = {};
   }
   if (providerConfig.id === "naga") {
     requestBody.stream_options = { include_usage: true };
