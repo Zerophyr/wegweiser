@@ -230,8 +230,33 @@ class ModelDropdownManager {
       const splitIndex = model.id.indexOf(':');
       source = splitIndex !== -1 ? model.id.slice(splitIndex + 1) : model.id;
     }
-    const match = source.match(/^([^/]+)/);
-    return match ? match[1].toLowerCase() : '';
+    if (source.includes('/')) {
+      const match = source.match(/^([^/]+)/);
+      return match ? match[1].toLowerCase() : '';
+    }
+
+    const inferred = this.inferVendorFromModelName(source.toLowerCase());
+    return inferred || '';
+  }
+
+  inferVendorFromModelName(name) {
+    if (!name) return '';
+    const startsWith = (prefix) => name.startsWith(prefix);
+
+    if (startsWith('gpt-') || startsWith('gptimage') || startsWith('gpt-image') || startsWith('o1') || startsWith('o3') || startsWith('o4') || startsWith('dall-e')) {
+      return 'openai';
+    }
+    if (startsWith('claude')) return 'anthropic';
+    if (startsWith('gemini')) return 'google';
+    if (startsWith('llama')) return 'meta';
+    if (startsWith('mistral') || startsWith('mixtral')) return 'mistral';
+    if (startsWith('qwen')) return 'alibaba';
+    if (startsWith('deepseek')) return 'deepseek';
+    if (startsWith('grok')) return 'xai';
+    if (startsWith('command')) return 'cohere';
+    if (startsWith('jamba')) return 'ai21';
+    if (startsWith('phi')) return 'microsoft';
+    return '';
   }
 
   getVendorLabelForModel(model) {

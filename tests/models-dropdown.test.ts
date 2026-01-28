@@ -89,4 +89,24 @@ describe("ModelDropdownManager storage keys", () => {
       .map((el) => el.textContent);
     expect(headers).toContain("OpenAI");
   });
+
+  test("infers vendor when rawId has no prefix", () => {
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      { id: "naga:gpt-image-1", provider: "naga", rawId: "gpt-image-1", displayName: "NG-gpt-image-1" },
+      { id: "openrouter:openai/gpt-4-turbo", provider: "openrouter", rawId: "openai/gpt-4-turbo", displayName: "OR-openai/gpt-4-turbo" }
+    ]);
+    dropdown.show("");
+
+    const headers = Array.from(document.querySelectorAll(".model-dropdown-provider"))
+      .map((el) => el.textContent);
+    expect(headers).toContain("OpenAI");
+    expect(headers).not.toContain("Gpt-image-1");
+    expect(headers.length).toBe(1);
+  });
 });
