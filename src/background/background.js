@@ -13,7 +13,7 @@ import {
 import {
   buildCombinedModelId,
   buildModelDisplayName
-} from '/src/shared/utils.js';
+} from '/src/shared/model-utils.js';
 
 // Cache management
 const lastBalanceByProvider = {};
