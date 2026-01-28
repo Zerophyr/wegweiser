@@ -1,4 +1,7 @@
-const { initVisibilityToggle } = require("../src/shared/visibility-toggle.js");
+const {
+  initVisibilityToggle,
+  bindVisibilityToggles
+} = require("../src/shared/visibility-toggle.js");
 
 test("toggle switches input type and aria state", () => {
   document.body.innerHTML = `
@@ -39,4 +42,22 @@ test("toggle switches input type and aria state", () => {
 
 test("toggle returns false when required elements are missing", () => {
   expect(initVisibilityToggle({})).toBe(false);
+});
+
+test("bindVisibilityToggles initializes toggles via data attributes", () => {
+  document.body.innerHTML = `
+    <div>
+      <input id="apiKey" type="text" />
+      <button data-toggle-target="apiKey" data-toggle-label="API key">
+        <span class="icon-on" hidden></span>
+        <span class="icon-off"></span>
+      </button>
+    </div>
+  `;
+
+  const count = bindVisibilityToggles(document);
+  const input = document.getElementById("apiKey") as HTMLInputElement;
+
+  expect(count).toBe(1);
+  expect(input.type).toBe("password");
 });

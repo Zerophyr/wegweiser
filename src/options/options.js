@@ -42,6 +42,11 @@ let pendingClearAllHistory = null; // { items, timeout }
 let currentProvider = "openrouter";
 const DEBUG_STREAM_KEY = "or_debug_stream";
 
+function setupKeyVisibilityToggles() {
+  if (typeof bindVisibilityToggles !== "function") return;
+  bindVisibilityToggles(document);
+}
+
 // ---- Provider helpers ----
 function normalizeProvider(providerId) {
   if (typeof normalizeProviderId === "function") {
@@ -284,6 +289,7 @@ async function loadProviderState(providerId) {
   loadFavoritesAndRecents(localItems, syncItems);
   loadSelectedModel(localItems);
   initModelDropdown();
+  setupKeyVisibilityToggles();
 }
 
 // ---- Load stored settings (API key, model, favorites, history limit) ----
@@ -873,4 +879,5 @@ if (themeSelect) {
 // ---- Load history on page load ----
 document.addEventListener("DOMContentLoaded", () => {
   loadPromptHistory();
+  setupKeyVisibilityToggles();
 });
