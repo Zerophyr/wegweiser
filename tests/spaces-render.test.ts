@@ -79,6 +79,23 @@ describe("renderChatMessages", () => {
     expect(result).toHaveLength(2);
   });
 
+  test("buildStreamMessages sends raw instructions on first message", () => {
+    const result = win.buildStreamMessages?.([], 'Hello', 'Be concise.');
+    const system = result?.find((m: any) => m.role === 'system');
+    expect(system?.content).toBe('Be concise.');
+  });
+
+  test("buildStreamMessages wraps instructions with ongoing prefix on follow-up", () => {
+    const messages = [
+      { role: 'user', content: 'First' },
+      { role: 'assistant', content: 'Reply' }
+    ];
+    const result = win.buildStreamMessages?.(messages, 'Second', 'Be concise.');
+    const system = result?.find((m: any) => m.role === 'system');
+    expect(system?.content).toContain('[Ongoing conversation.');
+    expect(system?.content).toContain('Be concise.');
+  });
+
   test("getSourcesData returns empty sources when extractor missing", () => {
     const result = win.getSourcesData?.('No sources here');
     expect(result?.sources).toEqual([]);

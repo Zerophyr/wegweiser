@@ -1677,7 +1677,11 @@ function buildStreamMessages(messages, prompt, systemInstruction, summary) {
 
   const finalMessages = [];
   if (systemInstruction) {
-    finalMessages.push({ role: 'system', content: systemInstruction });
+    const isOngoing = baseMessages.length > 0;
+    const content = isOngoing
+      ? `[Ongoing conversation. Follow these standing instructions without re-introducing yourself:]\n${systemInstruction}`
+      : systemInstruction;
+    finalMessages.push({ role: 'system', content });
   }
   if (summary) {
     finalMessages.push({ role: 'system', content: `Summary so far:\n${summary}` });
