@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
 
 // Provider state
 let currentProvider = 'openrouter';
+const MAX_CONTEXT_MESSAGES = 16;
 
 function normalizeProviderSafe(providerId) {
   if (typeof normalizeProviderId === 'function') {
@@ -217,6 +218,147 @@ function buildContextBadgeLabel(contextSize) {
   return `${Math.floor(contextSize / 2)} Q&A`;
 }
 
+function getContextUsageCount(thread, space) {
+  const data = buildSpacesContextData(thread);
+  let count = data.liveMessages.length;
+  if (data.summary) {
+    count += 1;
+  }
+  if (space?.customInstructions && space.customInstructions.trim().length) {
+    count += 1;
+  }
+  return count;
+}
+
+function updateSpacesContextButton(thread, space) {
+  if (!elements.spacesContextBtn) return;
+  const badgeEl = elements.spacesContextBadge;
+  if (!thread) {
+    elements.spacesContextBtn.classList.add('inactive');
+    elements.spacesContextBtn.setAttribute('aria-disabled', 'true');
+    if (badgeEl) {
+      badgeEl.style.display = 'none';
+      badgeEl.textContent = '';
+    }
+    return;
+  }
+
+  const data = buildSpacesContextData(thread);
+  const label = buildContextBadgeLabel(data.liveMessages.length);
+  const isActive = Boolean(label);
+  elements.spacesContextBtn.classList.toggle('inactive', !isActive);
+  elements.spacesContextBtn.setAttribute('aria-disabled', isActive ? 'false' : 'true');
+
+  if (badgeEl) {
+    if (isActive) {
+      badgeEl.textContent = label;
+      badgeEl.style.display = 'inline-flex';
+    } else {
+      badgeEl.style.display = 'none';
+      badgeEl.textContent = '';
+    }
+  }
+
+  const usedCount = getContextUsageCount(thread, space);
+  const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
+  elements.spacesContextBtn.title = isActive
+    ? `${usedCount} messages in context · ${remaining} remaining`
+    : 'No conversation context yet';
+}
+
+function buildContextMessageHtml(messages) {
+  return (messages || []).map((msg) => {
+    const role = msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User';
+    const roleClass = msg.role === 'assistant' ? 'assistant' : '';
+    const preview = truncateText(msg.content || '', 160);
+    return `
+      <div class="spaces-context-item">
+        <div class="spaces-context-role ${roleClass}">${escapeHtml(role)}</div>
+        <div class="spaces-context-text">${escapeHtml(preview)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSpacesContextModal(thread, space) {
+  if (!thread) return;
+  const data = buildSpacesContextData(thread);
+  const usedCount = getContextUsageCount(thread, space);
+  const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
+  const fillPercentage = Math.min((usedCount / MAX_CONTEXT_MESSAGES) * 100, 100);
+  const isNearLimit = fillPercentage > 75;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'spaces-context-overlay';
+
+  const modal = document.createElement('div');
+  modal.className = 'spaces-context-modal';
+
+  modal.innerHTML = `
+    <div class="spaces-context-header">
+      <h3><span>🧠</span><span>Conversation Context</span></h3>
+      <button class="spaces-context-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="spaces-context-body">
+      ${data.summary ? `
+        <div class="spaces-context-section">
+          <h4>Summary</h4>
+          <div class="spaces-context-text">${escapeHtml(data.summary)}</div>
+        </div>
+      ` : ''}
+      <div class="spaces-context-section">
+        <h4>Live Messages (${data.liveMessages.length})</h4>
+        ${data.liveMessages.length ? buildContextMessageHtml(data.liveMessages) : '<div class="spaces-context-text">No live messages yet.</div>'}
+      </div>
+      ${data.archivedMessages.length ? `
+        <div class="spaces-context-section">
+          <button class="spaces-context-archive-toggle" type="button">
+            <span>Archived messages (${data.archivedMessages.length})</span>
+            <span>+</span>
+          </button>
+          <div class="spaces-context-archive-content">
+            ${buildContextMessageHtml(data.archivedMessages)}
+          </div>
+        </div>
+      ` : ''}
+      ${space?.customInstructions && space.customInstructions.trim().length ? `
+        <div class="spaces-context-section">
+          <h4>Custom Instructions</h4>
+          <div class="spaces-context-text">${escapeHtml(truncateText(space.customInstructions, 220))}</div>
+        </div>
+      ` : ''}
+    </div>
+    <div class="spaces-context-footer">
+      <div class="spaces-context-text">${usedCount}/${MAX_CONTEXT_MESSAGES} messages in context · ${remaining} remaining</div>
+      <div class="spaces-context-bar">
+        <div class="spaces-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? '#f59e0b' : '#22c55e'};"></div>
+      </div>
+      ${isNearLimit ? '<div class="spaces-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const closeBtn = modal.querySelector('.spaces-context-close');
+  closeBtn?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const archiveToggle = modal.querySelector('.spaces-context-archive-toggle');
+  const archiveContent = modal.querySelector('.spaces-context-archive-content');
+  if (archiveToggle && archiveContent) {
+    archiveToggle.addEventListener('click', () => {
+      const isOpen = archiveContent.classList.toggle('open');
+      const indicator = archiveToggle.querySelector('span:last-child');
+      if (indicator) {
+        indicator.textContent = isOpen ? '−' : '+';
+      }
+    });
+  }
+}
+
 
 // ============ STORAGE FUNCTIONS ============
 
@@ -397,6 +539,7 @@ async function addMessageToThread(threadId, message) {
 
 let currentSpaceId = null;
 let currentThreadId = null;
+let currentSpaceData = null;
 let isStreaming = false;
 let streamPort = null;
 let editingSpaceId = null;
@@ -447,6 +590,8 @@ function initElements() {
   elements.sendBtn = document.getElementById('send-btn');
   elements.stopBtn = document.getElementById('stop-btn');
   elements.chatModelIndicator = document.getElementById('chat-model-indicator');
+  elements.spacesContextBtn = document.getElementById('spaces-context-btn');
+  elements.spacesContextBadge = document.querySelector('.spaces-context-badge');
   elements.chatWebSearch = document.getElementById('chat-web-search');
   elements.chatReasoning = document.getElementById('chat-reasoning');
 
@@ -495,6 +640,8 @@ function showView(viewName) {
     elements.spacesListView.classList.add('active');
     currentSpaceId = null;
     currentThreadId = null;
+    currentSpaceData = null;
+    updateSpacesContextButton(null, null);
   } else if (viewName === 'space') {
     elements.spaceView.classList.add('active');
   }
@@ -800,6 +947,7 @@ function renderChatMessages(messages, thread = null) {
 
   if (!messages || messages.length === 0) {
     chatMessagesEl.innerHTML = '';
+    updateSpacesContextButton(thread, currentSpaceData);
     return;
   }
 
@@ -828,6 +976,7 @@ function renderChatMessages(messages, thread = null) {
 
   postProcessMessages(chatMessagesEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  updateSpacesContextButton(thread, currentSpaceData);
 }
 
 function toggleArchiveSection() {
@@ -1014,6 +1163,7 @@ async function openThread(threadId) {
   // Set chat toggles from space settings
   const space = await getSpace(currentSpaceId);
   if (space) {
+    currentSpaceData = space;
     elements.chatWebSearch.checked = space.webSearch || false;
     elements.chatReasoning.checked = space.reasoning || false;
     updateChatModelIndicator(space);
@@ -1032,6 +1182,7 @@ async function createNewThread() {
   // Set chat toggles from space settings
   const space = await getSpace(currentSpaceId);
   if (space) {
+    currentSpaceData = space;
     elements.chatWebSearch.checked = space.webSearch || false;
     elements.chatReasoning.checked = space.reasoning || false;
   }
@@ -1433,6 +1584,17 @@ function bindEvents() {
 
   elements.newThreadBtn.addEventListener('click', createNewThread);
 
+  if (elements.spacesContextBtn) {
+    elements.spacesContextBtn.addEventListener('click', async () => {
+      if (elements.spacesContextBtn.classList.contains('inactive')) return;
+      if (!currentThreadId || !currentSpaceId) return;
+      const thread = await getThread(currentThreadId);
+      const space = currentSpaceData || await getSpace(currentSpaceId);
+      currentSpaceData = space || currentSpaceData;
+      openSpacesContextModal(thread, currentSpaceData);
+    });
+  }
+
   elements.chatMessages.addEventListener('click', async (e) => {
     const archiveToggle = e.target.closest('.chat-archive-toggle');
     if (archiveToggle) {
@@ -1813,6 +1975,10 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
 
         // Save assistant message to thread
         await addMessageToThread(currentThreadId, buildAssistantMessage(fullContent, meta));
+        const updatedThread = await getThread(currentThreadId);
+        if (updatedThread) {
+          updateSpacesContextButton(updatedThread, currentSpaceData);
+        }
 
         updateAssistantFooter(streamingUi, meta);
 

@@ -91,7 +91,13 @@
               <button id="send-btn" class="btn btn-primary">Send</button>
               <button id="stop-btn" class="btn btn-danger" style="display: none;">Stop</button>
             </div>
-            <div id="chat-model-indicator" class="chat-model-indicator"></div>
+            <div class="chat-meta-row">
+              <div id="chat-model-indicator" class="chat-model-indicator"></div>
+              <button id="spaces-context-btn" class="spaces-context-btn" type="button" aria-label="View conversation context" aria-disabled="true">
+                <span class="spaces-context-icon">🧠</span>
+                <span class="spaces-context-badge" style="display: none;"></span>
+              </button>
+            </div>
           </div>
         </div>
       </main>
