@@ -842,11 +842,23 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
   const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
+  const summaryStartedAt = Date.now();
 
   const requestBody = {
     model: customModel || cfg.model || DEFAULTS.MODEL,
     messages: Array.isArray(messages) ? messages : []
   };
+
+  if (debugStreamEnabled) {
+    pushDebugStreamEntry(debugStreamLog, {
+      type: "summary_start",
+      provider: providerConfig.id,
+      model: requestBody.model,
+      messageCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
+      hasApiKey: Boolean(cfg.apiKey),
+      hasProvisioningKey: Boolean(cfg.provisioningKey)
+    });
+  }
 
   let lastError;
   for (let attempt = 0; attempt < API_CONFIG.MAX_RETRIES; attempt++) {
@@ -854,16 +866,30 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: buildAuthHeaders(cfg.apiKey, providerConfig),
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
-    });
+      const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: buildAuthHeaders(cfg.apiKey, providerConfig),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
 
       clearTimeout(timeoutId);
 
       const data = await res.json();
+
+      if (debugStreamEnabled) {
+        pushDebugStreamEntry(debugStreamLog, {
+          type: "summary_response",
+          provider: providerConfig.id,
+          status: res.status,
+          ok: res.ok,
+          summaryLength: typeof data?.choices?.[0]?.message?.content === "string"
+            ? data.choices[0].message.content.length
+            : 0,
+          tokens: data?.usage?.total_tokens || null,
+          elapsedMs: Date.now() - summaryStartedAt
+        });
+      }
 
       if (!res.ok) {
         if (res.status === 429) {
@@ -881,6 +907,15 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
       return { answer: content, tokens };
     } catch (error) {
       lastError = error;
+
+      if (debugStreamEnabled) {
+        pushDebugStreamEntry(debugStreamLog, {
+          type: "summary_error",
+          provider: providerConfig.id,
+          error: error?.message || String(error),
+          elapsedMs: Date.now() - summaryStartedAt
+        });
+      }
 
       if (error.name === 'AbortError') {
         throw new Error(ERROR_MESSAGES.TIMEOUT);

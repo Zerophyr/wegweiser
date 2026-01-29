@@ -15,6 +15,7 @@ const win = window as unknown as {
     summary?: string
   ) => any[];
   shouldSkipSummarization?: (prompt: string) => boolean;
+  getSummaryMinLength?: (historyCount: number) => number;
 };
 
 function loadSpaces() {
@@ -57,5 +58,11 @@ describe("spaces summarization helpers", () => {
 
   test("shouldSkipSummarization returns true for long prompts", () => {
     expect(win.shouldSkipSummarization?.("a".repeat(10000))).toBe(true);
+  });
+
+  test("getSummaryMinLength adapts to history length", () => {
+    expect(win.getSummaryMinLength?.(4)).toBe(80);
+    expect(win.getSummaryMinLength?.(6)).toBe(120);
+    expect(win.getSummaryMinLength?.(12)).toBe(200);
   });
 });

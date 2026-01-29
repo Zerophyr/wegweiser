@@ -198,6 +198,12 @@ function shouldSkipSummarization(prompt) {
   return estimatedTokens > 2000;
 }
 
+function getSummaryMinLength(historyCount) {
+  const safeCount = Number.isFinite(historyCount) ? historyCount : Number(historyCount) || 0;
+  const scaled = safeCount * 20;
+  return Math.max(80, Math.min(200, scaled));
+}
+
 function appendArchivedMessages(currentArchive, newMessages) {
   const safeCurrent = Array.isArray(currentArchive) ? currentArchive : [];
   const safeNew = Array.isArray(newMessages) ? newMessages : [];
@@ -1080,6 +1086,7 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.getLiveWindowSize = getLiveWindowSize;
   window.splitMessagesForSummary = splitMessagesForSummary;
   window.shouldSkipSummarization = shouldSkipSummarization;
+  window.getSummaryMinLength = getSummaryMinLength;
   window.appendArchivedMessages = appendArchivedMessages;
   window.buildSpacesContextData = buildSpacesContextData;
   window.buildContextBadgeLabel = buildContextBadgeLabel;
@@ -1837,7 +1844,8 @@ async function sendMessage() {
         model: space.model || null,
         provider: space.modelProvider || currentProvider
       });
-      if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= 200) {
+      const minSummaryLength = getSummaryMinLength(historyToSummarize.length);
+      if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= minSummaryLength) {
         thread.summary = summaryRes.summary.trim();
         thread.summaryUpdatedAt = Date.now();
         const updatedArchive = appendArchivedMessages(thread.archivedMessages, historyToSummarize);
