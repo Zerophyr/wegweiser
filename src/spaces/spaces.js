@@ -764,6 +764,14 @@ async function renderThreadList() {
         <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
         <div class="menu-items" style="display: none;">
           <button class="menu-item" data-action="rename" data-thread-id="${thread.id}">Rename</button>
+          <div class="menu-item-submenu">
+            <button class="menu-item" data-action="export-parent">Export &#9656;</button>
+            <div class="submenu-items">
+              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="md">Markdown</button>
+              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="pdf">PDF</button>
+              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="docx">DOCX</button>
+            </div>
+          </div>
           <button class="menu-item danger" data-action="delete-thread" data-thread-id="${thread.id}">Delete</button>
         </div>
       </div>
@@ -787,6 +795,20 @@ async function renderThreadList() {
         e.stopPropagation();
         const threadId = target.closest('[data-action="rename"]').dataset.threadId;
         openRenameModal(threadId);
+        return;
+      }
+
+      // Handle export click
+      if (target.closest('[data-action="export"]')) {
+        e.stopPropagation();
+        const btn = target.closest('[data-action="export"]');
+        exportThread(btn.dataset.threadId, btn.dataset.format);
+        return;
+      }
+
+      // Prevent export parent from closing menu
+      if (target.closest('[data-action="export-parent"]')) {
+        e.stopPropagation();
         return;
       }
 
@@ -1090,6 +1112,8 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.appendArchivedMessages = appendArchivedMessages;
   window.buildSpacesContextData = buildSpacesContextData;
   window.buildContextBadgeLabel = buildContextBadgeLabel;
+  window.sanitizeFilename = sanitizeFilename;
+  window.getFullThreadMessages = getFullThreadMessages;
 }
 
 async function renderStorageUsage() {
@@ -1156,6 +1180,57 @@ async function openSpace(spaceId) {
 
   showView('space');
   await renderThreadList();
+}
+
+function sanitizeFilename(name) {
+  return (name || 'thread').replace(/[^a-zA-Z0-9 _-]/g, '').trim().substring(0, 50) || 'thread';
+}
+
+function getFullThreadMessages(thread) {
+  const archived = Array.isArray(thread.archivedMessages) ? thread.archivedMessages : [];
+  const live = Array.isArray(thread.messages) ? thread.messages : [];
+  return [...archived, ...live];
+}
+
+async function exportThread(threadId, format) {
+  try {
+    const thread = await getThread(threadId);
+    if (!thread) {
+      showToast('Thread not found', 'error');
+      return;
+    }
+
+    const allMessages = getFullThreadMessages(thread);
+    if (allMessages.length === 0) {
+      showToast('Nothing to export', 'info');
+      return;
+    }
+
+    const filename = sanitizeFilename(thread.title);
+
+    if (format === 'md') {
+      exportMarkdownFile(allMessages, `${filename}.md`);
+      showToast('Exported as Markdown', 'success');
+    } else if (format === 'docx') {
+      exportDocx(allMessages, `${filename}.docx`);
+      showToast('Exported as DOCX', 'success');
+    } else if (format === 'pdf') {
+      const html = allMessages.map(msg => {
+        const role = msg.role === 'assistant' ? 'Assistant' : 'User';
+        return `<h2>${role}</h2><p>${escapeHtmlForExport(msg.content || '')}</p>`;
+      }).join('');
+      exportPdf(html, filename);
+      showToast('Exported as PDF', 'success');
+    }
+
+    // Close menus after export
+    document.querySelectorAll('.menu-items').forEach(menu => {
+      menu.style.display = 'none';
+    });
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast('Export failed: ' + (err.message || 'Unknown error'), 'error');
+  }
 }
 
 async function openThread(threadId) {

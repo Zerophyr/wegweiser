@@ -6,6 +6,8 @@ const win = window as unknown as {
   buildAssistantMessage?: (content: string, meta: any) => any;
   buildStreamMessages?: (messages: any[], prompt: string, systemInstruction?: string) => any[];
   getSourcesData?: (content: string) => { sources: any[]; cleanText: string };
+  sanitizeFilename?: (name: string) => string;
+  getFullThreadMessages?: (thread: any) => any[];
 };
 
 const testGlobal = global as unknown as {
@@ -112,5 +114,39 @@ describe("renderChatMessages", () => {
     expect(result?.sources).toHaveLength(1);
     expect(result?.cleanText).toBe('text');
     delete (global as any).extractSources;
+  });
+
+  test("sanitizeFilename strips special chars and caps length", () => {
+    expect(win.sanitizeFilename?.('Hello World!')).toBe('Hello World');
+    expect(win.sanitizeFilename?.('a/b\\c:d?e')).toBe('abcde');
+    expect(win.sanitizeFilename?.('A'.repeat(100))).toHaveLength(50);
+    expect(win.sanitizeFilename?.('')).toBe('thread');
+    expect(win.sanitizeFilename?.('   ')).toBe('thread');
+  });
+
+  test("getFullThreadMessages combines archived and live messages", () => {
+    const thread = {
+      archivedMessages: [
+        { role: 'user', content: 'Old' },
+        { role: 'assistant', content: 'Old reply' }
+      ],
+      messages: [
+        { role: 'user', content: 'New' },
+        { role: 'assistant', content: 'New reply' }
+      ]
+    };
+    const result = win.getFullThreadMessages?.(thread);
+    expect(result).toHaveLength(4);
+    expect(result?.[0].content).toBe('Old');
+    expect(result?.[3].content).toBe('New reply');
+  });
+
+  test("getFullThreadMessages returns live only when no archive", () => {
+    const thread = {
+      messages: [{ role: 'user', content: 'Only' }]
+    };
+    const result = win.getFullThreadMessages?.(thread);
+    expect(result).toHaveLength(1);
+    expect(result?.[0].content).toBe('Only');
   });
 });
