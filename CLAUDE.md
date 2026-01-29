@@ -103,6 +103,7 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 - Live window: 12 messages before summary exists, 8 messages after summary exists
 - Summary is injected as a system message after Space custom instructions; archived messages are never sent to the model
 - Summary refresh uses `MESSAGE_TYPES.SUMMARIZE_THREAD` with `buildSummarizerMessages()` in `src/shared/utils.js`
+- Summary acceptance uses an adaptive minimum length (80–200 chars based on history count)
 
 **Storage Strategy**:
 - **chrome.storage.local**: API keys (OpenRouter + Naga), provisioning key, history, caches, debug log toggle
@@ -142,7 +143,19 @@ Spaces uses a separate summarization pipeline in `src/spaces/spaces.js`:
 - `thread.summary` and `thread.summaryUpdatedAt` store the rolling summary
 - `thread.archivedMessages` and `thread.archivedUpdatedAt` store older messages for UI-only viewing
 - Summary updates call background `SUMMARIZE_THREAD` (no history/context side-effects)
-- UI renders an “Earlier messages (N)” toggle and a “Summary updated” badge
+- UI renders an "Earlier messages (N)" toggle and a "Summary updated" badge
+
+### Contextual Custom Instructions
+`buildStreamMessages()` in `src/spaces/spaces.js` varies how Space custom instructions are sent:
+- **First message** (empty thread): instructions sent as-is in a system message
+- **Follow-up messages** (thread has history): instructions wrapped with `[Ongoing conversation. Follow these standing instructions without re-introducing yourself:]` prefix
+- This prevents models from re-introducing themselves mid-thread
+
+### Thread Export
+The thread three-dot menu includes an "Export" submenu (Markdown, PDF, DOCX):
+- `exportThread()` in `src/spaces/spaces.js` loads the thread, combines `archivedMessages` + `messages` via `getFullThreadMessages()`, and calls the appropriate `exporter.js` function
+- `sanitizeFilename()` strips special chars and caps at 50 characters
+- Submenu opens to the left to avoid clipping by the thread panel
 
 ### Adding Features That Access Page Content
 The "Summarize Page" feature demonstrates the pattern for accessing webpage content:
@@ -185,7 +198,7 @@ When modifying markdown support, update both `src/modules/markdown.js` and the p
 - **Sidepanel logs**: Right-click sidebar → Inspect (opens DevTools)
 - **Context size tracking**: Already implemented with console logs at lines src/background/background.js:389, 403-404, 460
 - **Message flow**: Look for `console.log` statements showing message types and payloads
-- **Streaming debug log**: Options → "Streaming Debug Log" (download last 500 stream events)
+- **Streaming debug log**: Options → "Streaming Debug Log" (download last 500 stream events, includes summary start/response/error)
 
 ## Storage Keys Reference
 All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:

@@ -24,9 +24,11 @@
 - 🔄 **Chat Toggles** - Temporarily override web search/reasoning per message
 - 🔗 **Source Citations** - Clickable [1], [2] references with clean URL removal
 - 📋 **Copy Answers** - One-click copy button for AI responses in threads
-- 🧾 **Adaptive Summaries** - Older turns are summarized to keep token usage low
+- 🧾 **Adaptive Summaries** - Older turns are summarized to keep token usage low (short summaries accepted for small histories)
 - 🗂️ **Archived Messages** - Expand “Earlier messages (N)” to view full history
-- 🏷️ **Summary Badge** - “Summary updated” indicator after refresh
+- 🏷️ **Summary Badge** - "Summary updated" indicator after refresh
+- 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX from the three-dot menu
+- 💬 **Contextual Instructions** - Custom instructions adapt framing based on thread state to prevent model re-introductions
 - 💾 **Persistent Storage** - All conversations saved locally with full history archived
 - 📊 **Storage Monitoring** - Visual usage tracking with tiered warnings (70%/85%/95%)
 
@@ -116,7 +118,7 @@ _(Coming soon)_
 1. **Provider keys**: Switch provider to edit OpenRouter or NagaAI keys
 2. **Provisioning key**: Optional NagaAI key to enable balance display
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
-4. **Streaming debug log**: Toggle logging and download the last 500 stream events
+4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
 
 ## 🛠️ Development
 
@@ -198,12 +200,15 @@ Wegweiser-extension/
 
 ### v1.1.1 (Latest)
 - 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
+- ✅ **Short Summary Acceptance** - Minimum summary length adapts to history size
 - 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
 - 🏷️ **Summary Badge** - Visual indicator after summary refresh
 - 🔁 **Multi-Provider Models** - Combined OpenRouter + NagaAI model list with provider badges
 - 💳 **NagaAI Balance Support** - Provisioning key unlocks balance display
 - 👁️ **Key Visibility Toggle** - Inline eye icons for API/provisioning keys in Options
 - 🧪 **Streaming Debug Log** - Optional log for troubleshooting stuck streams
+- 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX via three-dot menu
+- 💬 **Contextual Instructions** - Custom instructions adapt framing to prevent model re-introductions mid-thread
 
 ### v1.1.0
 - 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards
