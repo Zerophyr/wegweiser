@@ -765,7 +765,7 @@ async function renderThreadList() {
         <div class="menu-items" style="display: none;">
           <button class="menu-item" data-action="rename" data-thread-id="${thread.id}">Rename</button>
           <div class="menu-item-submenu">
-            <button class="menu-item" data-action="export-parent">Export &#9656;</button>
+            <button class="menu-item" data-action="export-parent">&#9666; Export</button>
             <div class="submenu-items">
               <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="md">Markdown</button>
               <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="pdf">PDF</button>
