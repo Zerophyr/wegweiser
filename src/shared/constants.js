@@ -44,6 +44,7 @@ export const MESSAGE_TYPES = {
   SUMMARIZE_THREAD: "summarize_thread",
   SPACES_QUERY: "spaces_query",
   SPACES_STREAM: "spaces_stream",
+  IMAGE_QUERY: "image_query",
   DEBUG_GET_STREAM_LOG: "debug_get_stream_log",
   DEBUG_CLEAR_STREAM_LOG: "debug_clear_stream_log",
   DEBUG_SET_ENABLED: "debug_set_enabled"
