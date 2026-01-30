@@ -62,6 +62,7 @@ Wegweiser-extension/
 ├── tests/                       # Jest test files
 ├── docs/                        # Documentation
 │   ├── features/                # Feature documentation
+│   ├── plans/                   # Design documents
 │   └── releases/                # Release notes
 ├── manifest.json
 ├── README.md
@@ -176,6 +177,51 @@ When adding new features that need page access, follow this permission-first pat
 - API keys MUST only be stored in `chrome.storage.local` (never sync)
 - Maintain the Content Security Policy in manifest.json
 
+### Color System
+All colors are centralized in `src/modules/theme.js` as 28 CSS custom properties. **Never hardcode hex colors** -- use `var(--color-*)` in CSS and JS inline styles.
+
+**Available variables:**
+
+| Variable | Dark | Light | Usage |
+|---|---|---|---|
+| `--color-bg` | `#0f0f0f` | `#ffffff` | Page background |
+| `--color-bg-secondary` | `#18181b` | `#f9fafb` | Cards, inputs, panels |
+| `--color-bg-tertiary` | `#27272a` | `#f3f4f6` | Chips, hover states |
+| `--color-bg-elevated` | `#111113` | `#ffffff` | Popovers, source cards |
+| `--color-text` | `#e4e4e7` | `#1f2937` | Primary content |
+| `--color-text-secondary` | `#d4d4d8` | `#374151` | Labels, descriptions |
+| `--color-text-muted` | `#a1a1aa` | `#6b7280` | Timestamps, meta, placeholders |
+| `--color-text-on-primary` | `#ffffff` | `#ffffff` | Text on colored buttons |
+| `--color-border` | `#27272a` | `#e5e7eb` | Dividers, card edges |
+| `--color-border-hover` | `#3f3f46` | `#d1d5db` | Interactive hover borders |
+| `--color-primary` | `#3b82f6` | `#3b82f6` | Buttons, active states |
+| `--color-primary-hover` | `#2563eb` | `#2563eb` | Button hover |
+| `--color-primary-subtle` | `rgba(59,130,246,0.1)` | `rgba(59,130,246,0.08)` | Blue-tinted backgrounds |
+| `--color-success` | `#10b981` | `#059669` | Positive states |
+| `--color-error` | `#ef4444` | `#dc2626` | Error states |
+| `--color-warning` | `#f59e0b` | `#d97706` | Warning states |
+| `--color-info` | `#0ea5e9` | `#0284c7` | Info/debug badges |
+| `--color-accent` | `#8b5cf6` | `#7c3aed` | Purple accents |
+| `--color-link` | `#60a5fa` | `#2563eb` | In-content links |
+| `--color-link-hover` | `#93c5fd` | `#1d4ed8` | Link hover |
+| `--color-topic-1` through `--color-topic-6` | blue/emerald/amber/pink/violet/cyan 400 | 600 variants | Topic heading colors |
+| `--color-shadow` | `rgba(0,0,0,0.4)` | `rgba(0,0,0,0.1)` | Box shadows |
+| `--color-scrollbar` | `#27272a` | `#e5e7eb` | Scrollbar thumb |
+| `--color-scrollbar-hover` | `#3f3f46` | `#d1d5db` | Scrollbar thumb hover |
+
+**How theming works:**
+1. `initTheme()` injects `:root` defaults and a `body.theme-light` variable override block
+2. `applyTheme()` sets all variables on `document.documentElement` using `camelToKebab()` conversion
+3. CSS/JS reference `var(--color-*)` -- theme switches automatically update everything
+4. Light theme semantic colors shift one Tailwind shade darker (500 → 600) for contrast on white
+
+**Adding new colors:**
+1. Add the camelCase key to both `THEMES.dark.colors` and `THEMES.light.colors` in `theme.js`
+2. Add the kebab-case variable to both the `:root` and `body.theme-light` blocks in `initTheme()`
+3. Reference as `var(--color-your-new-color)` in CSS or inline styles
+
+**Gradient endpoints:** Darker shades used as gradient endpoints (e.g., `#1d4ed8`, `#dc2626`) are intentionally kept hardcoded since they don't need theme adaptation.
+
 ### Adding Visual Feedback
 The codebase uses multiple feedback layers:
 1. **Toast notifications**: `showToast(message, type)` for user actions
@@ -232,7 +278,7 @@ All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
 
 **Async Message Handlers**: When using `chrome.runtime.onMessage.addListener()`, you MUST `return true` if you're using `sendResponse()` asynchronously. See src/background/background.js message handlers for examples.
 
-**CSS Variable Theming**: Themes work by setting CSS variables on the document element. When adding new UI elements, use variables like `--color-bg`, `--color-text` instead of hardcoded colors.
+**CSS Variable Theming**: All colors are managed through 28 CSS custom properties defined in `src/modules/theme.js`. **NEVER hardcode hex colors** in CSS or JS -- always use `var(--color-*)` variables. Light/dark theming works automatically through variable redefinition. See the Color System section below for the full variable reference.
 
 **Tab ID Management**: For context isolation, always use the correct tabId. The sidepanel gets its tabId via `chrome.tabs.query({ active: true, currentWindow: true })`. Context menu requests send tabId from the originating tab.
 

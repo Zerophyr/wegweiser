@@ -18,3 +18,4 @@ Spaces uses adaptive summarization to reduce token usage while preserving full h
 ## Notes
 - Archived messages are UI-only.
 - Summary updates call background `SUMMARIZE_THREAD` and do not modify sidebar context.
+- Minimum summary length is adaptive (80–200 chars based on history size).
