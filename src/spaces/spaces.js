@@ -547,6 +547,7 @@ let currentSpaceId = null;
 let currentThreadId = null;
 let currentSpaceData = null;
 let isStreaming = false;
+let imageModeEnabled = false;
 let streamPort = null;
 let editingSpaceId = null;
 let renamingThreadId = null;
@@ -600,6 +601,7 @@ function initElements() {
   elements.spacesContextBadge = document.querySelector('.spaces-context-badge');
   elements.chatWebSearch = document.getElementById('chat-web-search');
   elements.chatReasoning = document.getElementById('chat-reasoning');
+  elements.chatImageMode = document.getElementById('chat-image-mode');
 
   // Space modal
   elements.spaceModal = document.getElementById('space-modal');
@@ -838,6 +840,27 @@ function buildMessageHtml(messages) {
   const safeMessages = Array.isArray(messages) ? messages : [];
   return safeMessages.map((msg, index) => {
     if (msg.role === 'assistant') {
+      if (msg.meta?.imageId) {
+        const meta = msg.meta || null;
+        const metaTime = meta?.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
+        const metaModel = meta?.model || 'default model';
+        const metaText = meta ? `${metaTime} - ${metaModel}` : '';
+        const metaHtml = meta
+          ? `<div class="chat-meta"><span class="chat-meta-text">${escapeHtml(metaText)}</span></div>`
+          : '';
+
+        return `
+          <div class="chat-message chat-message-assistant image-message" data-image-id="${escapeHtml(msg.meta.imageId)}" data-msg-index="${index}">
+            <div class="chat-bubble-wrapper">
+              ${metaHtml}
+              <div class="chat-bubble">
+                <div class="chat-content"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       const { sources, cleanText } = typeof extractSources === 'function'
         ? extractSources(msg.content)
         : { sources: [], cleanText: msg.content };
@@ -1003,6 +1026,7 @@ function renderChatMessages(messages, thread = null) {
   chatMessagesEl.innerHTML = `${archiveHtml}${summaryBadgeHtml}${messagesHtml}`;
 
   postProcessMessages(chatMessagesEl);
+  hydrateImageCards(chatMessagesEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   updateSpacesContextButton(thread, currentSpaceData);
 }
@@ -1114,6 +1138,7 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.buildContextBadgeLabel = buildContextBadgeLabel;
   window.sanitizeFilename = sanitizeFilename;
   window.getFullThreadMessages = getFullThreadMessages;
+  window.openImageLightbox = openImageLightbox;
 }
 
 async function renderStorageUsage() {
@@ -1159,6 +1184,113 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function getImageExtension(mimeType) {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  if (mimeType === 'image/gif') return 'gif';
+  return 'png';
+}
+
+function downloadImage(dataUrl, imageId, mimeType) {
+  if (!dataUrl) return;
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = `wegweiser-image-${imageId}.${getImageExtension(mimeType)}`;
+  link.click();
+}
+
+function openImageLightbox(dataUrl, imageId, mimeType) {
+  if (!dataUrl) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'image-lightbox';
+
+  const content = document.createElement('div');
+  content.className = 'image-lightbox-content';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'image-lightbox-toolbar';
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.type = 'button';
+  downloadBtn.className = 'btn btn-secondary';
+  downloadBtn.textContent = 'Download';
+  downloadBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    downloadImage(dataUrl, imageId, mimeType);
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'btn btn-secondary';
+  closeBtn.textContent = 'Close';
+
+  toolbar.appendChild(downloadBtn);
+  toolbar.appendChild(closeBtn);
+
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  img.alt = 'Generated image';
+
+  content.appendChild(toolbar);
+  content.appendChild(img);
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', handleKey);
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Escape') {
+      close();
+    }
+  };
+
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener('keydown', handleKey);
+}
+
+async function hydrateImageCards(root) {
+  if (typeof buildImageCard !== 'function') return;
+  if (typeof getImageCacheEntry !== 'function') return;
+
+  const scope = root || document;
+  const messages = scope.querySelectorAll('.image-message');
+  for (const message of messages) {
+    const imageId = message.getAttribute('data-image-id');
+    const contentEl = message.querySelector('.chat-content');
+    if (!imageId || !contentEl) continue;
+
+    const entry = await getImageCacheEntry(imageId);
+    const dataUrl = entry?.dataUrl || entry?.data || '';
+    const mimeType = entry?.mimeType || 'image/png';
+
+    let card;
+    if (dataUrl) {
+      card = buildImageCard({
+        state: 'ready',
+        imageUrl: dataUrl,
+        mode: 'spaces',
+        onView: () => openImageLightbox(dataUrl, imageId, mimeType),
+        onDownload: () => downloadImage(dataUrl, imageId, mimeType)
+      });
+      const thumb = card.querySelector('.image-card-thumb');
+      if (thumb) {
+        thumb.addEventListener('click', () => openImageLightbox(dataUrl, imageId, mimeType));
+      }
+    } else {
+      card = buildImageCard({ state: 'expired' });
+    }
+
+    contentEl.innerHTML = '';
+    contentEl.appendChild(card);
+  }
 }
 
 // ============ ACTIONS ============
@@ -1248,6 +1380,10 @@ async function openThread(threadId) {
     currentSpaceData = space;
     elements.chatWebSearch.checked = space.webSearch || false;
     elements.chatReasoning.checked = space.reasoning || false;
+    if (elements.chatImageMode) {
+      elements.chatImageMode.checked = false;
+      imageModeEnabled = false;
+    }
     updateChatModelIndicator(space);
   }
 
@@ -1267,6 +1403,10 @@ async function createNewThread() {
     currentSpaceData = space;
     elements.chatWebSearch.checked = space.webSearch || false;
     elements.chatReasoning.checked = space.reasoning || false;
+    if (elements.chatImageMode) {
+      elements.chatImageMode.checked = false;
+      imageModeEnabled = false;
+    }
   }
 
   const thread = await createThread(currentSpaceId);
@@ -1666,6 +1806,12 @@ function bindEvents() {
 
   elements.newThreadBtn.addEventListener('click', createNewThread);
 
+  if (elements.chatImageMode) {
+    elements.chatImageMode.addEventListener('change', () => {
+      imageModeEnabled = elements.chatImageMode.checked;
+    });
+  }
+
   if (elements.spacesContextBtn) {
     elements.spacesContextBtn.addEventListener('click', async () => {
       if (elements.spacesContextBtn.classList.contains('inactive')) return;
@@ -1885,12 +2031,129 @@ function updateAssistantFooter(ui, meta) {
   }
 }
 
+async function sendImageMessage(content, space) {
+  if (!currentThreadId || !currentSpaceId) return;
+
+  isStreaming = true;
+  if (elements.sendBtn) {
+    elements.sendBtn.disabled = true;
+  }
+  if (elements.stopBtn) {
+    elements.stopBtn.style.display = 'none';
+  }
+
+  await addMessageToThread(currentThreadId, {
+    role: 'user',
+    content
+  });
+
+  elements.chatInput.value = '';
+  elements.chatInput.style.height = 'auto';
+
+  const thread = await getThread(currentThreadId);
+  if (thread) {
+    renderChatMessages(thread.messages, thread);
+  }
+
+  const tempWrapper = document.createElement('div');
+  tempWrapper.className = 'chat-message chat-message-assistant image-message';
+  tempWrapper.innerHTML = `
+    <div class="chat-bubble-wrapper">
+      <div class="chat-bubble">
+        <div class="chat-content"></div>
+      </div>
+    </div>
+  `;
+
+  const tempContent = tempWrapper.querySelector('.chat-content');
+  if (tempContent && typeof buildImageCard === 'function') {
+    tempContent.appendChild(buildImageCard({ state: 'generating' }));
+  } else if (tempContent) {
+    tempContent.textContent = 'Generating image...';
+  }
+
+  elements.chatMessages.appendChild(tempWrapper);
+  elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+  try {
+    const provider = space?.modelProvider || currentProvider;
+    const model = space?.model || null;
+
+    const res = await chrome.runtime.sendMessage({
+      type: 'image_query',
+      prompt: content,
+      provider,
+      model
+    });
+
+    tempWrapper.remove();
+
+    if (!res?.ok) {
+      showToast(res?.error || 'Failed to generate image', 'error');
+      return;
+    }
+
+    const image = res.image || {};
+    const imageId = image.imageId || generateId('image');
+    const mimeType = image.mimeType || 'image/png';
+    const dataUrl = image.dataUrl || image.data || '';
+
+    if (typeof putImageCacheEntry === 'function') {
+      await putImageCacheEntry({
+        imageId,
+        mimeType,
+        dataUrl,
+        createdAt: Date.now()
+      });
+    }
+
+    let metaModel = 'default model';
+    if (space?.modelDisplayName) {
+      metaModel = space.modelDisplayName;
+    } else if (space?.model && typeof buildModelDisplayName === 'function') {
+      metaModel = buildModelDisplayName(provider, space.model);
+    }
+
+    await addMessageToThread(currentThreadId, {
+      role: 'assistant',
+      content: 'Image generated',
+      meta: {
+        createdAt: Date.now(),
+        model: metaModel,
+        imageId,
+        mimeType
+      }
+    });
+
+    const updatedThread = await getThread(currentThreadId);
+    if (updatedThread) {
+      renderChatMessages(updatedThread.messages, updatedThread);
+      updateSpacesContextButton(updatedThread, currentSpaceData);
+    }
+  } catch (err) {
+    console.error('Image generation failed:', err);
+    tempWrapper.remove();
+    showToast(err.message || 'Failed to generate image', 'error');
+  } finally {
+    isStreaming = false;
+    if (elements.sendBtn) {
+      elements.sendBtn.disabled = false;
+    }
+    await renderThreadList();
+  }
+}
+
 async function sendMessage() {
   const content = elements.chatInput.value.trim();
   if (!content || !currentThreadId || !currentSpaceId || isStreaming) return;
 
   const space = await getSpace(currentSpaceId);
   if (!space) return;
+
+  if (imageModeEnabled) {
+    await sendImageMessage(content, space);
+    return;
+  }
 
   // Add user message to thread
   await addMessageToThread(currentThreadId, {
