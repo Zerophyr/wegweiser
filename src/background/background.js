@@ -103,6 +103,17 @@ function buildBalanceHeaders(apiKey, providerConfig, provisioningKey) {
   };
 }
 
+async function getApiKeyForProvider(providerId) {
+  const provider = normalizeProviderId(providerId);
+  const keys = await chrome.storage.local.get([
+    STORAGE_KEYS.API_KEY,
+    STORAGE_KEYS.API_KEY_NAGA
+  ]);
+  return provider === "naga"
+    ? (keys[STORAGE_KEYS.API_KEY_NAGA] || "")
+    : (keys[STORAGE_KEYS.API_KEY] || "");
+}
+
 function parseModelsPayload(payload) {
   const list = Array.isArray(payload) ? payload : (payload?.data || []);
   return list.map((model) => ({
@@ -265,6 +276,104 @@ async function addHistoryEntry(prompt, answer) {
   return entry;
 }
 
+// ---- Image generation ----
+function extractOpenRouterImageUrl(message) {
+  const images = Array.isArray(message?.images) ? message.images : [];
+  if (!images.length) return "";
+  const first = images[0] || {};
+  const imageUrl = first.image_url || first.imageUrl || {};
+  return imageUrl.url || first.url || "";
+}
+
+function buildDataUrlFromBase64(base64, mimeType = "image/png") {
+  if (!base64 || typeof base64 !== "string") return "";
+  if (base64.startsWith("data:")) return base64;
+  return `data:${mimeType};base64,${base64}`;
+}
+
+async function callImageGeneration(prompt, providerId, modelId) {
+  if (!prompt || typeof prompt !== "string") {
+    throw new Error(ERROR_MESSAGES.NO_PROMPT);
+  }
+
+  const provider = normalizeProviderId(providerId);
+  const providerConfig = getProviderConfig(provider);
+  const apiKey = await getApiKeyForProvider(provider);
+  if (!apiKey) {
+    throw new Error(ERROR_MESSAGES.NO_API_KEY);
+  }
+
+  const model = modelId || cachedConfig.model || DEFAULTS.MODEL;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+
+  try {
+    if (providerConfig.id === "naga") {
+      const res = await fetch(`${providerConfig.baseUrl}/images/generations`, {
+        method: "POST",
+        headers: buildAuthHeaders(apiKey, providerConfig),
+        body: JSON.stringify({
+          model,
+          prompt,
+          n: 1,
+          response_format: "b64_json"
+        }),
+        signal: controller.signal
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
+      }
+
+      const imageBase64 = data?.data?.[0]?.b64_json || "";
+      const dataUrl = buildDataUrlFromBase64(imageBase64);
+      if (!dataUrl) {
+        throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
+      }
+
+      return {
+        imageId: crypto.randomUUID(),
+        mimeType: "image/png",
+        dataUrl
+      };
+    }
+
+    const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: buildAuthHeaders(apiKey, providerConfig),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"]
+      }),
+      signal: controller.signal
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
+    }
+
+    const message = data?.choices?.[0]?.message || {};
+    const imageUrl = extractOpenRouterImageUrl(message);
+    if (!imageUrl) {
+      throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
+    }
+
+    const mimeMatch = imageUrl.match(/^data:([^;]+);base64,/);
+    const mimeType = mimeMatch?.[1] || "image/png";
+
+    return {
+      imageId: crypto.randomUUID(),
+      mimeType,
+      dataUrl: imageUrl
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ---- Install: side panel ----
 chrome.runtime.onInstalled.addListener(async () => {
   chrome.sidePanel
@@ -320,6 +429,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           contextSize: result.contextSize,
           reasoning: result.reasoning  // Include reasoning in response
         });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg?.type === MESSAGE_TYPES.IMAGE_QUERY) {
+    (async () => {
+      try {
+        const result = await callImageGeneration(
+          msg.prompt,
+          msg.provider || null,
+          msg.model || null
+        );
+        sendResponse({ ok: true, image: result });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }

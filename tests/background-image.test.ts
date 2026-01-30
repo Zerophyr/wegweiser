@@ -10,3 +10,15 @@ describe("image message type", () => {
     expect(content).toMatch(/IMAGE_QUERY/);
   });
 });
+
+describe("background image routing", () => {
+  test("background handles image query and endpoints", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/IMAGE_QUERY/);
+    expect(content).toMatch(/modalities/);
+    expect(content).toMatch(/images\/generations/);
+  });
+});
