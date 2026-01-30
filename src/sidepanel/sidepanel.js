@@ -361,9 +361,28 @@ function getImageExtension(mimeType) {
   return "png";
 }
 
-function openImageInNewTab(dataUrl) {
+function getImageViewerBaseUrl() {
+  if (typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function") {
+    return chrome.runtime.getURL("src/image-viewer/image-viewer.html");
+  }
+  return "";
+}
+
+function openImageInNewTab(dataUrl, imageId) {
   if (!dataUrl) return;
-  chrome.tabs.create({ url: dataUrl });
+  const viewerBaseUrl = getImageViewerBaseUrl();
+  const openUrl = typeof buildImageOpenUrl === "function"
+    ? buildImageOpenUrl(dataUrl, imageId || "", viewerBaseUrl)
+    : dataUrl;
+
+  chrome.tabs.create({ url: openUrl }, () => {
+    if (chrome.runtime && chrome.runtime.lastError) {
+      console.warn("Failed to open image:", chrome.runtime.lastError.message);
+      if (typeof showToast === "function") {
+        showToast("Unable to open image in a new tab.", "error");
+      }
+    }
+  });
 }
 
 function downloadImage(dataUrl, imageId, mimeType) {
@@ -489,12 +508,12 @@ async function generateImage(prompt) {
         state: "ready",
         imageUrl: resolvedDataUrl,
         mode: "sidepanel",
-        onView: () => openImageInNewTab(resolvedDataUrl),
+        onView: () => openImageInNewTab(resolvedDataUrl, imageId),
         onDownload: () => downloadImage(resolvedDataUrl, imageId, mimeType)
       });
       const thumb = readyCard.querySelector(".image-card-thumb");
       if (thumb) {
-        thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl));
+        thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl, imageId));
       }
       answerContent.innerHTML = "";
       answerContent.appendChild(readyCard);
@@ -544,6 +563,12 @@ async function askQuestion() {
   }
 
   if (imageModeEnabled) {
+    if (typeof clearPromptAfterSend === "function") {
+      clearPromptAfterSend(promptEl);
+    } else {
+      promptEl.value = "";
+      promptEl.style.height = "auto";
+    }
     await generateImage(prompt);
     return;
   }
@@ -887,9 +912,12 @@ async function askQuestion() {
     });
 
     // Clear the prompt for next question
-    promptEl.value = "";
-    // Reset textarea height
-    promptEl.style.height = 'auto';
+    if (typeof clearPromptAfterSend === "function") {
+      clearPromptAfterSend(promptEl);
+    } else {
+      promptEl.value = "";
+      promptEl.style.height = 'auto';
+    }
     // Hide estimated cost
     estimatedCostEl.style.display = 'none';
 

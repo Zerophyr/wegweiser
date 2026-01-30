@@ -30,10 +30,22 @@
     </div>
 
     <footer class="storage-footer" id="storage-footer">
-      <div class="storage-bar">
-        <div class="storage-fill" id="storage-fill"></div>
+      <div class="storage-meters">
+        <div class="storage-meter">
+          <div class="storage-label">Local Storage (settings + chats)</div>
+          <div class="storage-bar">
+            <div class="storage-fill" id="storage-fill-local"></div>
+          </div>
+          <span class="storage-text" id="storage-text-local">Calculating storage...</span>
+        </div>
+        <div class="storage-meter">
+          <div class="storage-label">Image Storage (IndexedDB)</div>
+          <div class="storage-bar storage-bar-secondary">
+            <div class="storage-fill storage-fill-secondary" id="storage-fill-images"></div>
+          </div>
+          <span class="storage-text" id="storage-text-images">Loading image storage...</span>
+        </div>
       </div>
-      <span class="storage-text" id="storage-text">Calculating storage...</span>
     </footer>
   </div>
 
@@ -226,6 +238,7 @@
   <script src="../modules/exporter.js"></script>
   <script src="../modules/theme.js"></script>
   <script src="../shared/utils.js"></script>
+  <script src="../shared/image-store.js"></script>
   <script src="../shared/image-cache.js"></script>
   <script src="../modules/models-dropdown.js"></script>
   <script src="spaces.js"></script>

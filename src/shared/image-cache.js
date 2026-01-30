@@ -21,6 +21,10 @@ function getImageCacheTtl() {
   return 3 * 60 * 60 * 1000;
 }
 
+function hasImageStoreSupport() {
+  return typeof putImageStoreEntry === "function" && typeof getImageStoreEntry === "function";
+}
+
 function normalizeCache(cache) {
   if (!cache || typeof cache !== "object") return {};
   return cache;
@@ -38,6 +42,39 @@ function pruneExpiredImageCache(cache, now = Date.now()) {
   return pruned;
 }
 
+function prepareImageCacheEntry(entry, now = Date.now(), storeSupported = hasImageStoreSupport()) {
+  if (!entry || !entry.imageId) {
+    return { cacheEntry: null, storeEntry: null };
+  }
+
+  const createdAt = typeof entry.createdAt === "number" ? entry.createdAt : now;
+  const expiresAt = typeof entry.expiresAt === "number"
+    ? entry.expiresAt
+    : (createdAt + getImageCacheTtl());
+
+  const normalized = {
+    ...entry,
+    createdAt,
+    expiresAt
+  };
+
+  if (storeSupported && (normalized.dataUrl || normalized.data)) {
+    const storeEntry = {
+      imageId: normalized.imageId,
+      dataUrl: normalized.dataUrl || normalized.data,
+      mimeType: normalized.mimeType || "image/png",
+      createdAt,
+      expiresAt
+    };
+    delete normalized.dataUrl;
+    delete normalized.data;
+    normalized.hasData = true;
+    return { cacheEntry: normalized, storeEntry };
+  }
+
+  return { cacheEntry: normalized, storeEntry: null };
+}
+
 async function getImageCacheEntry(imageId, now = Date.now()) {
   if (!imageId) return null;
   const storage = getStorage();
@@ -53,6 +90,15 @@ async function getImageCacheEntry(imageId, now = Date.now()) {
     await storage.set({ [key]: cache });
     return null;
   }
+  if (entry.dataUrl || entry.data) {
+    return entry;
+  }
+  if (entry.hasData && hasImageStoreSupport()) {
+    const stored = await getImageStoreEntry(imageId);
+    if (stored && (stored.dataUrl || stored.data)) {
+      return { ...entry, ...stored };
+    }
+  }
   return entry;
 }
 
@@ -67,18 +113,15 @@ async function putImageCacheEntry(entry, now = Date.now()) {
   const result = await storage.get({ [key]: {} });
   const cache = pruneExpiredImageCache(result[key], now);
 
-  const createdAt = typeof entry.createdAt === "number" ? entry.createdAt : now;
-  const expiresAt = typeof entry.expiresAt === "number" ? entry.expiresAt : (createdAt + ttl);
+  const { cacheEntry, storeEntry } = prepareImageCacheEntry(entry, now, hasImageStoreSupport());
+  if (!cacheEntry) return null;
+  if (storeEntry) {
+    await putImageStoreEntry(storeEntry);
+  }
 
-  const normalized = {
-    ...entry,
-    createdAt,
-    expiresAt
-  };
-
-  cache[entry.imageId] = normalized;
+  cache[cacheEntry.imageId] = cacheEntry;
   await storage.set({ [key]: cache });
-  return normalized;
+  return cacheEntry;
 }
 
 async function cleanupImageCache(now = Date.now()) {
@@ -88,13 +131,30 @@ async function cleanupImageCache(now = Date.now()) {
   const key = getImageCacheKey();
   const result = await storage.get({ [key]: {} });
   const pruned = pruneExpiredImageCache(result[key], now);
-  await storage.set({ [key]: pruned });
-  return pruned;
+  let nextCache = pruned;
+
+  if (hasImageStoreSupport()) {
+    nextCache = {};
+    for (const entry of Object.values(pruned)) {
+      const { cacheEntry, storeEntry } = prepareImageCacheEntry(entry, now, true);
+      if (storeEntry) {
+        await putImageStoreEntry(storeEntry);
+      }
+      if (cacheEntry) {
+        nextCache[cacheEntry.imageId] = cacheEntry;
+      }
+    }
+    await cleanupImageStore(now);
+  }
+
+  await storage.set({ [key]: nextCache });
+  return nextCache;
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
     pruneExpiredImageCache,
+    prepareImageCacheEntry,
     putImageCacheEntry,
     getImageCacheEntry,
     cleanupImageCache

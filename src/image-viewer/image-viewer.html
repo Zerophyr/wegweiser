@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Wegweiser Image Viewer</title>
+  <link rel="stylesheet" href="image-viewer.css">
+</head>
+<body>
+  <div class="viewer-root">
+    <div class="viewer-header">
+      <div class="viewer-title">Generated Image</div>
+      <div class="viewer-actions">
+        <button id="download-btn" type="button">Download</button>
+      </div>
+    </div>
+    <div class="viewer-body">
+      <div id="viewer-status" class="viewer-status">Loading image...</div>
+      <img id="viewer-image" alt="Generated image" />
+    </div>
+  </div>
+
+  <script src="../shared/image-store.js"></script>
+  <script src="../shared/image-cache.js"></script>
+  <script src="image-viewer.js"></script>
+</body>
+</html>

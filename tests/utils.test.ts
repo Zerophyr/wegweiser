@@ -99,6 +99,22 @@ describe("provider helpers", () => {
   });
 });
 
+describe("buildImageOpenUrl", () => {
+  const { buildImageOpenUrl } = require("../src/shared/utils.js");
+
+  test("returns data URL when short enough", () => {
+    const dataUrl = "data:image/png;base64,abc";
+    const url = buildImageOpenUrl(dataUrl, "img123", "chrome-extension://ext/image-viewer.html");
+    expect(url).toBe(dataUrl);
+  });
+
+  test("uses viewer url when data URL is long", () => {
+    const dataUrl = "data:image/png;base64," + "a".repeat(5000);
+    const url = buildImageOpenUrl(dataUrl, "img123", "chrome-extension://ext/image-viewer.html");
+    expect(url).toBe("chrome-extension://ext/image-viewer.html?imageId=img123");
+  });
+});
+
 describe("extractReasoningFromStreamChunk", () => {
   test("separates reasoning tags from content in a single chunk", () => {
     const { extractReasoningFromStreamChunk } = require("../src/shared/utils.js");

@@ -417,6 +417,47 @@ async function checkStorageUsage() {
   };
 }
 
+function formatBytes(bytes) {
+  const safeBytes = Number.isFinite(bytes) ? bytes : 0;
+  return `${(safeBytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function buildStorageLabel(label, bytesUsed, maxBytes = null) {
+  if (typeof maxBytes === 'number' && maxBytes > 0) {
+    return `${label}: ${formatBytes(bytesUsed)} of ${formatBytes(maxBytes)}`;
+  }
+  return `${label}: ${formatBytes(bytesUsed)}`;
+}
+
+async function getImageStorageUsage() {
+  if (typeof getImageStoreStats !== 'function') {
+    return { bytesUsed: 0, percentUsed: null, quotaBytes: null };
+  }
+  const stats = await getImageStoreStats();
+  let quotaBytes = null;
+  let percentUsed = null;
+
+  if (navigator?.storage?.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      if (typeof estimate?.quota === 'number') {
+        quotaBytes = estimate.quota;
+        if (typeof stats?.bytesUsed === 'number' && estimate.quota > 0) {
+          percentUsed = (stats.bytesUsed / estimate.quota) * 100;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to estimate storage quota:', e);
+    }
+  }
+
+  return {
+    bytesUsed: stats?.bytesUsed || 0,
+    percentUsed,
+    quotaBytes
+  };
+}
+
 async function estimateItemSize(item) {
   const json = JSON.stringify(item);
   return new Blob([json]).size;
@@ -578,8 +619,10 @@ function initElements() {
   elements.createSpaceBtn = document.getElementById('create-space-btn');
   elements.emptyCreateBtn = document.getElementById('empty-create-btn');
   elements.storageFooter = document.getElementById('storage-footer');
-  elements.storageFill = document.getElementById('storage-fill');
-  elements.storageText = document.getElementById('storage-text');
+  elements.storageFill = document.getElementById('storage-fill-local');
+  elements.storageText = document.getElementById('storage-text-local');
+  elements.storageFillImages = document.getElementById('storage-fill-images');
+  elements.storageTextImages = document.getElementById('storage-text-images');
   elements.storageWarning = document.getElementById('storage-warning');
   elements.warningMessage = document.getElementById('warning-message');
   elements.warningClose = document.getElementById('warning-close');
@@ -1133,6 +1176,8 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.splitMessagesForSummary = splitMessagesForSummary;
   window.shouldSkipSummarization = shouldSkipSummarization;
   window.getSummaryMinLength = getSummaryMinLength;
+  window.formatBytes = formatBytes;
+  window.buildStorageLabel = buildStorageLabel;
   window.appendArchivedMessages = appendArchivedMessages;
   window.buildSpacesContextData = buildSpacesContextData;
   window.buildContextBadgeLabel = buildContextBadgeLabel;
@@ -1145,7 +1190,7 @@ async function renderStorageUsage() {
   const usage = await checkStorageUsage();
 
   elements.storageFill.style.width = `${Math.min(usage.percentUsed, 100)}%`;
-  elements.storageText.textContent = `Using ${usage.formatted}`;
+  elements.storageText.textContent = buildStorageLabel('Local Storage (settings + chats)', usage.bytesInUse, usage.maxBytes);
 
   // Update fill color based on usage
   elements.storageFill.classList.remove('warning', 'danger');
@@ -1164,6 +1209,17 @@ async function renderStorageUsage() {
     showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads.');
   } else {
     hideStorageWarning();
+  }
+
+  if (elements.storageFillImages && elements.storageTextImages) {
+    elements.storageTextImages.textContent = 'Loading image storage...';
+    const imageUsage = await getImageStorageUsage();
+    elements.storageTextImages.textContent = buildStorageLabel('Image Storage (IndexedDB)', imageUsage.bytesUsed, imageUsage.quotaBytes);
+    if (typeof imageUsage.percentUsed === 'number') {
+      elements.storageFillImages.style.width = `${Math.min(imageUsage.percentUsed, 100)}%`;
+    } else {
+      elements.storageFillImages.style.width = '30%';
+    }
   }
 }
 

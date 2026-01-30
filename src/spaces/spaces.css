@@ -379,8 +379,26 @@ body {
   gap: 16px;
 }
 
+.storage-meters {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+}
+
+.storage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.storage-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 .storage-bar {
-  flex: 1;
   max-width: 200px;
   height: 6px;
   background: var(--color-bg-tertiary);
@@ -388,11 +406,19 @@ body {
   overflow: hidden;
 }
 
+.storage-bar-secondary {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .storage-fill {
   height: 100%;
   background: var(--color-primary);
   border-radius: 3px;
   transition: width 0.3s ease, background 0.3s ease;
+}
+
+.storage-fill-secondary {
+  background: #5aa2ff;
 }
 
 .storage-fill.warning {
@@ -404,7 +430,7 @@ body {
 }
 
 .storage-text {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 

@@ -20,6 +20,7 @@ const promptHistoryEl = document.getElementById("prompt-history");
 const debugStreamToggle = document.getElementById("debug-stream-toggle");
 const downloadDebugLogBtn = document.getElementById("download-debug-log-btn");
 const clearDebugLogBtn = document.getElementById("clear-debug-log-btn");
+const clearImageCacheBtn = document.getElementById("clear-image-cache-btn");
 
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
@@ -853,6 +854,22 @@ if (clearDebugLogBtn) {
     } catch (e) {
       console.error("Failed to clear debug log:", e);
       toast.error("Failed to clear debug log");
+    }
+  });
+}
+
+// ---- Image storage cleanup ----
+if (clearImageCacheBtn) {
+  clearImageCacheBtn.addEventListener("click", async () => {
+    try {
+      if (typeof cleanupImageStore !== "function") {
+        throw new Error("Image store unavailable");
+      }
+      await cleanupImageStore(Infinity);
+      toast.success("Image cache cleared");
+    } catch (e) {
+      console.error("Failed to clear image cache:", e);
+      toast.error("Failed to clear image cache");
     }
   });
 }

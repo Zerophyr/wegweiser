@@ -73,6 +73,40 @@ function debounce(fn, delay) {
 }
 
 /**
+ * Clears prompt input after sending.
+ * @param {{value?: string, style?: {height?: string}}} inputEl
+ */
+function clearPromptAfterSend(inputEl) {
+  if (!inputEl) return;
+  inputEl.value = "";
+  if (inputEl.style) {
+    inputEl.style.height = "auto";
+  }
+}
+
+/**
+ * Builds a safe URL for opening generated images in a new tab.
+ * Falls back to an extension viewer when data URLs are too long.
+ * @param {string} dataUrl
+ * @param {string} imageId
+ * @param {string} viewerBaseUrl
+ * @param {number} maxDataUrlLength
+ * @returns {string}
+ */
+function buildImageOpenUrl(dataUrl, imageId, viewerBaseUrl, maxDataUrlLength = 2000) {
+  if (!dataUrl) return "";
+  const safeViewerBase = typeof viewerBaseUrl === "string" ? viewerBaseUrl : "";
+  const safeImageId = typeof imageId === "string" ? imageId : "";
+  if (!safeViewerBase || !safeImageId) {
+    return dataUrl;
+  }
+  if (typeof dataUrl === "string" && dataUrl.length <= maxDataUrlLength) {
+    return dataUrl;
+  }
+  return `${safeViewerBase}?imageId=${encodeURIComponent(safeImageId)}`;
+}
+
+/**
  * Extracts provider name from model ID
  * @param {string} modelId - The model ID (e.g., "openai/gpt-4")
  * @returns {string} Capitalized provider name
@@ -475,6 +509,8 @@ if (typeof module !== "undefined") {
     validateUrl,
     retryWithBackoff,
     debounce,
+    clearPromptAfterSend,
+    buildImageOpenUrl,
     getProvider,
     normalizeProviderId,
     getProviderLabel,
