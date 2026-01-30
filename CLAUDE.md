@@ -34,6 +34,10 @@ Wegweiser-extension/
 │   │   ├── sidepanel.html       # Sidebar UI
 │   │   ├── sidepanel.css        # Sidebar styles
 │   │   └── sidepanel.js         # Sidebar logic
+│   ├── image-viewer/
+│   │   ├── image-viewer.html    # Image viewer tab
+│   │   ├── image-viewer.css     # Image viewer styles
+│   │   └── image-viewer.js      # Image viewer logic
 │   ├── spaces/
 │   │   ├── spaces.html          # Full-page Spaces UI
 │   │   ├── spaces.css           # Spaces styling
@@ -55,6 +59,7 @@ Wegweiser-extension/
 │   └── shared/
 │       ├── constants.js         # Message types, storage keys
 │       ├── debug-log.js         # Streaming debug log helpers
+│       ├── image-store.js       # IndexedDB-backed image storage
 │       ├── model-utils.js       # Provider/model helpers for background
 │       ├── utils.js             # Common utilities
 │       └── visibility-toggle.js # Options key visibility helpers
@@ -105,10 +110,13 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 - Summary is injected as a system message after Space custom instructions; archived messages are never sent to the model
 - Summary refresh uses `MESSAGE_TYPES.SUMMARIZE_THREAD` with `buildSummarizerMessages()` in `src/shared/utils.js`
 - Summary acceptance uses an adaptive minimum length (80–200 chars based on history count)
+- Storage footer shows two meters: Local Storage (settings + chats) and Image Storage (IndexedDB)
 
 **Storage Strategy**:
 - **chrome.storage.local**: API keys (OpenRouter + Naga), provisioning key, history, caches, debug log toggle
 - **chrome.storage.sync**: Favorites, theme preferences (synced across devices)
+- **IndexedDB**: Generated images (large data URLs stored outside local storage quota)
+  - Options has a "Clear Images" button that wipes the IndexedDB image store
 
 **Caching System**: Models cached for 1 hour, balance for 60 seconds. Naga startups metadata cached for vendor labels. Cache keys include timestamps to detect expiry.
 

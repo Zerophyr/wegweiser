@@ -51,6 +51,8 @@
 - 🔄 **Real-time Streaming** - Server-sent events for live response generation
 - 🧭 **Provider Badges** - OR/NG badges in model lists to show provider availability
 - 🧪 **Streaming Debug Log** - Optional log of the last 500 streaming events (Options)
+- 🖼️ **IndexedDB Image Storage** - Image generations stored outside chrome.storage to avoid quota limits
+- 🧹 **Image Cache Cleanup** - Clear generated images from Options
 
 ### Security & Performance (v0.6.0)
 - 🔒 **Enhanced Security** - API keys stored locally, CSP protection, input validation
@@ -119,6 +121,7 @@ _(Coming soon)_
 2. **Provisioning key**: Optional NagaAI key to enable balance display
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
+5. **Image storage**: Clear generated images to free space (stored in IndexedDB)
 
 ## 🛠️ Development
 
@@ -165,10 +168,12 @@ Wegweiser-extension/
 │   ├── background/         # Service worker
 │   ├── sidepanel/          # Sidebar UI
 │   ├── spaces/             # Spaces UI
+│   ├── image-viewer/        # Image viewer tab for generated images
 │   ├── options/            # Options page
 │   ├── modules/            # UI modules (markdown, toast, models, themes)
 │   ├── lib/                # Vendor libs (DOMPurify)
 │   └── shared/             # Shared helpers + constants
+│       └── image-store.js   # IndexedDB-backed image storage
 ├── icons/                  # Extension icons
 ├── tests/                  # Jest tests
 ├── docs/                   # Documentation + plans
@@ -184,6 +189,8 @@ Wegweiser-extension/
 - **Content Security Policy** - Strict CSP prevents injection attacks
 - **Input Validation** - All user input sanitized
 - **URL Validation** - Only HTTPS links allowed
+- **Local Image Storage** - Generated images stored in IndexedDB on your device
+- **Image Cleanup** - Manual clear option available in Options
 - **No Telemetry** - No data collected or shared
 
 ## 🎯 Quality Metrics
