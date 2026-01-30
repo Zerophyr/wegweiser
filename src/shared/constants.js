@@ -26,7 +26,8 @@ export const STORAGE_KEYS = {
   SPACES: "or_spaces",
   THREADS: "or_threads",
   THEME: "or_theme",
-  DEBUG_STREAM: "or_debug_stream"
+  DEBUG_STREAM: "or_debug_stream",
+  IMAGE_CACHE: "or_image_cache"
 };
 
 // Message types for chrome.runtime.sendMessage
@@ -52,7 +53,8 @@ export const MESSAGE_TYPES = {
 export const CACHE_TTL = {
   BALANCE: 60_000,        // 60 seconds
   CONFIG: 60_000,         // 60 seconds
-  MODELS: 3_600_000       // 1 hour
+  MODELS: 3_600_000,      // 1 hour
+  IMAGE: 10_800_000       // 3 hours
 };
 
 // Default values
