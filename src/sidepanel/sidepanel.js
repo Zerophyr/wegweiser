@@ -27,6 +27,7 @@ const modelInput = document.getElementById("model-input");
 const modelStatusEl = document.getElementById("model-status");
 const webSearchToggle = document.getElementById("web-search-toggle");
 const reasoningToggle = document.getElementById("reasoning-toggle");
+const imageToggle = document.getElementById("image-toggle");
 const settingsIcon = document.getElementById("settings-icon");
 const typingIndicator = document.getElementById("typing-indicator");
 const stopBtn = document.getElementById("stopBtn");
@@ -35,6 +36,7 @@ const estimatedCostEl = document.getElementById("estimated-cost");
 // ---- Toggle states ----
 let webSearchEnabled = false;
 let reasoningEnabled = false;
+let imageModeEnabled = false;
 
 // ---- Provider state ----
 let currentProvider = "openrouter";
@@ -352,6 +354,26 @@ function sanitizePrompt(prompt) {
   return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
 }
 
+function getImageExtension(mimeType) {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/gif") return "gif";
+  return "png";
+}
+
+function openImageInNewTab(dataUrl) {
+  if (!dataUrl) return;
+  chrome.tabs.create({ url: dataUrl });
+}
+
+function downloadImage(dataUrl, imageId, mimeType) {
+  if (!dataUrl) return;
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = `wegweiser-image-${imageId}.${getImageExtension(mimeType)}`;
+  link.click();
+}
+
 // ---- Balance handling ----
 async function refreshBalance() {
   if (!balanceEl) return;
@@ -385,6 +407,106 @@ if (balanceRefreshBtn) {
   balanceRefreshBtn.addEventListener("click", refreshBalance);
 }
 
+async function generateImage(prompt) {
+  askBtn.disabled = true;
+  stopBtn.style.display = 'none';
+  metaEl.textContent = "🖼️ Generating image...";
+
+  showAnswerBox();
+
+  const answerItem = document.createElement("div");
+  answerItem.className = "answer-item";
+  answerItem.innerHTML = `
+    <div class="answer-meta">
+      <span>${new Date().toLocaleTimeString()} - Image</span>
+    </div>
+    <div class="answer-content"></div>
+  `;
+
+  const answerContent = answerItem.querySelector(".answer-content");
+  if (answerContent && typeof buildImageCard === "function") {
+    answerContent.appendChild(buildImageCard({ state: "generating" }));
+  } else if (answerContent) {
+    answerContent.textContent = "Generating image...";
+  }
+
+  answerEl.appendChild(answerItem);
+  updateAnswerVisibility();
+  answerSection.scrollTop = answerSection.scrollHeight;
+
+  try {
+    const parsed = parseCombinedModelIdSafe(selectedCombinedModelId || "");
+    const provider = normalizeProviderSafe(parsed.provider || currentProvider);
+    const modelId = parsed.modelId || "";
+
+    const res = await chrome.runtime.sendMessage({
+      type: "image_query",
+      prompt,
+      provider,
+      model: modelId
+    });
+
+    if (!res?.ok) {
+      const errorMessage = res?.error || "Failed to generate image.";
+      if (answerContent && typeof buildImageCard === "function") {
+        answerContent.innerHTML = "";
+        answerContent.appendChild(buildImageCard({ state: "error" }));
+      } else if (answerContent) {
+        answerContent.textContent = errorMessage;
+      }
+      metaEl.textContent = "❌ Failed to generate image.";
+      return;
+    }
+
+    const image = res.image || {};
+    const imageId = image.imageId || crypto.randomUUID();
+    const mimeType = image.mimeType || "image/png";
+    const dataUrl = image.dataUrl || image.data || "";
+
+    if (typeof putImageCacheEntry === "function") {
+      await putImageCacheEntry({
+        imageId,
+        mimeType,
+        dataUrl,
+        createdAt: Date.now()
+      });
+    }
+
+    if (answerContent && typeof buildImageCard === "function") {
+      const readyCard = buildImageCard({
+        state: "ready",
+        imageUrl: dataUrl,
+        mode: "sidepanel",
+        onView: () => openImageInNewTab(dataUrl),
+        onDownload: () => downloadImage(dataUrl, imageId, mimeType)
+      });
+      const thumb = readyCard.querySelector(".image-card-thumb");
+      if (thumb) {
+        thumb.addEventListener("click", () => openImageInNewTab(dataUrl));
+      }
+      answerContent.innerHTML = "";
+      answerContent.appendChild(readyCard);
+    } else if (answerContent) {
+      answerContent.textContent = "Image generated.";
+    }
+
+    metaEl.textContent = "✅ Image generated.";
+    answerSection.scrollTop = answerSection.scrollHeight;
+    await refreshBalance();
+  } catch (e) {
+    console.error("Error generating image:", e);
+    if (answerContent && typeof buildImageCard === "function") {
+      answerContent.innerHTML = "";
+      answerContent.appendChild(buildImageCard({ state: "error" }));
+    } else if (answerContent) {
+      answerContent.textContent = e?.message || String(e);
+    }
+    metaEl.textContent = "❌ Failed to generate image.";
+  } finally {
+    askBtn.disabled = false;
+  }
+}
+
 // ---- Ask function with real-time streaming ----
 async function askQuestion() {
   const rawPrompt = promptEl.value;
@@ -407,6 +529,11 @@ async function askQuestion() {
       // Ignore errors
     }
     activePort = null;
+  }
+
+  if (imageModeEnabled) {
+    await generateImage(prompt);
+    return;
   }
 
   askBtn.disabled = true;
@@ -1228,9 +1355,10 @@ async function loadModels() {
 // ---- Web Search and Reasoning toggles ----
 async function loadToggleSettings() {
   try {
-    const settings = await chrome.storage.local.get(["webSearchEnabled", "reasoningEnabled"]);
+    const settings = await chrome.storage.local.get(["webSearchEnabled", "reasoningEnabled", "imageModeEnabled"]);
     webSearchEnabled = settings.webSearchEnabled || false;
     reasoningEnabled = settings.reasoningEnabled || false;
+    imageModeEnabled = settings.imageModeEnabled || false;
 
     if (webSearchEnabled) {
       webSearchToggle.classList.add("active");
@@ -1241,6 +1369,13 @@ async function loadToggleSettings() {
       reasoningToggle.classList.add("active");
     }
     reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
+
+    if (imageToggle) {
+      if (imageModeEnabled) {
+        imageToggle.classList.add("active");
+      }
+      imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
+    }
   } catch (e) {
     console.error("Error loading toggle settings:", e);
   }
@@ -1250,7 +1385,8 @@ async function saveToggleSettings() {
   try {
     await chrome.storage.local.set({
       webSearchEnabled,
-      reasoningEnabled
+      reasoningEnabled,
+      imageModeEnabled
     });
   } catch (e) {
     console.error("Error saving toggle settings:", e);
@@ -1270,6 +1406,15 @@ reasoningToggle.addEventListener("click", async () => {
   reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
   await saveToggleSettings();
 });
+
+if (imageToggle) {
+  imageToggle.addEventListener("click", async () => {
+    imageModeEnabled = !imageModeEnabled;
+    imageToggle.classList.toggle("active");
+    imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
+    await saveToggleSettings();
+  });
+}
 
 // ---- Settings icon click ----
 settingsIcon.addEventListener("click", () => {
