@@ -276,7 +276,7 @@ answerEl.addEventListener("click", (e) => {
         navigator.clipboard.writeText(text).then(() => {
           // Visual feedback
           const originalColor = copyBtn.style.color;
-          copyBtn.style.color = '#22c55e';
+          copyBtn.style.color = 'var(--color-success)';
           copyBtn.setAttribute('aria-label', 'Copied to clipboard');
           setTimeout(() => {
             copyBtn.style.color = originalColor;
@@ -504,12 +504,12 @@ async function askQuestion() {
       wrapper.setAttribute("role", "region");
       wrapper.setAttribute("aria-label", "Reasoning steps");
       wrapper.innerHTML = `
-        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
             <span>💭</span>
             <span>Thinking...</span>
           </div>
-          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
       `;
       const answerContentEl = answerItem.querySelector(".answer-content");
@@ -524,12 +524,12 @@ async function askQuestion() {
     // Setup reasoning display if enabled
     if (reasoningEnabled && reasoningContent) {
       reasoningContent.innerHTML = `
-        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
             <span>💭</span>
             <span>Thinking...</span>
           </div>
-          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
       `;
     }
@@ -677,11 +677,11 @@ async function askQuestion() {
 
           // Color based on usage: green < 50%, yellow < 80%, red >= 80%
           if (percentage < 50) {
-            tokenBar.style.background = 'linear-gradient(90deg, #22c55e, #16a34a)';
+            tokenBar.style.background = 'linear-gradient(90deg, var(--color-success), #16a34a)';
           } else if (percentage < 80) {
-            tokenBar.style.background = 'linear-gradient(90deg, #eab308, #ca8a04)';
+            tokenBar.style.background = 'linear-gradient(90deg, var(--color-warning), #ca8a04)';
           } else {
-            tokenBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
+            tokenBar.style.background = 'linear-gradient(90deg, var(--color-error), #dc2626)';
           }
         }
 
@@ -943,7 +943,7 @@ if (summarizeBtn) {
               ${contextBadge}
             </div>
             <div class="token-usage-bar" role="progressbar" aria-valuenow="${res.tokens ? Math.round(Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100)) : 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
-              <div class="token-usage-fill" style="width: ${res.tokens ? Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100) : 0}%; background: ${res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.5 ? 'linear-gradient(90deg, #22c55e, #16a34a)' : res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.8 ? 'linear-gradient(90deg, #eab308, #ca8a04)' : 'linear-gradient(90deg, #ef4444, #dc2626)'};"></div>
+              <div class="token-usage-fill" style="width: ${res.tokens ? Math.min((res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100) : 0}%; background: ${res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.5 ? 'linear-gradient(90deg, var(--color-success), #16a34a)' : res.tokens && (res.tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) < 0.8 ? 'linear-gradient(90deg, var(--color-warning), #ca8a04)' : 'linear-gradient(90deg, var(--color-error), #dc2626)'};"></div>
             </div>
             <div class="answer-actions">
               <div class="answer-actions-left">

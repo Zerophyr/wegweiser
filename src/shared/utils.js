@@ -391,14 +391,14 @@ function extractReasoningFromStreamChunk(state, chunk) {
  */
 function getTokenBarStyle(tokens, maxTokens = 4000) {
   if (!tokens || !maxTokens) {
-    return { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+    return { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success, #22c55e), #16a34a)' };
   }
   const percent = Math.round(Math.min((tokens / maxTokens) * 100, 100));
-  let gradient = 'linear-gradient(90deg, #22c55e, #16a34a)';
+  let gradient = 'linear-gradient(90deg, var(--color-success, #22c55e), #16a34a)';
   if (percent >= 80) {
-    gradient = 'linear-gradient(90deg, #ef4444, #dc2626)';
+    gradient = 'linear-gradient(90deg, var(--color-error, #ef4444), #dc2626)';
   } else if (percent >= 50) {
-    gradient = 'linear-gradient(90deg, #eab308, #ca8a04)';
+    gradient = 'linear-gradient(90deg, var(--color-warning, #eab308), #ca8a04)';
   }
   return { percent, gradient };
 }

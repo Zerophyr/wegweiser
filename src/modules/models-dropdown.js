@@ -50,8 +50,8 @@ class ModelDropdownManager {
         right: 0;
         max-height: 60vh;
         overflow-y: auto;
-        background: #18181b;
-        border: 1px solid #3b82f6;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-primary);
         border-bottom: none;
         border-radius: 6px 6px 0 0;
         z-index: 1000;
@@ -68,8 +68,8 @@ class ModelDropdownManager {
         max-width: 600px;
         max-height: 70vh;
         overflow-y: auto;
-        background: #18181b;
-        border: 1px solid #3b82f6;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-primary);
         border-radius: 8px;
         z-index: 1000;
         display: none;
@@ -302,19 +302,19 @@ class ModelDropdownManager {
   getProviderBadge(model) {
     const provider = this.getModelProviderId(model);
     if (provider === 'openrouter') {
-      return { label: 'OR', background: '#1d4ed8', color: '#e2e8f0' };
+      return { label: 'OR', background: '#1d4ed8', color: 'var(--color-text)' };
     }
     if (provider === 'naga') {
-      return { label: 'NG', background: '#15803d', color: '#e2e8f0' };
+      return { label: 'NG', background: '#15803d', color: 'var(--color-text)' };
     }
-    return { label: '?', background: '#3f3f46', color: '#e4e4e7' };
+    return { label: '?', background: 'var(--color-border-hover)', color: 'var(--color-text)' };
   }
 
   highlightSelected() {
     const items = this.dropdownElement.querySelectorAll('.model-dropdown-item');
     items.forEach((item, index) => {
       if (index === this.state.selectedIndex) {
-        item.style.background = '#27272a';
+        item.style.background = 'var(--color-border)';
         item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       } else {
         item.style.background = '';
@@ -351,7 +351,7 @@ class ModelDropdownManager {
     this.dropdownElement.querySelectorAll('.model-dropdown-item').forEach(i => {
       i.style.background = '';
     });
-    item.style.background = '#27272a';
+    item.style.background = 'var(--color-border)';
   }
 
   handleDropdownLeave(e) {
@@ -497,16 +497,16 @@ class ModelDropdownManager {
     const fontSize = this.config.containerType === 'sidebar' ? '13px' : '14px';
     const closeSize = this.config.containerType === 'sidebar' ? '24px' : '28px';
 
-    closeHeader.style.cssText = `padding: ${padding}; background: #0f0f0f; border-bottom: 1px solid #3b82f6; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center;`;
+    closeHeader.style.cssText = `padding: ${padding}; background: var(--color-bg); border-bottom: 1px solid var(--color-primary); position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center;`;
     closeHeader.innerHTML = `
-      <span style="font-size: ${fontSize}; font-weight: 600; color: #e4e4e7;">Select Model</span>
-      <button id="model-dropdown-close" style="background: none; border: none; color: #71717a; cursor: pointer; font-size: ${parseInt(closeSize) + 6}px; padding: 0; width: ${closeSize}; height: ${closeSize}; display: flex; align-items: center; justify-content: center;">×</button>
+      <span style="font-size: ${fontSize}; font-weight: 600; color: var(--color-text);">Select Model</span>
+      <button id="model-dropdown-close" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: ${parseInt(closeSize) + 6}px; padding: 0; width: ${closeSize}; height: ${closeSize}; display: flex; align-items: center; justify-content: center;">×</button>
     `;
     dropdown.appendChild(closeHeader);
 
     // Favorites section
     if (favModels.length > 0) {
-      this.renderSection(dropdown, '★ Favorites', favModels, '#fbbf24', true);
+      this.renderSection(dropdown, '★ Favorites', favModels, 'var(--color-topic-3)', true);
     }
 
     // Recently used section
@@ -514,7 +514,7 @@ class ModelDropdownManager {
       if (favModels.length > 0) {
         this.renderSeparator(dropdown);
       }
-      this.renderSection(dropdown, '🕒 Recently Used', recentModels, '#a78bfa', false);
+      this.renderSection(dropdown, '🕒 Recently Used', recentModels, 'var(--color-topic-5)', false);
     }
 
     // All models section
@@ -530,7 +530,7 @@ class ModelDropdownManager {
       allHeader.textContent = this.state.filterTerm ?
         `All Models (${filteredModels.length}/${this.state.allModels.length})` :
         'All Models';
-      allHeader.style.cssText = `padding: ${headerPadding}; font-size: ${headerFontSize}; color: #71717a; font-weight: 600; background: #0f0f0f; position: sticky; top: 0;`;
+      allHeader.style.cssText = `padding: ${headerPadding}; font-size: ${headerFontSize}; color: var(--color-text-muted); font-weight: 600; background: var(--color-bg); position: sticky; top: 0;`;
       dropdown.appendChild(allHeader);
 
       const grouped = {};
@@ -553,7 +553,7 @@ class ModelDropdownManager {
     if (filteredModels.length === 0) {
       const noResults = document.createElement('div');
       noResults.textContent = `No models match "${this.state.filterTerm}"`;
-      noResults.style.cssText = `padding: ${this.config.containerType === 'sidebar' ? '12px' : '24px'}; font-size: ${this.config.containerType === 'sidebar' ? '12px' : '14px'}; color: #71717a; text-align: center;`;
+      noResults.style.cssText = `padding: ${this.config.containerType === 'sidebar' ? '12px' : '24px'}; font-size: ${this.config.containerType === 'sidebar' ? '12px' : '14px'}; color: var(--color-text-muted); text-align: center;`;
       dropdown.appendChild(noResults);
     }
   }
@@ -564,7 +564,7 @@ class ModelDropdownManager {
     const fontSize = this.config.containerType === 'sidebar' ? '11px' : '12px';
 
     header.textContent = title;
-    header.style.cssText = `padding: ${padding}; font-size: ${fontSize}; color: ${color}; font-weight: 600; background: #0f0f0f; position: sticky; top: 0;`;
+    header.style.cssText = `padding: ${padding}; font-size: ${fontSize}; color: ${color}; font-weight: 600; background: var(--color-bg); position: sticky; top: 0;`;
     dropdown.appendChild(header);
 
     models.forEach(model => {
@@ -580,11 +580,11 @@ class ModelDropdownManager {
     const fontSize = this.config.containerType === 'sidebar' ? '11px' : '12px';
 
     providerHeader.textContent = provider;
-    providerHeader.style.cssText = `padding: ${padding}; font-size: ${fontSize}; color: #a1a1aa; font-weight: 600; background: #18181b; border-bottom: 1px solid #27272a; margin-top: 4px;`;
+    providerHeader.style.cssText = `padding: ${padding}; font-size: ${fontSize}; color: var(--color-text-muted); font-weight: 600; background: var(--color-bg-secondary); border-bottom: 1px solid var(--color-border); margin-top: 4px;`;
     dropdown.appendChild(providerHeader);
 
     models.forEach(model => {
-      const item = this.createModelItem(model, '#e4e4e7', '☆', true);
+      const item = this.createModelItem(model, 'var(--color-text)', '☆', true);
       dropdown.appendChild(item);
     });
   }
@@ -600,7 +600,7 @@ class ModelDropdownManager {
       padding.split(' ')[1];
     const fontSize = this.config.containerType === 'sidebar' ? '13px' : '14px';
 
-    item.style.cssText = `padding: ${padding.split(' ')[0]} ${padding.split(' ')[1]} ${padding.split(' ')[0]} ${leftPadding}; cursor: pointer; font-size: ${fontSize}; color: ${color}; border-bottom: 1px solid #27272a; display: flex; justify-content: space-between; align-items: center;`;
+    item.style.cssText = `padding: ${padding.split(' ')[0]} ${padding.split(' ')[1]} ${padding.split(' ')[0]} ${leftPadding}; cursor: pointer; font-size: ${fontSize}; color: ${color}; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;`;
 
     const modelName = document.createElement('span');
     modelName.textContent = this.getModelLabel(model);
@@ -615,7 +615,7 @@ class ModelDropdownManager {
     const starIcon = document.createElement('span');
     starIcon.textContent = starType;
     starIcon.className = 'model-star-icon';
-    starIcon.style.cssText = `color: ${starType === '★' ? '#fbbf24' : '#52525b'}; font-size: 16px; padding: 0 8px; cursor: pointer; ${starType === '☆' ? 'opacity: 0; transition: opacity 0.2s;' : ''}`;
+    starIcon.style.cssText = `color: ${starType === '★' ? 'var(--color-topic-3)' : 'var(--color-text-muted)'}; font-size: 16px; padding: 0 8px; cursor: pointer; ${starType === '☆' ? 'opacity: 0; transition: opacity 0.2s;' : ''}`;
     starIcon.title = starType === '★' ? 'Remove from favorites' : 'Add to favorites';
 
     const rightControls = document.createElement('span');
@@ -631,7 +631,7 @@ class ModelDropdownManager {
 
   renderSeparator(dropdown) {
     const sep = document.createElement('div');
-    sep.style.cssText = 'height: 2px; background: #3b82f6; margin: 0;';
+    sep.style.cssText = 'height: 2px; background: var(--color-primary); margin: 0;';
     dropdown.appendChild(sep);
   }
 

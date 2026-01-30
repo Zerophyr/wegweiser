@@ -13,8 +13,8 @@
       font-size: 14px;
       margin: 0;
       padding: 0;
-      background: #0f0f0f;
-      color: #e4e4e7;
+      background: var(--color-bg);
+      color: var(--color-text);
       min-height: 100vh;
     }
 
@@ -57,8 +57,8 @@
     }
 
     .history-detail-card {
-      background: #18181b;
-      border: 1px solid #27272a;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       padding: 24px;
       height: 100%;
@@ -71,18 +71,18 @@
       align-items: center;
       margin-bottom: 20px;
       padding-bottom: 16px;
-      border-bottom: 1px solid #27272a;
+      border-bottom: 1px solid var(--color-border);
     }
 
     .history-detail-title {
       font-size: 18px;
       font-weight: 700;
-      color: #d4d4d8;
+      color: var(--color-text-secondary);
     }
 
     .history-close-btn {
-      background: #27272a;
-      color: #e4e4e7;
+      background: var(--color-bg-tertiary);
+      color: var(--color-text);
       border: none;
       border-radius: 6px;
       padding: 6px 12px;
@@ -93,7 +93,7 @@
     }
 
     .history-close-btn:hover {
-      background: #3f3f46;
+      background: var(--color-border-hover);
       transform: none;
       box-shadow: none;
     }
@@ -107,15 +107,15 @@
       margin-bottom: 8px;
       font-weight: 600;
       font-size: 14px;
-      color: #d4d4d8;
+      color: var(--color-text-secondary);
     }
 
     input[type="text"] {
       width: 100%;
       padding: 12px;
-      background: #18181b;
-      color: #e4e4e7;
-      border: 1px solid #27272a;
+      background: var(--color-bg-secondary);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
       font-size: 14px;
@@ -125,9 +125,9 @@
     input[type="password"] {
       width: 100%;
       padding: 12px;
-      background: #18181b;
-      color: #e4e4e7;
-      border: 1px solid #27272a;
+      background: var(--color-bg-secondary);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
       font-size: 14px;
@@ -136,22 +136,22 @@
 
     input[type="text"]:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-subtle);
     }
 
     input[type="password"]:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-subtle);
     }
 
     input[type="text"]::placeholder {
-      color: #52525b;
+      color: var(--color-text-muted);
     }
 
     input[type="password"]::placeholder {
-      color: #52525b;
+      color: var(--color-text-muted);
     }
 
     .key-input {
@@ -177,7 +177,7 @@
       border: none;
       border-radius: 8px;
       background: transparent;
-      color: #f4f4f5;
+      color: var(--color-text);
       cursor: pointer;
       transition: color 0.2s ease, background 0.2s ease;
       padding: 0;
@@ -191,7 +191,7 @@
     }
 
     .key-toggle:focus-visible {
-      outline: 2px solid #3b82f6;
+      outline: 2px solid var(--color-primary);
       outline-offset: 2px;
     }
 
@@ -207,9 +207,9 @@
     select {
       width: 100%;
       padding: 12px;
-      background: #18181b;
-      color: #e4e4e7;
-      border: 1px solid #27272a;
+      background: var(--color-bg-secondary);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       font-family: inherit;
       font-size: 14px;
@@ -219,35 +219,35 @@
 
     select:focus {
       outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-subtle);
     }
 
     select option {
-      background: #18181b;
-      color: #e4e4e7;
+      background: var(--color-bg-secondary);
+      color: var(--color-text);
       padding: 8px;
     }
 
     select option:disabled {
-      color: #71717a;
+      color: var(--color-text-muted);
     }
 
     button {
       padding: 12px 24px;
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-      color: white;
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+      color: var(--color-text-on-primary);
       border: none;
       border-radius: 8px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 1px 3px var(--color-shadow);
     }
 
     button:hover {
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      background: linear-gradient(135deg, var(--color-primary-hover) 0%, #1d4ed8 100%);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
       transform: translateY(-1px);
     }
@@ -265,7 +265,7 @@
     #status, #models-status {
       margin-top: 8px;
       font-size: 13px;
-      color: #71717a;
+      color: var(--color-text-muted);
       font-style: italic;
     }
 
@@ -276,7 +276,7 @@
       font-size: 13px;
       margin-top: 12px;
       cursor: pointer;
-      color: #d4d4d8;
+      color: var(--color-text-secondary);
       font-weight: 500;
     }
 
@@ -284,7 +284,7 @@
       width: 18px;
       height: 18px;
       cursor: pointer;
-      accent-color: #3b82f6;
+      accent-color: var(--color-primary);
     }
 
     #favorite-toggle:disabled {
@@ -299,7 +299,7 @@
       font-size: 13px;
       margin-top: 8px;
       cursor: pointer;
-      color: #d4d4d8;
+      color: var(--color-text-secondary);
       font-weight: 500;
     }
 
@@ -307,7 +307,7 @@
       width: 18px;
       height: 18px;
       cursor: pointer;
-      accent-color: #3b82f6;
+      accent-color: var(--color-primary);
     }
 
     #debug-stream-toggle:disabled {
@@ -328,16 +328,16 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #0f0f0f;
+      background: var(--color-bg);
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #27272a;
+      background: var(--color-scrollbar);
       border-radius: 5px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #3f3f46;
+      background: var(--color-scrollbar-hover);
     }
   </style>
 </head>
@@ -352,7 +352,7 @@
           <option value="openrouter">OpenRouter</option>
           <option value="naga">NagaAI</option>
         </select>
-        <div style="font-size: 12px; color: #71717a; margin-top: 4px;">
+        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 4px;">
           Choose which provider's API key to edit. Models are combined when keys are set.
         </div>
       </div>
@@ -404,7 +404,7 @@
           </button>
         </div>
         <div id="naga-provisioning-group" style="margin-top: 12px; display: none;">
-          <label for="nagaProvisioningKey" style="margin-bottom: 8px;">NagaAI provisioning key <span style="font-weight: 400; color: #71717a;">(Optional)</span></label>
+          <label for="nagaProvisioningKey" style="margin-bottom: 8px;">NagaAI provisioning key <span style="font-weight: 400; color: var(--color-text-muted);">(Optional)</span></label>
           <div class="key-input">
             <input type="password" id="nagaProvisioningKey" placeholder="pk-..." />
             <button
@@ -449,19 +449,19 @@
               </svg>
             </button>
           </div>
-          <div style="font-size: 12px; color: #71717a; margin-top: 6px;">
+          <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 6px;">
             ⚠️ Account balance requires a provisioning key.
           </div>
         </div>
-        <div style="font-size: 12px; color: #71717a; margin-top: 6px;">
+        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 6px;">
           💡 Models refresh after saving. Providers without keys are hidden.
         </div>
       </div>
 
       <div class="form-group">
         <label for="model">Model
-          <span style="font-weight: 400; color: #71717a; font-size: 12px; margin-left: 8px;">
-            Not sure what to pick? Check the <a href="https://lmarena.ai/leaderboard" target="_blank" style="color: #3b82f6; text-decoration: none;">Model Benchmark</a>
+          <span style="font-weight: 400; color: var(--color-text-muted); font-size: 12px; margin-left: 8px;">
+            Not sure what to pick? Check the <a href="https://lmarena.ai/leaderboard" target="_blank" style="color: var(--color-primary); text-decoration: none;">Model Benchmark</a>
           </span>
         </label>
         <div style="position: relative;">
@@ -474,7 +474,7 @@
       <div class="form-group">
         <label for="history-limit">Prompt History Limit</label>
         <input type="number" id="history-limit" min="1" max="200" value="20" style="width: 100px;" />
-        <div style="font-size: 12px; color: #71717a; margin-top: 4px;">Maximum number of prompts to keep in history (default: 20)</div>
+        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 4px;">Maximum number of prompts to keep in history (default: 20)</div>
       </div>
 
       <div class="form-group">
@@ -483,17 +483,17 @@
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
-        <div style="font-size: 12px; color: #71717a; margin-top: 4px;">Choose your preferred color theme</div>
+        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 4px;">Choose your preferred color theme</div>
       </div>
 
       <div class="form-group">
         <label>Prompt History</label>
         <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <button id="export-history-btn" type="button" style="padding: 8px 16px; background: #8b5cf6; font-size: 13px;">Export History (JSON)</button>
-          <button id="export-history-csv-btn" type="button" style="padding: 8px 16px; background: #8b5cf6; font-size: 13px;">Export History (CSV)</button>
-          <button id="clear-all-history-btn" type="button" style="padding: 8px 16px; background: #ef4444; font-size: 13px;">Clear All History</button>
+          <button id="export-history-btn" type="button" style="padding: 8px 16px; background: var(--color-accent); font-size: 13px;">Export History (JSON)</button>
+          <button id="export-history-csv-btn" type="button" style="padding: 8px 16px; background: var(--color-accent); font-size: 13px;">Export History (CSV)</button>
+          <button id="clear-all-history-btn" type="button" style="padding: 8px 16px; background: var(--color-error); font-size: 13px;">Clear All History</button>
         </div>
-        <div id="prompt-history-container" style="max-height: 400px; overflow-y: auto; background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 12px;">
+        <div id="prompt-history-container" style="max-height: 400px; overflow-y: auto; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px;">
           <div id="prompt-history">Loading history...</div>
         </div>
       </div>
@@ -504,12 +504,12 @@
           <input type="checkbox" id="debug-stream-toggle" />
           Enable stream diagnostics
         </label>
-        <div style="font-size: 12px; color: #71717a; margin-top: 6px;">
+        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 6px;">
           Stores the last 500 stream events locally. Disable to stop logging.
         </div>
         <div style="display: flex; gap: 8px; margin-top: 12px;">
-          <button id="download-debug-log-btn" type="button" style="padding: 8px 16px; background: #0ea5e9; font-size: 13px;">Download Log</button>
-          <button id="clear-debug-log-btn" type="button" style="padding: 8px 16px; background: #ef4444; font-size: 13px;">Clear Log</button>
+          <button id="download-debug-log-btn" type="button" style="padding: 8px 16px; background: var(--color-info); font-size: 13px;">Download Log</button>
+          <button id="clear-debug-log-btn" type="button" style="padding: 8px 16px; background: var(--color-error); font-size: 13px;">Clear Log</button>
         </div>
       </div>
 

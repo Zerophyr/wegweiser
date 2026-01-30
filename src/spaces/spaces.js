@@ -337,7 +337,7 @@ function openSpacesContextModal(thread, space) {
     <div class="spaces-context-footer">
       <div class="spaces-context-text">${usedCount}/${MAX_CONTEXT_MESSAGES} messages in context · ${remaining} remaining</div>
       <div class="spaces-context-bar">
-        <div class="spaces-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? '#f59e0b' : '#22c55e'};"></div>
+        <div class="spaces-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};"></div>
       </div>
       ${isNearLimit ? '<div class="spaces-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
     </div>
@@ -861,7 +861,7 @@ function buildMessageHtml(messages) {
           : '';
         const tokenStyle = typeof getTokenBarStyle === 'function'
           ? getTokenBarStyle(meta.tokens || null)
-          : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+          : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
 
         footerHtml = `
           <div class="chat-footer">
@@ -1775,7 +1775,7 @@ function getSourcesData(content) {
 function createStreamingAssistantMessage() {
   const tokenStyle = typeof getTokenBarStyle === 'function'
     ? getTokenBarStyle(null)
-    : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
 
   const messageDiv = document.createElement('div');
   messageDiv.className = 'chat-message chat-message-assistant';
@@ -1873,7 +1873,7 @@ function updateAssistantFooter(ui, meta) {
 
   const tokenStyle = typeof getTokenBarStyle === 'function'
     ? getTokenBarStyle(meta.tokens || null)
-    : { percent: 0, gradient: 'linear-gradient(90deg, #22c55e, #16a34a)' };
+    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
 
   if (ui.tokenFillEl) {
     ui.tokenFillEl.style.width = `${tokenStyle.percent}%`;
@@ -1996,12 +1996,12 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
       wrapper.className = 'chat-reasoning-bubble';
       wrapper.style.marginBottom = '12px';
       wrapper.innerHTML = `
-        <div style="padding: 12px; background: #1e1e21; border-left: 3px solid #a78bfa; border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
+          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
             <span>💭</span>
             <span>Reasoning:</span>
           </div>
-          <div class="reasoning-text" style="font-size: 13px; color: #d4d4d8; line-height: 1.6; white-space: pre-wrap;"></div>
+          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
       `;
       const contentEl = assistantBubble || bubble.querySelector('.chat-content');

@@ -354,17 +354,17 @@ function renderPromptHistory(history) {
   for (const item of history) {
     const div = document.createElement("div");
     div.className = "history-item";
-    div.style.cssText = "background: #0f0f0f; border: 1px solid #27272a; border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;";
+    div.style.cssText = "background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;";
 
     const ts = new Date(item.createdAt).toLocaleString();
     const promptPreview = item.prompt.length > 80 ? item.prompt.slice(0, 80) + "…" : item.prompt;
 
     div.innerHTML = `
       <div class="history-preview">
-        <div style="font-size: 11px; color: #71717a; margin-bottom: 4px;">${ts}</div>
-        <div style="font-size: 13px; color: #d4d4d8; margin-bottom: 4px; font-weight: 600;">Prompt:</div>
-        <div style="font-size: 12px; color: #d4d4d8; margin-bottom: 8px; white-space: pre-wrap;">${escapeHtml(promptPreview)}</div>
-        <div style="font-size: 11px; color: #71717a; margin-bottom: 2px;">Click to view full context</div>
+        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px;">${ts}</div>
+        <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 600;">Prompt:</div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeHtml(promptPreview)}</div>
+        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Click to view full context</div>
       </div>
     `;
 
@@ -386,11 +386,11 @@ function renderPromptHistory(history) {
 
         // Highlight selected item
         document.querySelectorAll(".history-item").forEach(i => {
-          i.style.background = "#0f0f0f";
-          i.style.borderColor = "#27272a";
+          i.style.background = "var(--color-bg)";
+          i.style.borderColor = "var(--color-border)";
         });
-        item.style.background = "#18181b";
-        item.style.borderColor = "#3b82f6";
+        item.style.background = "var(--color-bg-secondary)";
+        item.style.borderColor = "var(--color-primary)";
       }
     });
   });
@@ -408,18 +408,18 @@ function showHistoryDetail(item) {
 
   detailContent.innerHTML = `
     <div style="margin-bottom: 20px;">
-      <div style="font-size: 11px; color: #71717a; margin-bottom: 12px;">${ts}</div>
+      <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 12px;">${ts}</div>
 
-      <div style="font-size: 14px; color: #d4d4d8; margin-bottom: 8px; font-weight: 600;">Prompt</div>
-      <div style="font-size: 13px; color: #e4e4e7; margin-bottom: 16px; white-space: pre-wrap; background: #0f0f0f; padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeHtml(item.prompt)}</div>
+      <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Prompt</div>
+      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeHtml(item.prompt)}</div>
 
-      <div style="font-size: 14px; color: #d4d4d8; margin-bottom: 8px; font-weight: 600;">Answer</div>
-      <div style="font-size: 13px; color: #e4e4e7; margin-bottom: 20px; white-space: pre-wrap; background: #0f0f0f; padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeHtml(item.answer || "No answer available")}</div>
+      <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Answer</div>
+      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeHtml(item.answer || "No answer available")}</div>
 
       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <button class="detail-copy-prompt-btn" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Prompt</button>
-        <button class="detail-copy-answer-btn" style="padding: 8px 16px; background: #8b5cf6; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Answer</button>
-        <button class="detail-delete-btn" style="padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Delete</button>
+        <button class="detail-copy-prompt-btn" style="padding: 8px 16px; background: var(--color-primary); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Prompt</button>
+        <button class="detail-copy-answer-btn" style="padding: 8px 16px; background: var(--color-accent); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Answer</button>
+        <button class="detail-delete-btn" style="padding: 8px 16px; background: var(--color-error); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Delete</button>
       </div>
     </div>
   `;
@@ -522,8 +522,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Remove highlight from all items
       document.querySelectorAll(".history-item").forEach(i => {
-        i.style.background = "#0f0f0f";
-        i.style.borderColor = "#27272a";
+        i.style.background = "var(--color-bg)";
+        i.style.borderColor = "var(--color-border)";
       });
     });
   }
@@ -578,7 +578,7 @@ async function loadModels() {
     }
 
     modelsStatusEl.textContent = `✓ Loaded ${combinedModels.length} models.`;
-    modelsStatusEl.style.color = "#10b981";
+    modelsStatusEl.style.color = "var(--color-success)";
   } catch (e) {
     console.error("Failed to load models:", e);
     if (typeof e?.message === "string" && e.message.toLowerCase().includes("no api key")) {
@@ -586,7 +586,7 @@ async function loadModels() {
     } else {
       modelsStatusEl.textContent = `Error: ${e.message}`;
     }
-    modelsStatusEl.style.color = "#ef4444";
+    modelsStatusEl.style.color = "var(--color-error)";
   }
 }
 
@@ -635,7 +635,7 @@ saveBtn.addEventListener("click", async () => {
   ]);
 
   statusEl.textContent = combinedModelId ? "Saved." : "Saved. (Using default model)";
-  statusEl.style.color = "#10b981";
+  statusEl.style.color = "var(--color-success)";
   await loadModels();
   await notifyProviderSettingsUpdated(settings.id);
   setTimeout(() => {

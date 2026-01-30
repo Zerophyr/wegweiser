@@ -106,8 +106,8 @@ class ContextVisualization {
     const modal = document.createElement('div');
     modal.className = 'context-timeline-modal';
     modal.style.cssText = `
-      background: #18181b;
-      border: 1px solid #3b82f6;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-primary);
       border-radius: 8px;
       max-width: 600px;
       width: 90%;
@@ -122,7 +122,7 @@ class ContextVisualization {
     const header = document.createElement('div');
     header.style.cssText = `
       padding: 16px;
-      border-bottom: 1px solid #27272a;
+      border-bottom: 1px solid var(--color-border);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -130,9 +130,9 @@ class ContextVisualization {
     header.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 20px;">🧠</span>
-        <span style="font-size: 14px; font-weight: 600; color: #e4e4e7;">Conversation Timeline</span>
+        <span style="font-size: 14px; font-weight: 600; color: var(--color-text);">Conversation Timeline</span>
       </div>
-      <button class="context-timeline-close" style="background: none; border: none; color: #71717a; cursor: pointer; font-size: 24px;">×</button>
+      <button class="context-timeline-close" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: 24px;">×</button>
     `;
 
     // Timeline content
@@ -162,7 +162,7 @@ class ContextVisualization {
 
   buildTimelineContent(messages) {
     if (!messages || messages.length === 0) {
-      return '<div style="text-align: center; color: #71717a; padding: 40px;">No messages in context</div>';
+      return '<div style="text-align: center; color: var(--color-text-muted); padding: 40px;">No messages in context</div>';
     }
 
     let html = '<div class="timeline">';
@@ -170,7 +170,7 @@ class ContextVisualization {
     messages.forEach((msg, index) => {
       const isUser = msg.role === 'user';
       const icon = isUser ? '👤' : '🤖';
-      const color = isUser ? '#3b82f6' : '#10b981';
+      const color = isUser ? 'var(--color-primary)' : 'var(--color-success)';
       const label = isUser ? 'You' : 'Assistant';
       const preview = this.truncateText(msg.content, 150);
       const position = index + 1;
@@ -180,12 +180,12 @@ class ContextVisualization {
           <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: ${color}20; border: 2px solid ${color}; display: flex; align-items: center; justify-content: center; font-size: 18px; position: relative; z-index: 1;">
             ${icon}
           </div>
-          <div style="flex: 1; padding-bottom: 12px; ${index < messages.length - 1 ? 'border-left: 2px solid #27272a; margin-left: 19px; padding-left: 20px;' : ''}">
+          <div style="flex: 1; padding-bottom: 12px; ${index < messages.length - 1 ? 'border-left: 2px solid var(--color-border); margin-left: 19px; padding-left: 20px;' : ''}">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
               <span style="font-size: 13px; font-weight: 600; color: ${color};">${label}</span>
-              <span style="font-size: 11px; color: #71717a;">#${position}</span>
+              <span style="font-size: 11px; color: var(--color-text-muted);">#${position}</span>
             </div>
-            <div style="font-size: 12px; color: #a1a1aa; line-height: 1.5;">
+            <div style="font-size: 12px; color: var(--color-text-muted); line-height: 1.5;">
               ${escapeHtml(preview)}
             </div>
           </div>
@@ -200,15 +200,15 @@ class ContextVisualization {
     const isNearLimit = fillPercentage > 75;
 
     html += `
-      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #27272a;">
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-border);">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="font-size: 12px; color: #71717a;">Memory Usage</span>
-          <span style="font-size: 12px; color: ${isNearLimit ? '#f59e0b' : '#10b981'};">${messages.length}/${this.maxMessages} messages</span>
+          <span style="font-size: 12px; color: var(--color-text-muted);">Memory Usage</span>
+          <span style="font-size: 12px; color: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};">${messages.length}/${this.maxMessages} messages</span>
         </div>
-        <div style="height: 6px; background: #27272a; border-radius: 3px; overflow: hidden;">
-          <div style="height: 100%; background: ${isNearLimit ? '#f59e0b' : '#10b981'}; width: ${fillPercentage}%; transition: width 0.3s ease;"></div>
+        <div style="height: 6px; background: var(--color-bg-tertiary); border-radius: 3px; overflow: hidden;">
+          <div style="height: 100%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'}; width: ${fillPercentage}%; transition: width 0.3s ease;"></div>
         </div>
-        ${isNearLimit ? '<div style="margin-top: 8px; font-size: 11px; color: #f59e0b;">⚠️ Context is near capacity. Older messages will be removed soon.</div>' : ''}
+        ${isNearLimit ? '<div style="margin-top: 8px; font-size: 11px; color: var(--color-warning);">⚠️ Context is near capacity. Older messages will be removed soon.</div>' : ''}
       </div>
     `;
 
@@ -245,8 +245,8 @@ style.textContent = `
     align-items: center;
     justify-content: center;
     font-size: 18px;
-    background: #18181b;
-    border: 1px solid #27272a;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
     transition: all 0.2s ease;
     position: absolute;
     right: 16px;
@@ -257,12 +257,12 @@ style.textContent = `
   .context-viz-icon.active {
     opacity: 1;
     cursor: pointer;
-    border-color: #3b82f6;
+    border-color: var(--color-primary);
   }
 
   .context-viz-icon.active:hover {
-    background: #1e1e21;
-    border-color: #60a5fa;
+    background: var(--color-bg-tertiary);
+    border-color: var(--color-link);
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
   }
 
@@ -270,7 +270,7 @@ style.textContent = `
     position: absolute;
     top: -4px;
     right: -4px;
-    background: #3b82f6;
+    background: var(--color-primary);
     color: white;
     font-size: 9px;
     font-weight: 700;
@@ -282,7 +282,7 @@ style.textContent = `
   }
 
   .context-badge.warning {
-    background: #f59e0b;
+    background: var(--color-warning);
   }
 `;
 document.head.appendChild(style);

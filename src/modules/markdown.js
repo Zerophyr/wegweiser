@@ -203,21 +203,21 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
         font-size: 1.8em;
         font-weight: 700;
         margin: 16px 0 12px 0;
-        color: #e4e4e7;
-        border-bottom: 2px solid #3b82f6;
+        color: var(--color-text);
+        border-bottom: 2px solid var(--color-primary);
         padding-bottom: 8px;
       }
       .answer-content h2 {
         font-size: 1.5em;
         font-weight: 700;
         margin: 14px 0 10px 0;
-        color: #e4e4e7;
+        color: var(--color-text);
       }
       .answer-content h3 {
         font-size: 1.3em;
         font-weight: 600;
         margin: 12px 0 8px 0;
-        color: #d4d4d8;
+        color: var(--color-text-secondary);
       }
       .answer-content h4,
       .answer-content h5,
@@ -225,39 +225,39 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
         font-size: 1.1em;
         font-weight: 600;
         margin: 10px 0 6px 0;
-        color: #d4d4d8;
+        color: var(--color-text-secondary);
       }
       .answer-content p {
         margin: 8px 0;
         line-height: 1.6;
-        color: #e4e4e7;
+        color: var(--color-text);
       }
       .answer-content strong {
         font-weight: 700;
-        color: #f4f4f5;
+        color: var(--color-text);
       }
       .answer-content em {
         font-style: italic;
-        color: #d4d4d8;
+        color: var(--color-text-secondary);
       }
       .answer-content code.inline-code {
-        background: #27272a;
-        color: #f472b6;
+        background: var(--color-bg-tertiary);
+        color: var(--color-topic-4);
         padding: 2px 6px;
         border-radius: 4px;
         font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
         font-size: 0.9em;
       }
       .answer-content pre.code-block {
-        background: #18181b;
-        border: 1px solid #27272a;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
         border-radius: 8px;
         padding: 12px;
         overflow-x: auto;
         margin: 12px 0;
       }
       .answer-content pre.code-block code {
-        color: #e4e4e7;
+        color: var(--color-text);
         font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
         font-size: 0.9em;
         line-height: 1.5;
@@ -270,27 +270,27 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
       .answer-content li {
         margin: 4px 0;
         line-height: 1.6;
-        color: #e4e4e7;
+        color: var(--color-text);
       }
       .answer-content blockquote {
-        border-left: 4px solid #3b82f6;
+        border-left: 4px solid var(--color-primary);
         padding-left: 16px;
         margin: 12px 0;
-        color: #a1a1aa;
+        color: var(--color-text-muted);
         font-style: italic;
       }
       .answer-content hr {
         border: none;
-        border-top: 1px solid #27272a;
+        border-top: 1px solid var(--color-border);
         margin: 16px 0;
       }
       .answer-content a.md-link {
-        color: #3b82f6;
+        color: var(--color-primary);
         text-decoration: underline;
         transition: color 0.2s;
       }
       .answer-content a.md-link:hover {
-        color: #60a5fa;
+        color: var(--color-link);
       }
     `;
     document.head.appendChild(style);

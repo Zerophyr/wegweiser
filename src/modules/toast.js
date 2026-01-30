@@ -51,12 +51,12 @@ function showToast(message, type = 'info', durationOrOptions = 3000) {
     warning: '⚠'
   };
 
-  // Colors based on type
+  // Colors based on type (use CSS variables with fallbacks)
   const colors = {
-    success: { bg: '#10b981', border: '#059669' },
-    error: { bg: '#ef4444', border: '#dc2626' },
-    info: { bg: '#3b82f6', border: '#2563eb' },
-    warning: { bg: '#f59e0b', border: '#d97706' }
+    success: { bg: 'var(--color-success, #10b981)', border: '#059669' },
+    error: { bg: 'var(--color-error, #ef4444)', border: '#dc2626' },
+    info: { bg: 'var(--color-primary, #3b82f6)', border: '#2563eb' },
+    warning: { bg: 'var(--color-warning, #f59e0b)', border: '#d97706' }
   };
 
   const color = colors[type] || colors.info;

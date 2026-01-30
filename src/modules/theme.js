@@ -7,16 +7,32 @@ const THEMES = {
       bg: '#0f0f0f',
       bgSecondary: '#18181b',
       bgTertiary: '#27272a',
+      bgElevated: '#111113',
       text: '#e4e4e7',
       textSecondary: '#d4d4d8',
-      textMuted: '#71717a',
+      textMuted: '#a1a1aa',
+      textOnPrimary: '#ffffff',
       border: '#27272a',
       borderHover: '#3f3f46',
       primary: '#3b82f6',
       primaryHover: '#2563eb',
+      primarySubtle: 'rgba(59, 130, 246, 0.1)',
       success: '#10b981',
       error: '#ef4444',
-      warning: '#f59e0b'
+      warning: '#f59e0b',
+      info: '#0ea5e9',
+      accent: '#8b5cf6',
+      link: '#60a5fa',
+      linkHover: '#93c5fd',
+      topic1: '#60a5fa',
+      topic2: '#34d399',
+      topic3: '#fbbf24',
+      topic4: '#f472b6',
+      topic5: '#a78bfa',
+      topic6: '#22d3ee',
+      shadow: 'rgba(0, 0, 0, 0.4)',
+      scrollbar: '#27272a',
+      scrollbarHover: '#3f3f46'
     }
   },
   light: {
@@ -25,19 +41,45 @@ const THEMES = {
       bg: '#ffffff',
       bgSecondary: '#f9fafb',
       bgTertiary: '#f3f4f6',
+      bgElevated: '#ffffff',
       text: '#1f2937',
       textSecondary: '#374151',
       textMuted: '#6b7280',
+      textOnPrimary: '#ffffff',
       border: '#e5e7eb',
       borderHover: '#d1d5db',
       primary: '#3b82f6',
       primaryHover: '#2563eb',
-      success: '#10b981',
-      error: '#ef4444',
-      warning: '#f59e0b'
+      primarySubtle: 'rgba(59, 130, 246, 0.08)',
+      success: '#059669',
+      error: '#dc2626',
+      warning: '#d97706',
+      info: '#0284c7',
+      accent: '#7c3aed',
+      link: '#2563eb',
+      linkHover: '#1d4ed8',
+      topic1: '#2563eb',
+      topic2: '#059669',
+      topic3: '#d97706',
+      topic4: '#db2777',
+      topic5: '#7c3aed',
+      topic6: '#0891b2',
+      shadow: 'rgba(0, 0, 0, 0.1)',
+      scrollbar: '#e5e7eb',
+      scrollbarHover: '#d1d5db'
     }
   }
 };
+
+/**
+ * Convert camelCase to kebab-case (e.g. bgSecondary -> bg-secondary)
+ */
+function camelToKebab(str) {
+  return str
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+    .toLowerCase();
+}
 
 /**
  * Apply theme to current page
@@ -47,9 +89,9 @@ function applyTheme(themeName) {
   const theme = THEMES[themeName] || THEMES.dark;
   const root = document.documentElement;
 
-  // Set CSS variables
+  // Set CSS variables (convert camelCase keys to kebab-case)
   Object.entries(theme.colors).forEach(([key, value]) => {
-    root.style.setProperty(`--color-${key}`, value);
+    root.style.setProperty(`--color-${camelToKebab(key)}`, value);
   });
 
   // Add theme class to body
@@ -88,16 +130,32 @@ function initTheme() {
         --color-bg: #0f0f0f;
         --color-bg-secondary: #18181b;
         --color-bg-tertiary: #27272a;
+        --color-bg-elevated: #111113;
         --color-text: #e4e4e7;
         --color-text-secondary: #d4d4d8;
-        --color-text-muted: #71717a;
+        --color-text-muted: #a1a1aa;
+        --color-text-on-primary: #ffffff;
         --color-border: #27272a;
         --color-border-hover: #3f3f46;
         --color-primary: #3b82f6;
         --color-primary-hover: #2563eb;
+        --color-primary-subtle: rgba(59, 130, 246, 0.1);
         --color-success: #10b981;
         --color-error: #ef4444;
         --color-warning: #f59e0b;
+        --color-info: #0ea5e9;
+        --color-accent: #8b5cf6;
+        --color-link: #60a5fa;
+        --color-link-hover: #93c5fd;
+        --color-topic-1: #60a5fa;
+        --color-topic-2: #34d399;
+        --color-topic-3: #fbbf24;
+        --color-topic-4: #f472b6;
+        --color-topic-5: #a78bfa;
+        --color-topic-6: #22d3ee;
+        --color-shadow: rgba(0, 0, 0, 0.4);
+        --color-scrollbar: #27272a;
+        --color-scrollbar-hover: #3f3f46;
       }
 
       body {
@@ -148,267 +206,78 @@ function initTheme() {
         --color-bg: #ffffff;
         --color-bg-secondary: #f9fafb;
         --color-bg-tertiary: #f3f4f6;
+        --color-bg-elevated: #ffffff;
         --color-text: #1f2937;
         --color-text-secondary: #374151;
         --color-text-muted: #6b7280;
+        --color-text-on-primary: #ffffff;
         --color-border: #e5e7eb;
         --color-border-hover: #d1d5db;
+        --color-primary-subtle: rgba(59, 130, 246, 0.08);
+        --color-success: #059669;
+        --color-error: #dc2626;
+        --color-warning: #d97706;
+        --color-info: #0284c7;
+        --color-accent: #7c3aed;
+        --color-link: #2563eb;
+        --color-link-hover: #1d4ed8;
+        --color-topic-1: #2563eb;
+        --color-topic-2: #059669;
+        --color-topic-3: #d97706;
+        --color-topic-4: #db2777;
+        --color-topic-5: #7c3aed;
+        --color-topic-6: #0891b2;
+        --color-shadow: rgba(0, 0, 0, 0.1);
+        --color-scrollbar: #e5e7eb;
+        --color-scrollbar-hover: #d1d5db;
       }
 
       body.theme-light h1 {
-        color: #1f2937;
-        -webkit-text-fill-color: #1f2937;
-        background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
       }
 
-      body.theme-light .answer-content {
-        color: #1f2937;
-      }
-
-      body.theme-light #header {
-        background: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
-        border-bottom-color: #e5e7eb;
-      }
-
-      body.theme-light #settings-icon {
-        background: #f9fafb;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light #settings-icon:hover {
-        background: #f3f4f6;
-        border-color: #d1d5db;
-      }
-
-      body.theme-light #settings-icon svg {
-        fill: #6b7280;
-      }
-
-      body.theme-light #balance-row {
-        background: #ffffff;
-        border-bottom-color: #e5e7eb;
-      }
-
-      body.theme-light .toggle-btn {
-        background: #f9fafb;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light .toggle-btn:hover {
-        background: #f3f4f6;
-        border-color: #d1d5db;
-      }
-
+      /* Active toggle uses unique blue tint not in variable set */
       body.theme-light .toggle-btn.active {
         background: #dbeafe;
-        border-color: #3b82f6;
-      }
-
-      body.theme-light .toggle-btn svg {
-        fill: #6b7280;
       }
 
       body.theme-light .toggle-btn.active svg {
-        fill: #2563eb;
+        fill: var(--color-primary-hover);
       }
 
-      body.theme-light #balance-refresh {
-        background: #f3f4f6;
-        color: #1f2937;
-        border-color: #d1d5db;
-      }
-
-      body.theme-light #balance-refresh:hover {
-        background: #e5e7eb;
-        border-color: #9ca3af;
-      }
-
-      body.theme-light #bottom-section {
-        background: #ffffff;
-        border-top-color: #e5e7eb;
-      }
-
-      body.theme-light #prompt {
-        background: #f9fafb;
-        color: #1f2937;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light #prompt:focus {
-        border-color: #3b82f6;
-      }
-
-      body.theme-light #prompt::placeholder {
-        color: #9ca3af;
-      }
-
-      body.theme-light .answer-item {
-        background: #f9fafb;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light .answer-meta {
-        color: #6b7280;
-      }
-
-      body.theme-light .answer-footer {
-        border-top-color: #e5e7eb;
-        color: #9ca3af;
-      }
-
-      body.theme-light .clear-btn {
-        background: #f3f4f6;
-        color: #1f2937;
-        border-color: #d1d5db;
-      }
-
-      body.theme-light .clear-btn:hover {
-        background: #e5e7eb;
-        border-color: #9ca3af;
-      }
-
-      body.theme-light .typing-indicator {
-        background: #f9fafb;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light #model-section {
-        background: #f9fafb;
-        border-top-color: #e5e7eb;
-      }
-
-      body.theme-light #model-label {
-        color: #6b7280;
-      }
-
-      body.theme-light #model-select {
-        background: #ffffff;
-        color: #1f2937;
-        border-color: #e5e7eb;
-      }
-
-      body.theme-light #model-select option {
-        background: #f9fafb;
-        color: #1f2937;
-      }
-
-      body.theme-light #model-status {
-        color: #6b7280;
-      }
-
-      body.theme-light ::-webkit-scrollbar-track {
-        background: #ffffff;
-      }
-
-      body.theme-light ::-webkit-scrollbar-thumb {
-        background: #d1d5db;
-      }
-
-      body.theme-light ::-webkit-scrollbar-thumb:hover {
-        background: #9ca3af;
-      }
-
-      /* Options page specific - light theme */
-      body.theme-light #prompt-history-container {
-        background: #f9fafb !important;
-        border-color: #e5e7eb !important;
-      }
-
-      body.theme-light #prompt-history {
-        color: #1f2937;
-      }
-
-      body.theme-light .history-item {
-        background: #ffffff !important;
-        border-color: #e5e7eb !important;
-        color: #1f2937;
-      }
-
-      body.theme-light .history-item:hover {
-        background: #f3f4f6 !important;
-        border-color: #d1d5db !important;
-      }
-
+      /* Selected history item uses unique blue tint */
       body.theme-light .history-item.selected {
         background: #dbeafe !important;
-        border-color: #3b82f6 !important;
+        border-color: var(--color-primary) !important;
       }
 
-      body.theme-light .history-detail-card {
-        background: #f9fafb !important;
-        border-color: #e5e7eb !important;
-      }
-
-      body.theme-light .history-detail-header {
-        border-bottom-color: #e5e7eb;
-      }
-
-      body.theme-light .history-detail-title {
-        color: #1f2937;
-      }
-
-      body.theme-light .history-close-btn {
-        background: #f3f4f6;
-        color: #1f2937;
-        border-color: #d1d5db;
-      }
-
-      body.theme-light .history-close-btn:hover {
-        background: #e5e7eb;
-        border-color: #9ca3af;
-      }
-
-      body.theme-light .prompt-item-label,
-      body.theme-light .prompt-item input[type="text"],
-      body.theme-light .prompt-item textarea {
-        color: #1f2937;
-      }
-
-      body.theme-light .history-prompt,
-      body.theme-light .history-answer {
-        color: #1f2937;
-      }
-
-      body.theme-light .history-timestamp {
-        color: #6b7280;
-      }
-
-      /* History detail content - light theme */
-      body.theme-light #history-detail-content {
-        color: #1f2937;
-      }
-
-      body.theme-light #history-detail-content > div {
-        color: #1f2937;
-      }
-
+      /* Override JS-generated inline styles for light theme */
       body.theme-light #history-detail-content div[style*="color: #71717a"] {
-        color: #6b7280 !important;
+        color: var(--color-text-muted) !important;
       }
 
       body.theme-light #history-detail-content div[style*="color: #d4d4d8"] {
-        color: #1f2937 !important;
+        color: var(--color-text) !important;
       }
 
       body.theme-light #history-detail-content div[style*="color: #e4e4e7"] {
-        color: #1f2937 !important;
+        color: var(--color-text) !important;
       }
 
       body.theme-light #history-detail-content div[style*="background: #0f0f0f"] {
-        background: #f9fafb !important;
-        border: 1px solid #e5e7eb !important;
+        background: var(--color-bg-secondary) !important;
+        border: 1px solid var(--color-border) !important;
       }
 
-      /* History preview in list - light theme */
       body.theme-light .history-preview div[style*="color: #71717a"] {
-        color: #6b7280 !important;
+        color: var(--color-text-muted) !important;
       }
 
       body.theme-light .history-preview div[style*="color: #d4d4d8"] {
-        color: #1f2937 !important;
+        color: var(--color-text) !important;
       }
     `;
     document.head.appendChild(style);
@@ -420,5 +289,5 @@ function initTheme() {
 
 // Export for use in other files
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { THEMES, applyTheme, loadTheme, initTheme };
+  module.exports = { THEMES, applyTheme, loadTheme, initTheme, camelToKebab };
 }
