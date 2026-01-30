@@ -2455,6 +2455,12 @@ async function init() {
     initTheme();
   }
 
+  if (typeof cleanupImageCache === 'function') {
+    cleanupImageCache().catch((e) => {
+      console.warn('Failed to cleanup image cache:', e);
+    });
+  }
+
   // Load data
   await loadProviderSetting();
   await loadModels();

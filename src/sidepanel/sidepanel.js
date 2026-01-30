@@ -472,17 +472,29 @@ async function generateImage(prompt) {
       });
     }
 
+    let resolvedDataUrl = dataUrl;
+    if (typeof getImageCacheEntry === "function") {
+      const cached = await getImageCacheEntry(imageId);
+      resolvedDataUrl = cached?.dataUrl || cached?.data || resolvedDataUrl;
+    }
+
     if (answerContent && typeof buildImageCard === "function") {
+      if (!resolvedDataUrl) {
+        answerContent.innerHTML = "";
+        answerContent.appendChild(buildImageCard({ state: "expired" }));
+        metaEl.textContent = "⚠️ Image expired.";
+        return;
+      }
       const readyCard = buildImageCard({
         state: "ready",
-        imageUrl: dataUrl,
+        imageUrl: resolvedDataUrl,
         mode: "sidepanel",
-        onView: () => openImageInNewTab(dataUrl),
-        onDownload: () => downloadImage(dataUrl, imageId, mimeType)
+        onView: () => openImageInNewTab(resolvedDataUrl),
+        onDownload: () => downloadImage(resolvedDataUrl, imageId, mimeType)
       });
       const thumb = readyCard.querySelector(".image-card-thumb");
       if (thumb) {
-        thumb.addEventListener("click", () => openImageInNewTab(dataUrl));
+        thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl));
       }
       answerContent.innerHTML = "";
       answerContent.appendChild(readyCard);
@@ -1527,6 +1539,12 @@ function hideTypingIndicator() {
 document.addEventListener("DOMContentLoaded", async () => {
   // Hide answer box initially if empty
   updateAnswerVisibility();
+
+  if (typeof cleanupImageCache === "function") {
+    cleanupImageCache().catch((e) => {
+      console.warn("Failed to cleanup image cache:", e);
+    });
+  }
 
   // Load toggle settings
   loadToggleSettings();

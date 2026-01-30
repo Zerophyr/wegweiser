@@ -1,7 +1,8 @@
 const {
   pruneExpiredImageCache,
   putImageCacheEntry,
-  getImageCacheEntry
+  getImageCacheEntry,
+  cleanupImageCache
 } = require("../src/shared/image-cache.js");
 
 const IMAGE_CACHE_KEY = "or_image_cache";
@@ -40,5 +41,21 @@ describe("image cache", () => {
     });
     const res = await getImageCacheEntry("x", now);
     expect(res).toBeNull();
+  });
+
+  test("cleanupImageCache prunes expired entries and persists", async () => {
+    const now = 1000;
+    (global as any).chrome.storage.local.get.mockResolvedValue({
+      [IMAGE_CACHE_KEY]: {
+        stale: { imageId: "stale", expiresAt: now - 1 },
+        fresh: { imageId: "fresh", expiresAt: now + 1 }
+      }
+    });
+    await cleanupImageCache(now);
+    expect((global as any).chrome.storage.local.set).toHaveBeenCalledWith({
+      [IMAGE_CACHE_KEY]: {
+        fresh: { imageId: "fresh", expiresAt: now + 1 }
+      }
+    });
   });
 });
