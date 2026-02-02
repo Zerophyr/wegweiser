@@ -159,6 +159,14 @@ class ModelDropdownManager {
         }
       }, 0);
     });
+
+    // Support closing when clicking outside input while dropdown is open
+    document.addEventListener('mousedown', (e) => {
+      if (!this.state.visible) return;
+      if (input.contains(e.target)) return;
+      if (this.dropdownElement.contains(e.target)) return;
+      this.hide();
+    });
   }
 
   floatInput() {
