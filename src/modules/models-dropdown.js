@@ -32,6 +32,8 @@ class ModelDropdownManager {
     this.createDropdownElement();
     this.attachEventListeners();
     this.loadRecentlyUsedModels();
+    this.inputParent = this.config.inputElement ? this.config.inputElement.parentElement : null;
+    this.inputPlaceholder = null;
   }
 
   createDropdownElement() {
@@ -157,6 +159,40 @@ class ModelDropdownManager {
         }
       }, 0);
     });
+  }
+
+  floatInput() {
+    const input = this.config.inputElement;
+    if (!input || !this.dropdownElement || this.dropdownElement.contains(input)) return;
+    if (!this.inputPlaceholder && input.parentElement) {
+      this.inputPlaceholder = document.createComment('model-input-placeholder');
+      input.parentElement.insertBefore(this.inputPlaceholder, input);
+    }
+    input.classList.add('model-input-floating');
+    this.dropdownElement.insertBefore(input, this.dropdownElement.firstChild);
+  }
+
+  dockInput() {
+    const input = this.config.inputElement;
+    if (!input || !this.inputParent) return;
+    if (!this.dropdownElement.contains(input)) return;
+    input.classList.remove('model-input-floating');
+    if (this.inputPlaceholder && this.inputPlaceholder.parentElement) {
+      this.inputPlaceholder.parentElement.insertBefore(input, this.inputPlaceholder);
+      this.inputPlaceholder.remove();
+      this.inputPlaceholder = null;
+    } else {
+      this.inputParent.appendChild(input);
+    }
+    this.focusInput();
+  }
+
+  focusInput() {
+    const input = this.config.inputElement;
+    if (!input) return;
+    const value = input.value || '';
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
   }
 
   handleKeyDown(e) {
@@ -441,6 +477,8 @@ class ModelDropdownManager {
     this.render();
     this.dropdownElement.style.display = 'block';
     this.state.visible = true;
+    this.floatInput();
+    this.focusInput();
   }
 
   hide() {
@@ -449,6 +487,7 @@ class ModelDropdownManager {
     }
     this.state.visible = false;
     this.state.selectedIndex = -1;
+    this.dockInput();
   }
 
   render() {
