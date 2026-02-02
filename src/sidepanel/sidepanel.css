@@ -825,6 +825,7 @@ body {
 
 #model-input-wrapper {
   position: relative;
+  z-index: 1001;
 }
 
 #model-input {
@@ -837,6 +838,8 @@ body {
   font-family: inherit;
   font-size: 12px;
   transition: all 0.2s ease;
+  position: relative;
+  z-index: 1002;
 }
 
 #model-input:focus {
