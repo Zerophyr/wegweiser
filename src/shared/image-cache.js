@@ -158,7 +158,20 @@ async function putImageCacheEntry(entry, now = Date.now()) {
   if (hasImageStoreSupport() && typeof trimImageStoreToMaxBytes === "function") {
     const limitBytes = await getImageCacheLimitBytes();
     if (Number.isFinite(limitBytes)) {
-      await trimImageStoreToMaxBytes(limitBytes);
+      const trimResult = await trimImageStoreToMaxBytes(limitBytes);
+      const removedIds = Array.isArray(trimResult?.removedIds) ? trimResult.removedIds : [];
+      if (removedIds.length) {
+        let changed = false;
+        removedIds.forEach((imageId) => {
+          if (cache[imageId]) {
+            delete cache[imageId];
+            changed = true;
+          }
+        });
+        if (changed) {
+          await storage.set({ [key]: cache });
+        }
+      }
     }
   }
   return cacheEntry;
@@ -188,7 +201,13 @@ async function cleanupImageCache(now = Date.now()) {
     if (typeof trimImageStoreToMaxBytes === "function") {
       const limitBytes = await getImageCacheLimitBytes();
       if (Number.isFinite(limitBytes)) {
-        await trimImageStoreToMaxBytes(limitBytes);
+        const trimResult = await trimImageStoreToMaxBytes(limitBytes);
+        const removedIds = Array.isArray(trimResult?.removedIds) ? trimResult.removedIds : [];
+        if (removedIds.length) {
+          removedIds.forEach((imageId) => {
+            delete nextCache[imageId];
+          });
+        }
       }
     }
   }

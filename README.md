@@ -82,9 +82,9 @@ _(Coming soon)_
    - NagaAI: [naga.ac](https://naga.ac)
 2. Click the extension icon or open the side panel
 3. Click the gear icon (⚙️) to open options
-4. Choose your provider (OpenRouter or NagaAI) to edit keys
-5. Enter your API key (NagaAI: add provisioning key to see balance)
-6. Click "Save" (models refresh automatically)
+4. Enter API keys in the provider cards (NagaAI: add provisioning key to see balance)
+5. Enable the providers you want to load models for (Enable is disabled until a key is present)
+6. Models refresh automatically when providers are enabled/disabled
 7. Select your preferred model from the search dropdown
 8. Click "Save" if you changed the model
 
@@ -119,7 +119,7 @@ _(Coming soon)_
 3. Theme applies immediately
 
 ### Options Highlights
-1. **Provider keys**: Switch provider to edit OpenRouter or NagaAI keys
+1. **Provider cards + Enable toggles**: Enable OpenRouter and/or NagaAI (disabled until a key is present)
 2. **Provisioning key**: Optional NagaAI key to enable balance display
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)

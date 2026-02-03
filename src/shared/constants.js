@@ -29,7 +29,9 @@ export const STORAGE_KEYS = {
   DEBUG_STREAM: "or_debug_stream",
   IMAGE_CACHE: "or_image_cache",
   COLLAPSE_ON_SPACES: "or_collapse_on_spaces",
-  IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb"
+  IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb",
+  PROVIDER_ENABLED_OPENROUTER: "or_provider_enabled_openrouter",
+  PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga"
 };
 
 // Message types for chrome.runtime.sendMessage
@@ -66,7 +68,9 @@ export const DEFAULTS = {
   HISTORY_LIMIT: 20,
   MAX_CONTEXT_MESSAGES: 16,  // 16 messages = 8 conversation turns (8 user + 8 assistant)
   MODEL: "openai/gpt-4o-mini",
-  IMAGE_CACHE_LIMIT_MB: 512
+  IMAGE_CACHE_LIMIT_MB: 512,
+  PROVIDER_ENABLED_OPENROUTER: true,
+  PROVIDER_ENABLED_NAGA: false
 };
 
 // UI constants

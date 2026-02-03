@@ -28,6 +28,7 @@ class ModelDropdownManager {
     };
 
     this.dropdownElement = null;
+    this.handlers = null;
     this.init();
   }
 
@@ -97,8 +98,19 @@ class ModelDropdownManager {
     const input = this.config.inputElement;
     if (!input) return;
 
+    const handlers = {
+      onInputClick: null,
+      onInputFocus: null,
+      onInputInput: null,
+      onInputKeyDown: null,
+      onDocClick: null,
+      onDocMouseDown: null,
+      onDocMouseUp: null,
+      onInputBlur: null
+    };
+
     // Click to toggle
-    input.addEventListener('click', (e) => {
+    handlers.onInputClick = (e) => {
       e.stopPropagation();
       // Don't prevent default to allow normal input behavior
       if (!this.state.visible) {
@@ -117,10 +129,11 @@ class ModelDropdownManager {
         // If already open, just select the text
         input.select();
       }
-    });
+    };
+    input.addEventListener('click', handlers.onInputClick);
 
     // Focus opens and selects all text
-    input.addEventListener('focus', (e) => {
+    handlers.onInputFocus = () => {
       if (this.state.justClosed) {
         this.state.justClosed = false;
         return;
@@ -138,10 +151,11 @@ class ModelDropdownManager {
           this.state.justOpened = false;
         }, 200);
       }
-    });
+    };
+    input.addEventListener('focus', handlers.onInputFocus);
 
     // Type to filter - now the input value is preserved and visible
-    input.addEventListener('input', (e) => {
+    handlers.onInputInput = (e) => {
       if (this.state.ignoreNextInput) {
         this.state.ignoreNextInput = false;
         return;
@@ -153,13 +167,15 @@ class ModelDropdownManager {
       }
       // Show filtered results based on what user typed
       this.show(e.target.value);
-    });
+    };
+    input.addEventListener('input', handlers.onInputInput);
 
     // Keyboard navigation
-    input.addEventListener('keydown', this.handleKeyDown.bind(this));
+    handlers.onInputKeyDown = this.handleKeyDown.bind(this);
+    input.addEventListener('keydown', handlers.onInputKeyDown);
 
     // Click outside to close
-    document.addEventListener('click', (e) => {
+    handlers.onDocClick = (e) => {
       if (this.state.justOpened) return;
       setTimeout(() => {
         const inputWrapper = input.closest('#model-input-wrapper') || input.parentElement;
@@ -169,29 +185,36 @@ class ModelDropdownManager {
           this.hide();
         }
       }, 0);
-    });
+    };
+    document.addEventListener('click', handlers.onDocClick);
 
     // Support closing when clicking outside input while dropdown is open
-    document.addEventListener('mousedown', (e) => {
+    handlers.onDocMouseDown = (e) => {
       if (!this.state.visible) return;
       const insideDropdown = this.dropdownElement && this.dropdownElement.contains(e.target);
       this.state.pointerDownInDropdown = Boolean(insideDropdown);
       if (input.contains(e.target)) return;
       if (insideDropdown) return;
       this.hide();
-    });
-    document.addEventListener('mouseup', () => {
-      this.state.pointerDownInDropdown = false;
-    });
+    };
+    document.addEventListener('mousedown', handlers.onDocMouseDown);
 
-    input.addEventListener('blur', () => {
+    handlers.onDocMouseUp = () => {
+      this.state.pointerDownInDropdown = false;
+    };
+    document.addEventListener('mouseup', handlers.onDocMouseUp);
+
+    handlers.onInputBlur = () => {
       window.requestAnimationFrame(() => {
         if (!this.state.visible) return;
         if (this.state.pointerDownInDropdown) return;
         if (this.dropdownElement.contains(document.activeElement)) return;
         this.hide();
       });
-    });
+    };
+    input.addEventListener('blur', handlers.onInputBlur);
+
+    this.handlers = handlers;
   }
 
   isDebugEnabled() {
@@ -756,6 +779,18 @@ class ModelDropdownManager {
   }
 
   destroy() {
+    if (this.handlers && this.config.inputElement) {
+      const input = this.config.inputElement;
+      input.removeEventListener('click', this.handlers.onInputClick);
+      input.removeEventListener('focus', this.handlers.onInputFocus);
+      input.removeEventListener('input', this.handlers.onInputInput);
+      input.removeEventListener('keydown', this.handlers.onInputKeyDown);
+      input.removeEventListener('blur', this.handlers.onInputBlur);
+      document.removeEventListener('click', this.handlers.onDocClick);
+      document.removeEventListener('mousedown', this.handlers.onDocMouseDown);
+      document.removeEventListener('mouseup', this.handlers.onDocMouseUp);
+      this.handlers = null;
+    }
     if (this.dropdownElement) {
       this.dropdownElement.remove();
       this.dropdownElement = null;

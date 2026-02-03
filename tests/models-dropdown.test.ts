@@ -183,4 +183,33 @@ describe("ModelDropdownManager storage keys", () => {
     expect(badges).toContain("OR");
     expect(badges).toContain("NG");
   });
+
+  test("destroy removes input and document listeners", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    if (!input) {
+      throw new Error("model input not found");
+    }
+    const docAddSpy = jest.spyOn(document, "addEventListener");
+    const docRemoveSpy = jest.spyOn(document, "removeEventListener");
+    const inputAddSpy = jest.spyOn(input, "addEventListener");
+    const inputRemoveSpy = jest.spyOn(input, "removeEventListener");
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    expect(docAddSpy).toHaveBeenCalled();
+    expect(inputAddSpy).toHaveBeenCalled();
+
+    dropdown.destroy();
+
+    expect(docRemoveSpy).toHaveBeenCalled();
+    expect(inputRemoveSpy).toHaveBeenCalled();
+
+    docAddSpy.mockRestore();
+    docRemoveSpy.mockRestore();
+    inputAddSpy.mockRestore();
+    inputRemoveSpy.mockRestore();
+  });
 });

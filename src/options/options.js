@@ -5,11 +5,13 @@ if (typeof initTheme === 'function') {
   initTheme();
 }
 
-const apiKeyInput = document.getElementById("apiKey");
-const apiKeyLabel = document.getElementById("apiKeyLabel");
+const openrouterApiKeyInput = document.getElementById("openrouterApiKey");
+const nagaApiKeyInput = document.getElementById("nagaApiKey");
 const nagaProvisioningKeyInput = document.getElementById("nagaProvisioningKey");
-const nagaProvisioningGroup = document.getElementById("naga-provisioning-group");
-const providerSelect = document.getElementById("provider");
+const enableOpenrouterToggle = document.getElementById("enable-openrouter");
+const enableNagaToggle = document.getElementById("enable-naga");
+const enableOpenrouterStatus = document.getElementById("enable-openrouter-status");
+const enableNagaStatus = document.getElementById("enable-naga-status");
 const modelSelect = document.getElementById("model");
 const modelInput = document.getElementById("model-input");
 const modelsStatusEl = document.getElementById("models-status");
@@ -43,13 +45,28 @@ let modelDropdown = null; // ModelDropdownManager instance
 // Undo state for history deletion
 let pendingDeleteItem = null; // { item, timeout }
 let pendingClearAllHistory = null; // { items, timeout }
-let currentProvider = "openrouter";
 const DEBUG_STREAM_KEY = "or_debug_stream";
 const IMAGE_CACHE_LIMIT_KEY = "or_image_cache_limit_mb";
 const IMAGE_CACHE_LIMIT_DEFAULT = 512;
 const IMAGE_CACHE_LIMIT_MIN = 128;
 const IMAGE_CACHE_LIMIT_MAX = 2048;
 const IMAGE_CACHE_LIMIT_STEP = 64;
+const PROVIDER_ENABLE_KEYS = {
+  openrouter: "or_provider_enabled_openrouter",
+  naga: "or_provider_enabled_naga"
+};
+const PROVIDER_ENABLE_DEFAULTS = {
+  openrouter: true,
+  naga: false
+};
+const PROVIDER_KEY_STORAGE = {
+  openrouter: "or_api_key",
+  naga: "naga_api_key"
+};
+const PROVIDER_LABELS = {
+  openrouter: "OpenRouter",
+  naga: "NagaAI"
+};
 
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
@@ -115,60 +132,6 @@ function parseCombinedModelIdSafe(combinedId) {
 
 function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || "";
-}
-
-function getProviderSettings(providerId) {
-  const provider = normalizeProvider(providerId);
-  const apiKeyPlaceholder = typeof getProviderApiKeyPlaceholder === "function"
-    ? getProviderApiKeyPlaceholder(provider)
-    : (provider === "naga" ? "ng-..." : "sk-or-...");
-  return {
-    id: provider,
-    label: getProviderLabelSafe(provider),
-    apiKeyKey: provider === "naga" ? "naga_api_key" : "or_api_key",
-    provisioningKeyKey: provider === "naga" ? "naga_provisioning_key" : null,
-    favoritesKey: getProviderStorageKeySafe("or_favorites", provider),
-    recentModelsKey: getProviderStorageKeySafe("or_recent_models", provider),
-    apiKeyPlaceholder
-  };
-}
-
-function applyProviderSettings(providerId, localItems) {
-  const settings = getProviderSettings(providerId);
-  currentProvider = settings.id;
-
-  if (providerSelect) {
-    providerSelect.value = settings.id;
-  }
-
-  if (apiKeyLabel) {
-    apiKeyLabel.textContent = `${settings.label} API key`;
-  }
-  if (apiKeyInput) {
-    apiKeyInput.value = localItems[settings.apiKeyKey] || "";
-    apiKeyInput.placeholder = settings.apiKeyPlaceholder;
-  }
-  if (nagaProvisioningGroup && nagaProvisioningKeyInput) {
-    if (settings.id === "naga") {
-      nagaProvisioningGroup.style.display = "block";
-      nagaProvisioningKeyInput.value = localItems[settings.provisioningKeyKey] || "";
-    } else {
-      nagaProvisioningGroup.style.display = "none";
-      nagaProvisioningKeyInput.value = "";
-    }
-  }
-
-  if (localItems.or_history_limit) {
-    historyLimitInput.value = localItems.or_history_limit;
-  }
-  if (imageCacheLimitInput) {
-    const normalizedLimit = normalizeImageCacheLimitMb(localItems.or_image_cache_limit_mb);
-    imageCacheLimitInput.value = normalizedLimit;
-    updateImageCacheLimitLabel(normalizedLimit);
-  }
-  if (collapseOnSpacesToggle) {
-    collapseOnSpacesToggle.checked = localItems.or_collapse_on_spaces !== false;
-  }
 }
 
 function initModelDropdown() {
@@ -296,38 +259,57 @@ async function notifyProviderSettingsUpdated(providerId) {
   }
 }
 
-async function loadProviderState(providerId) {
-  const settings = getProviderSettings(providerId);
-  const localItems = await chrome.storage.local.get([
-    "or_provider",
-    "or_api_key",
-    "naga_api_key",
-    "naga_provisioning_key",
-    "or_model",
-    "or_model_provider",
-    "or_recent_models",
-    "or_recent_models_naga",
-    "or_history_limit",
-    "or_image_cache_limit_mb",
-    "or_collapse_on_spaces"
-  ]);
-  const syncItems = await chrome.storage.sync.get([
-    "or_favorites",
-    "or_favorites_naga"
-  ]);
+function getStoredProviderEnabled(localItems, provider) {
+  const key = PROVIDER_ENABLE_KEYS[provider];
+  const stored = localItems[key];
+  if (typeof stored === "boolean") {
+    return stored;
+  }
+  return PROVIDER_ENABLE_DEFAULTS[provider];
+}
 
-  applyProviderSettings(settings.id, localItems);
-  loadFavoritesAndRecents(localItems, syncItems);
-  loadSelectedModel(localItems);
-  initModelDropdown();
-  setupKeyVisibilityToggles();
+function updateEnableStatus(provider, enabled) {
+  const statusEl = provider === "openrouter" ? enableOpenrouterStatus : enableNagaStatus;
+  if (!statusEl) return;
+  statusEl.style.display = enabled ? "inline" : "none";
+}
+
+async function syncProviderToggleState(provider, apiKeyValue, localItems) {
+  const hasKey = Boolean(apiKeyValue && apiKeyValue.trim().length);
+  const toggle = provider === "openrouter" ? enableOpenrouterToggle : enableNagaToggle;
+  if (!toggle) return;
+
+  const storedEnabled = getStoredProviderEnabled(localItems, provider);
+  const enabled = hasKey ? storedEnabled : false;
+
+  toggle.disabled = !hasKey;
+  toggle.checked = enabled;
+  updateEnableStatus(provider, enabled);
+
+  if (!hasKey && storedEnabled) {
+    await chrome.storage.local.set({ [PROVIDER_ENABLE_KEYS[provider]]: false });
+  }
+}
+
+async function loadProviderCards(localItems) {
+  if (openrouterApiKeyInput) {
+    openrouterApiKeyInput.value = localItems.or_api_key || "";
+  }
+  if (nagaApiKeyInput) {
+    nagaApiKeyInput.value = localItems.naga_api_key || "";
+  }
+  if (nagaProvisioningKeyInput) {
+    nagaProvisioningKeyInput.value = localItems.naga_provisioning_key || "";
+  }
+
+  await syncProviderToggleState("openrouter", openrouterApiKeyInput?.value || "", localItems);
+  await syncProviderToggleState("naga", nagaApiKeyInput?.value || "", localItems);
 }
 
 // ---- Load stored settings (API key, model, favorites, history limit) ----
 // SECURITY FIX: API key now stored in chrome.storage.local (not synced across devices)
 Promise.all([
   chrome.storage.local.get([
-    "or_provider",
     "or_api_key",
     "naga_api_key",
     "naga_provisioning_key",
@@ -338,15 +320,16 @@ Promise.all([
     "or_history_limit",
     "or_debug_stream",
     "or_image_cache_limit_mb",
-    "or_collapse_on_spaces"
+    "or_collapse_on_spaces",
+    "or_provider_enabled_openrouter",
+    "or_provider_enabled_naga"
   ]),
   chrome.storage.sync.get([
     "or_favorites",
     "or_favorites_naga"
   ])
 ]).then(([localItems, syncItems]) => {
-  const provider = normalizeProvider(localItems.or_provider);
-  applyProviderSettings(provider, localItems);
+  loadProviderCards(localItems);
   loadFavoritesAndRecents(localItems, syncItems);
   loadSelectedModel(localItems);
   initModelDropdown();
@@ -613,8 +596,15 @@ async function loadModels() {
       modelSelect.value = selectedCombinedModelId;
     }
 
-    modelsStatusEl.textContent = `✓ Loaded ${combinedModels.length} models.`;
-    modelsStatusEl.style.color = "var(--color-success)";
+    if (!combinedModels.length) {
+      modelsStatusEl.textContent = res.reason === "no_enabled_providers"
+        ? "Enable at least one provider to load models."
+        : "No models available.";
+      modelsStatusEl.style.color = "var(--color-text-muted)";
+    } else {
+      modelsStatusEl.textContent = `✓ Loaded ${combinedModels.length} models.`;
+      modelsStatusEl.style.color = "var(--color-success)";
+    }
   } catch (e) {
     console.error("Failed to load models:", e);
     if (typeof e?.message === "string" && e.message.toLowerCase().includes("no api key")) {
@@ -628,9 +618,17 @@ async function loadModels() {
 
 // Auto-load models when page opens if API key exists
 Promise.all([
-  chrome.storage.local.get(["or_provider", "or_api_key", "naga_api_key", "naga_provisioning_key"])
+  chrome.storage.local.get([
+    "or_api_key",
+    "naga_api_key",
+    "naga_provisioning_key",
+    "or_provider_enabled_openrouter",
+    "or_provider_enabled_naga"
+  ])
 ]).then(([localItems]) => {
-  if (localItems.or_api_key || localItems.naga_api_key) {
+  const openrouterEnabled = localItems.or_provider_enabled_openrouter !== false;
+  const nagaEnabled = Boolean(localItems.or_provider_enabled_naga);
+  if ((openrouterEnabled && localItems.or_api_key) || (nagaEnabled && localItems.naga_api_key)) {
     // Small delay to ensure UI is ready
     setTimeout(() => loadModels(), 100);
   }
@@ -638,9 +636,6 @@ Promise.all([
 
 // ---- Save settings (key + model + history limit) ----
 saveBtn.addEventListener("click", async () => {
-  const settings = getProviderSettings(currentProvider);
-  const apiKey = apiKeyInput.value.trim();
-  const nagaProvisioningKey = nagaProvisioningKeyInput ? nagaProvisioningKeyInput.value.trim() : "";
   const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
   const collapseOnSpaces = collapseOnSpacesToggle ? Boolean(collapseOnSpacesToggle.checked) : true;
@@ -650,21 +645,17 @@ saveBtn.addEventListener("click", async () => {
 
   // Model is optional - if not set, will use default from constants
   const dataToSave = {
-    [settings.apiKeyKey]: apiKey,
     or_history_limit: historyLimit,
-    or_provider: settings.id,
     or_collapse_on_spaces: collapseOnSpaces,
     [IMAGE_CACHE_LIMIT_KEY]: imageCacheLimitMb
   };
-  if (settings.id === "naga") {
-    dataToSave[settings.provisioningKeyKey] = nagaProvisioningKey;
-  }
 
   // Only save model if one is selected
   if (combinedModelId) {
     const parsed = parseCombinedModelIdSafe(combinedModelId);
     dataToSave.or_model = parsed.modelId;
     dataToSave.or_model_provider = normalizeProvider(parsed.provider);
+    dataToSave.or_provider = normalizeProvider(parsed.provider);
     selectedCombinedModelId = combinedModelId;
   }
 
@@ -672,50 +663,89 @@ saveBtn.addEventListener("click", async () => {
   await Promise.all([
     chrome.storage.local.set(dataToSave),
     chrome.storage.sync.set({
-      [settings.favoritesKey]: Array.from(favoriteModelsByProvider[settings.id] || [])
+      or_favorites: Array.from(favoriteModelsByProvider.openrouter || []),
+      or_favorites_naga: Array.from(favoriteModelsByProvider.naga || [])
     })
   ]);
 
   statusEl.textContent = combinedModelId ? "Saved." : "Saved. (Using default model)";
   statusEl.style.color = "var(--color-success)";
   await loadModels();
-  await notifyProviderSettingsUpdated(settings.id);
+  await notifyProviderSettingsUpdated("all");
   setTimeout(() => {
     statusEl.textContent = "";
     statusEl.style.color = "";
   }, 2500);
 });
 
-// Reset models when API key changes.
-apiKeyInput.addEventListener("change", () => {
+async function saveProviderKey(provider, value) {
+  const key = PROVIDER_KEY_STORAGE[provider];
+  await chrome.storage.local.set({ [key]: value });
+}
+
+async function updateProviderModelsAfterChange() {
   combinedModels = [];
   modelMap = new Map();
   modelSelect.innerHTML = "";
   modelsStatusEl.textContent = "";
-});
+  await loadModels();
+  await notifyProviderSettingsUpdated("all");
+}
 
-// ---- Provider change ----
-if (providerSelect) {
-  providerSelect.addEventListener("change", async () => {
-    const provider = normalizeProvider(providerSelect.value);
-    currentProvider = provider;
-
-    await chrome.storage.local.set({ or_provider: provider });
-    try {
-      await chrome.runtime.sendMessage({ type: "set_provider", provider });
-    } catch (e) {
-      console.warn("Failed to notify background of provider change:", e);
+function wireProviderKeyInput(provider, inputEl) {
+  if (!inputEl) return;
+  let debounceId = null;
+  inputEl.addEventListener("input", () => {
+    const value = inputEl.value.trim();
+    if (debounceId) {
+      clearTimeout(debounceId);
     }
-    await notifyProviderSettingsUpdated(provider);
+    debounceId = setTimeout(async () => {
+      await saveProviderKey(provider, value);
+      const localItems = await chrome.storage.local.get([
+        PROVIDER_ENABLE_KEYS[provider]
+      ]);
+      await syncProviderToggleState(provider, value, localItems);
+      if (value.length === 0) {
+        updateEnableStatus(provider, false);
+      }
+      await updateProviderModelsAfterChange();
+    }, 300);
+  });
+}
 
-    const localItems = await chrome.storage.local.get([
-      "or_provider",
-      "or_api_key",
-      "naga_api_key",
-      "naga_provisioning_key",
-      "or_history_limit"
-    ]);
-    applyProviderSettings(provider, localItems);
+function wireProviderEnableToggle(provider, toggleEl, inputEl) {
+  if (!toggleEl) return;
+  toggleEl.addEventListener("change", async () => {
+    const hasKey = Boolean(inputEl?.value?.trim().length);
+    if (!hasKey) {
+      toggleEl.checked = false;
+      toggleEl.disabled = true;
+      updateEnableStatus(provider, false);
+      return;
+    }
+    await chrome.storage.local.set({ [PROVIDER_ENABLE_KEYS[provider]]: toggleEl.checked });
+    updateEnableStatus(provider, toggleEl.checked);
+    await updateProviderModelsAfterChange();
+  });
+}
+
+wireProviderKeyInput("openrouter", openrouterApiKeyInput);
+wireProviderKeyInput("naga", nagaApiKeyInput);
+wireProviderEnableToggle("openrouter", enableOpenrouterToggle, openrouterApiKeyInput);
+wireProviderEnableToggle("naga", enableNagaToggle, nagaApiKeyInput);
+
+if (nagaProvisioningKeyInput) {
+  let provisioningDebounce = null;
+  nagaProvisioningKeyInput.addEventListener("input", () => {
+    const value = nagaProvisioningKeyInput.value.trim();
+    if (provisioningDebounce) {
+      clearTimeout(provisioningDebounce);
+    }
+    provisioningDebounce = setTimeout(async () => {
+      await chrome.storage.local.set({ naga_provisioning_key: value });
+      await notifyProviderSettingsUpdated("naga");
+    }, 300);
   });
 }
 

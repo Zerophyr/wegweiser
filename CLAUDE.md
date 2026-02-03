@@ -96,7 +96,7 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 **Multi-Provider Routing**:
 - Combined model IDs are stored as `provider:modelId`
 - Requests route by the selected model provider (OpenRouter or NagaAI)
-- The Options provider dropdown edits keys only; models are combined when keys exist
+- Options uses compact provider cards with per-provider Enable toggles; models load only from enabled providers with keys
 
 **Per-Tab Conversation Context**:
 - `src/background/background.js` maintains a `Map<tabId, messages[]>` for conversation history
@@ -257,7 +257,7 @@ When modifying markdown support, update both `src/modules/markdown.js` and the p
 
 ## Storage Keys Reference
 All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
-- `PROVIDER` - Selected provider for key editing (OpenRouter/NagaAI)
+- `PROVIDER` - Last selected model provider (used as default when picking a model)
 - `API_KEY` - OpenRouter API key (local only)
 - `API_KEY_NAGA` - NagaAI API key (local only)
 - `API_KEY_NAGA_PROVISIONAL` - NagaAI provisioning key (local only, for balance)
@@ -280,6 +280,8 @@ All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
 - `DEBUG_STREAM` - Streaming debug log toggle (local)
 - `COLLAPSE_ON_SPACES` - Auto-close side panel when opening Spaces (local)
 - `IMAGE_CACHE_LIMIT_MB` - Image cache size limit in MB (local)
+- `PROVIDER_ENABLED_OPENROUTER` - Enable OpenRouter models (local)
+- `PROVIDER_ENABLED_NAGA` - Enable NagaAI models (local)
 
 ## Common Gotchas
 

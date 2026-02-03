@@ -417,7 +417,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.CLOSE_SIDEPANEL) {
     (async () => {
       try {
-        const tabId = sender?.tab?.id;
+        let tabId = sender?.tab?.id || msg?.tabId || null;
+        if (!tabId && chrome.tabs && typeof chrome.tabs.query === "function") {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          tabId = tabs?.[0]?.id || null;
+        }
         if (!tabId || !chrome.sidePanel || typeof chrome.sidePanel.close !== "function") {
           sendResponse({ ok: false, error: "Side panel close not available" });
           return;
@@ -599,18 +603,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
     (async () => {
       try {
-        const keys = await chrome.storage.local.get([
-          STORAGE_KEYS.API_KEY,
-          STORAGE_KEYS.API_KEY_NAGA
-        ]);
+        const keys = await chrome.storage.local.get({
+          [STORAGE_KEYS.API_KEY]: "",
+          [STORAGE_KEYS.API_KEY_NAGA]: "",
+          [STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER]: DEFAULTS.PROVIDER_ENABLED_OPENROUTER,
+          [STORAGE_KEYS.PROVIDER_ENABLED_NAGA]: DEFAULTS.PROVIDER_ENABLED_NAGA
+        });
+
+        const isOpenRouterEnabled = Boolean(keys[STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER]);
+        const isNagaEnabled = Boolean(keys[STORAGE_KEYS.PROVIDER_ENABLED_NAGA]);
 
         const providersToLoad = [
-          { id: "openrouter", apiKey: keys[STORAGE_KEYS.API_KEY] },
-          { id: "naga", apiKey: keys[STORAGE_KEYS.API_KEY_NAGA] }
-        ].filter(entry => entry.apiKey);
+          {
+            id: "openrouter",
+            enabled: isOpenRouterEnabled,
+            apiKey: keys[STORAGE_KEYS.API_KEY]
+          },
+          {
+            id: "naga",
+            enabled: isNagaEnabled,
+            apiKey: keys[STORAGE_KEYS.API_KEY_NAGA]
+          }
+        ].filter(entry => entry.enabled && entry.apiKey);
 
         if (providersToLoad.length === 0) {
-          sendResponse({ ok: false, error: ERROR_MESSAGES.NO_API_KEY });
+          sendResponse({ ok: true, models: [], reason: "no_enabled_providers" });
           return;
         }
 

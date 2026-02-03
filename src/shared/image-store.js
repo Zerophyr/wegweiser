@@ -51,7 +51,7 @@ function createMemoryImageStore() {
     async trim(maxBytes) {
       if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
         map.clear();
-        return { bytesUsed: 0, count: 0, removed: 0 };
+        return { bytesUsed: 0, count: 0, removed: 0, removedIds: [] };
       }
       const items = Array.from(map.values()).map((entry) => ({
         imageId: entry?.imageId,
@@ -60,19 +60,21 @@ function createMemoryImageStore() {
       }));
       let bytesUsed = items.reduce((sum, item) => sum + item.size, 0);
       if (bytesUsed <= maxBytes) {
-        return { bytesUsed, count: items.length, removed: 0 };
+        return { bytesUsed, count: items.length, removed: 0, removedIds: [] };
       }
       items.sort((a, b) => a.createdAt - b.createdAt);
       let removed = 0;
+      const removedIds = [];
       for (const item of items) {
         if (bytesUsed <= maxBytes) break;
         if (item.imageId) {
           map.delete(item.imageId);
+          removedIds.push(item.imageId);
         }
         bytesUsed -= item.size;
         removed += 1;
       }
-      return { bytesUsed, count: map.size, removed };
+      return { bytesUsed, count: map.size, removed, removedIds };
     }
   };
 }
@@ -203,7 +205,7 @@ function createIndexedDbStore(idb) {
           const tx = db.transaction(IMAGE_STORE_NAME, "readwrite");
           const store = tx.objectStore(IMAGE_STORE_NAME);
           const clearReq = store.clear();
-          clearReq.onsuccess = () => resolve({ bytesUsed: 0, count: 0, removed: 0 });
+          clearReq.onsuccess = () => resolve({ bytesUsed: 0, count: 0, removed: 0, removedIds: [] });
           clearReq.onerror = () => reject(clearReq.error);
         });
       }
@@ -228,7 +230,7 @@ function createIndexedDbStore(idb) {
       });
       let bytesUsed = items.reduce((sum, item) => sum + item.size, 0);
       if (bytesUsed <= maxBytes) {
-        return { bytesUsed, count: items.length, removed: 0 };
+        return { bytesUsed, count: items.length, removed: 0, removedIds: [] };
       }
       items.sort((a, b) => a.createdAt - b.createdAt);
       const removeKeys = [];
@@ -238,13 +240,18 @@ function createIndexedDbStore(idb) {
         removeKeys.push(item.key);
       }
       if (!removeKeys.length) {
-        return { bytesUsed, count: items.length, removed: 0 };
+        return { bytesUsed, count: items.length, removed: 0, removedIds: [] };
       }
       await run("readwrite", (store) => {
         removeKeys.forEach((key) => store.delete(key));
         return null;
       });
-      return { bytesUsed, count: items.length - removeKeys.length, removed: removeKeys.length };
+      return {
+        bytesUsed,
+        count: items.length - removeKeys.length,
+        removed: removeKeys.length,
+        removedIds: removeKeys
+      };
     }
   };
 }
