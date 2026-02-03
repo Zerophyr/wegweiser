@@ -22,6 +22,7 @@
 - 🌐 **Per-Space Web Search** - Enable/disable web search per space
 - 🧠 **Per-Space Reasoning** - Enable/disable reasoning mode per space
 - 🔄 **Chat Toggles** - Temporarily override web search/reasoning per message
+- ⚙️ **Quick Settings Access** - Gear icon next to “Create Space” opens Options
 - 🔗 **Source Citations** - Clickable [1], [2] references with clean URL removal
 - 📋 **Copy Answers** - One-click copy button for AI responses in threads
 - 🧾 **Adaptive Summaries** - Older turns are summarized to keep token usage low (short summaries accepted for small histories)
@@ -53,6 +54,7 @@
 - 🧪 **Streaming Debug Log** - Optional log of the last 500 streaming events (Options)
 - 🖼️ **IndexedDB Image Storage** - Image generations stored outside chrome.storage to avoid quota limits
 - 🧹 **Image Cache Cleanup** - Clear generated images from Options
+- 🎚️ **Image Cache Limit** - Adjustable cache size (128–2048 MB, default 512 MB)
 
 ### Security & Performance (v0.6.0)
 - 🔒 **Enhanced Security** - API keys stored locally, CSP protection, input validation
@@ -121,7 +123,8 @@ _(Coming soon)_
 2. **Provisioning key**: Optional NagaAI key to enable balance display
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
-5. **Image storage**: Clear generated images to free space (stored in IndexedDB)
+5. **Image storage**: Clear generated images and set the storage limit (IndexedDB)
+6. **Spaces behavior**: Toggle auto-collapse when opening Spaces
 
 ## 🛠️ Development
 
@@ -216,6 +219,8 @@ Wegweiser-extension/
 - 🧪 **Streaming Debug Log** - Optional log for troubleshooting stuck streams
 - 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX via three-dot menu
 - 💬 **Contextual Instructions** - Custom instructions adapt framing to prevent model re-introductions mid-thread
+- 🎚️ **Image Cache Limit** - Slider in Options to cap IndexedDB image storage
+- 🧭 **Spaces Shortcut** - Settings gear in Spaces + optional sidepanel auto-close
 
 ### v1.1.0
 - 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards

@@ -57,6 +57,12 @@ body {
   color: var(--color-text);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* Buttons */
 .btn {
   padding: 10px 20px;

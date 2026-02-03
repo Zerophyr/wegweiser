@@ -1298,10 +1298,21 @@ async function loadModels() {
         inputElement: modelInput,
         containerType: 'sidebar',
         onModelSelect: async (modelId) => {
+          const debugDropdown = Boolean(window.DEBUG_MODEL_DROPDOWN);
           const selectedModel = modelMap.get(modelId);
           const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
           const parsed = parseCombinedModelIdSafe(modelId);
           const provider = normalizeProviderSafe(parsed.provider);
+
+          if (debugDropdown) {
+            console.log('[ModelSelect]', {
+              modelId,
+              parsed,
+              provider,
+              displayName,
+              modelExists: Boolean(selectedModel)
+            });
+          }
 
           if (modelInput) {
             modelInput.value = displayName;
@@ -1314,6 +1325,10 @@ async function loadModels() {
               provider
             });
 
+            if (debugDropdown) {
+              console.log('[ModelSelect] response', res);
+            }
+
             if (res?.ok) {
               selectedCombinedModelId = modelId;
               currentProvider = provider;
@@ -1325,6 +1340,9 @@ async function loadModels() {
             return false;
           } catch (e) {
             console.error("Error setting model:", e);
+            if (debugDropdown) {
+              console.log('[ModelSelect] error', e);
+            }
             modelStatusEl.textContent = "Error setting model";
             return false;
           }
@@ -1465,8 +1483,23 @@ settingsIcon.addEventListener("click", () => {
 const spacesBtn = document.getElementById('spaces-btn');
 if (spacesBtn) {
   const openSpacesPage = async () => {
+    const stored = await chrome.storage.local.get(["or_collapse_on_spaces"]);
+    const collapseOnSpaces = stored.or_collapse_on_spaces !== false;
     const spacesUrl = chrome.runtime.getURL('src/spaces/spaces.html');
     const tabs = await chrome.tabs.query({ url: spacesUrl });
+
+    if (collapseOnSpaces) {
+      try {
+        await chrome.runtime.sendMessage({ type: "close_sidepanel" });
+      } catch (e) {
+        // ignore and try local close below
+      }
+      try {
+        window.close();
+      } catch (e) {
+        // ignore window close errors
+      }
+    }
 
     if (tabs.length > 0) {
       // Focus existing tab

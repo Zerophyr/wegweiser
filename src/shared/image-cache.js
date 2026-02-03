@@ -14,6 +14,40 @@ function getImageCacheKey() {
   return "or_image_cache";
 }
 
+function getImageCacheLimitKey() {
+  if (typeof STORAGE_KEYS !== "undefined" && STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB) {
+    return STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB;
+  }
+  return "or_image_cache_limit_mb";
+}
+
+function getDefaultImageCacheLimitMb() {
+  if (typeof DEFAULTS !== "undefined" && typeof DEFAULTS.IMAGE_CACHE_LIMIT_MB === "number") {
+    return DEFAULTS.IMAGE_CACHE_LIMIT_MB;
+  }
+  return 512;
+}
+
+function normalizeImageCacheLimitMb(value) {
+  const min = 128;
+  const max = 2048;
+  const step = 64;
+  if (!Number.isFinite(value)) return getDefaultImageCacheLimitMb();
+  const clamped = Math.max(min, Math.min(max, value));
+  const snapped = Math.round(clamped / step) * step;
+  return Math.max(min, Math.min(max, snapped));
+}
+
+async function getImageCacheLimitBytes() {
+  const storage = getStorage();
+  if (!storage) return null;
+  const key = getImageCacheLimitKey();
+  const fallback = getDefaultImageCacheLimitMb();
+  const result = await storage.get({ [key]: fallback });
+  const limitMb = normalizeImageCacheLimitMb(result[key]);
+  return limitMb * 1024 * 1024;
+}
+
 function getImageCacheTtl() {
   if (typeof CACHE_TTL !== "undefined" && typeof CACHE_TTL.IMAGE === "number") {
     return CACHE_TTL.IMAGE;
@@ -121,6 +155,12 @@ async function putImageCacheEntry(entry, now = Date.now()) {
 
   cache[cacheEntry.imageId] = cacheEntry;
   await storage.set({ [key]: cache });
+  if (hasImageStoreSupport() && typeof trimImageStoreToMaxBytes === "function") {
+    const limitBytes = await getImageCacheLimitBytes();
+    if (Number.isFinite(limitBytes)) {
+      await trimImageStoreToMaxBytes(limitBytes);
+    }
+  }
   return cacheEntry;
 }
 
@@ -145,6 +185,12 @@ async function cleanupImageCache(now = Date.now()) {
       }
     }
     await cleanupImageStore(now);
+    if (typeof trimImageStoreToMaxBytes === "function") {
+      const limitBytes = await getImageCacheLimitBytes();
+      if (Number.isFinite(limitBytes)) {
+        await trimImageStoreToMaxBytes(limitBytes);
+      }
+    }
   }
 
   await storage.set({ [key]: nextCache });

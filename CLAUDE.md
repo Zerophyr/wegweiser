@@ -110,13 +110,14 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 - Summary is injected as a system message after Space custom instructions; archived messages are never sent to the model
 - Summary refresh uses `MESSAGE_TYPES.SUMMARIZE_THREAD` with `buildSummarizerMessages()` in `src/shared/utils.js`
 - Summary acceptance uses an adaptive minimum length (80–200 chars based on history count)
-- Storage footer shows two meters: Local Storage (settings + chats) and Image Storage (IndexedDB)
+- Storage footer shows two meters: Local Storage (settings + chats) and Image Storage (IndexedDB, configurable limit)
 
 **Storage Strategy**:
 - **chrome.storage.local**: API keys (OpenRouter + Naga), provisioning key, history, caches, debug log toggle
 - **chrome.storage.sync**: Favorites, theme preferences (synced across devices)
 - **IndexedDB**: Generated images (large data URLs stored outside local storage quota)
   - Options has a "Clear Images" button that wipes the IndexedDB image store
+  - Image cache limit is user-configurable (128–2048 MB, default 512 MB)
 
 **Caching System**: Models cached for 1 hour, balance for 60 seconds. Naga startups metadata cached for vendor labels. Cache keys include timestamps to detect expiry.
 
@@ -277,6 +278,8 @@ All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
 - `THREADS` - All threads across spaces (local)
 - `THEME` - Current theme name (sync)
 - `DEBUG_STREAM` - Streaming debug log toggle (local)
+- `COLLAPSE_ON_SPACES` - Auto-close side panel when opening Spaces (local)
+- `IMAGE_CACHE_LIMIT_MB` - Image cache size limit in MB (local)
 
 ## Common Gotchas
 

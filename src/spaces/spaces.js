@@ -6,12 +6,24 @@ const STORAGE_KEYS = {
   THREADS: 'or_threads',
   API_KEY: 'or_api_key',
   MODEL: 'or_model',
-  MODEL_PROVIDER: 'or_model_provider'
+  MODEL_PROVIDER: 'or_model_provider',
+  IMAGE_CACHE_LIMIT_MB: 'or_image_cache_limit_mb'
 };
 
 // Provider state
 let currentProvider = 'openrouter';
 const MAX_CONTEXT_MESSAGES = 16;
+const IMAGE_CACHE_LIMIT_DEFAULT = 512;
+const IMAGE_CACHE_LIMIT_MIN = 128;
+const IMAGE_CACHE_LIMIT_MAX = 2048;
+const IMAGE_CACHE_LIMIT_STEP = 64;
+
+function normalizeImageCacheLimitMb(value) {
+  if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
+  const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
+  const snapped = Math.round(clamped / IMAGE_CACHE_LIMIT_STEP) * IMAGE_CACHE_LIMIT_STEP;
+  return Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, snapped));
+}
 
 function normalizeProviderSafe(providerId) {
   if (typeof normalizeProviderId === 'function') {
@@ -437,7 +449,18 @@ async function getImageStorageUsage() {
   let quotaBytes = null;
   let percentUsed = null;
 
-  if (navigator?.storage?.estimate) {
+  try {
+    const localItems = await chrome.storage.local.get([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
+    const limitMb = normalizeImageCacheLimitMb(localItems[STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
+    quotaBytes = limitMb * 1024 * 1024;
+    if (typeof stats?.bytesUsed === 'number' && quotaBytes > 0) {
+      percentUsed = (stats.bytesUsed / quotaBytes) * 100;
+    }
+  } catch (e) {
+    console.warn('Failed to load image cache limit:', e);
+  }
+
+  if (!quotaBytes && navigator?.storage?.estimate) {
     try {
       const estimate = await navigator.storage.estimate();
       if (typeof estimate?.quota === 'number') {
@@ -617,6 +640,7 @@ function initElements() {
   elements.spacesGrid = document.getElementById('spaces-grid');
   elements.emptyState = document.getElementById('empty-state');
   elements.createSpaceBtn = document.getElementById('create-space-btn');
+  elements.spacesSettingsBtn = document.getElementById('spaces-settings-btn');
   elements.emptyCreateBtn = document.getElementById('empty-create-btn');
   elements.storageFooter = document.getElementById('storage-footer');
   elements.storageFill = document.getElementById('storage-fill-local');
@@ -1829,6 +1853,17 @@ function bindEvents() {
   // Create space buttons
   elements.createSpaceBtn.addEventListener('click', openCreateSpaceModal);
   elements.emptyCreateBtn.addEventListener('click', openCreateSpaceModal);
+  if (elements.spacesSettingsBtn) {
+    elements.spacesSettingsBtn.addEventListener('click', () => {
+      chrome.runtime.openOptionsPage();
+    });
+    elements.spacesSettingsBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        chrome.runtime.openOptionsPage();
+      }
+    });
+  }
 
   // Space modal
   elements.modalClose.addEventListener('click', closeSpaceModal);

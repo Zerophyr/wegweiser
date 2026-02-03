@@ -27,7 +27,9 @@ export const STORAGE_KEYS = {
   THREADS: "or_threads",
   THEME: "or_theme",
   DEBUG_STREAM: "or_debug_stream",
-  IMAGE_CACHE: "or_image_cache"
+  IMAGE_CACHE: "or_image_cache",
+  COLLAPSE_ON_SPACES: "or_collapse_on_spaces",
+  IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb"
 };
 
 // Message types for chrome.runtime.sendMessage
@@ -47,7 +49,8 @@ export const MESSAGE_TYPES = {
   IMAGE_QUERY: "image_query",
   DEBUG_GET_STREAM_LOG: "debug_get_stream_log",
   DEBUG_CLEAR_STREAM_LOG: "debug_clear_stream_log",
-  DEBUG_SET_ENABLED: "debug_set_enabled"
+  DEBUG_SET_ENABLED: "debug_set_enabled",
+  CLOSE_SIDEPANEL: "close_sidepanel"
 };
 
 // Cache TTL values (in milliseconds)
@@ -62,7 +65,8 @@ export const CACHE_TTL = {
 export const DEFAULTS = {
   HISTORY_LIMIT: 20,
   MAX_CONTEXT_MESSAGES: 16,  // 16 messages = 8 conversation turns (8 user + 8 assistant)
-  MODEL: "openai/gpt-4o-mini"
+  MODEL: "openai/gpt-4o-mini",
+  IMAGE_CACHE_LIMIT_MB: 512
 };
 
 // UI constants

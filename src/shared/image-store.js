@@ -47,6 +47,32 @@ function createMemoryImageStore() {
         bytesUsed += estimateImageEntrySize(entry);
       }
       return { bytesUsed, count: map.size };
+    },
+    async trim(maxBytes) {
+      if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+        map.clear();
+        return { bytesUsed: 0, count: 0, removed: 0 };
+      }
+      const items = Array.from(map.values()).map((entry) => ({
+        imageId: entry?.imageId,
+        size: estimateImageEntrySize(entry),
+        createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : 0
+      }));
+      let bytesUsed = items.reduce((sum, item) => sum + item.size, 0);
+      if (bytesUsed <= maxBytes) {
+        return { bytesUsed, count: items.length, removed: 0 };
+      }
+      items.sort((a, b) => a.createdAt - b.createdAt);
+      let removed = 0;
+      for (const item of items) {
+        if (bytesUsed <= maxBytes) break;
+        if (item.imageId) {
+          map.delete(item.imageId);
+        }
+        bytesUsed -= item.size;
+        removed += 1;
+      }
+      return { bytesUsed, count: map.size, removed };
     }
   };
 }
@@ -168,6 +194,57 @@ function createIndexedDbStore(idb) {
         tx.oncomplete = () => resolve({ bytesUsed, count });
         tx.onerror = () => reject(tx.error);
       });
+    },
+    async trim(maxBytes) {
+      const db = await getDb();
+      if (!db) return null;
+      if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(IMAGE_STORE_NAME, "readwrite");
+          const store = tx.objectStore(IMAGE_STORE_NAME);
+          const clearReq = store.clear();
+          clearReq.onsuccess = () => resolve({ bytesUsed: 0, count: 0, removed: 0 });
+          clearReq.onerror = () => reject(clearReq.error);
+        });
+      }
+      const items = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IMAGE_STORE_NAME, "readonly");
+        const store = tx.objectStore(IMAGE_STORE_NAME);
+        const cursor = store.openCursor();
+        const collected = [];
+        cursor.onsuccess = (event) => {
+          const cur = event.target.result;
+          if (!cur) return;
+          const entry = cur.value;
+          collected.push({
+            key: cur.key,
+            size: estimateImageEntrySize(entry),
+            createdAt: typeof entry?.createdAt === "number" ? entry.createdAt : 0
+          });
+          cur.continue();
+        };
+        tx.oncomplete = () => resolve(collected);
+        tx.onerror = () => reject(tx.error);
+      });
+      let bytesUsed = items.reduce((sum, item) => sum + item.size, 0);
+      if (bytesUsed <= maxBytes) {
+        return { bytesUsed, count: items.length, removed: 0 };
+      }
+      items.sort((a, b) => a.createdAt - b.createdAt);
+      const removeKeys = [];
+      for (const item of items) {
+        if (bytesUsed <= maxBytes) break;
+        bytesUsed -= item.size;
+        removeKeys.push(item.key);
+      }
+      if (!removeKeys.length) {
+        return { bytesUsed, count: items.length, removed: 0 };
+      }
+      await run("readwrite", (store) => {
+        removeKeys.forEach((key) => store.delete(key));
+        return null;
+      });
+      return { bytesUsed, count: items.length - removeKeys.length, removed: removeKeys.length };
     }
   };
 }
@@ -206,12 +283,21 @@ async function getImageStoreStats(store) {
   return { bytesUsed: 0, count: 0 };
 }
 
+async function trimImageStoreToMaxBytes(maxBytes, store) {
+  const adapter = store || getDefaultImageStore();
+  if (typeof adapter.trim === "function") {
+    return adapter.trim(maxBytes);
+  }
+  return null;
+}
+
 if (typeof window !== "undefined") {
   window.createMemoryImageStore = createMemoryImageStore;
   window.getImageStoreEntry = getImageStoreEntry;
   window.putImageStoreEntry = putImageStoreEntry;
   window.cleanupImageStore = cleanupImageStore;
   window.getImageStoreStats = getImageStoreStats;
+  window.trimImageStoreToMaxBytes = trimImageStoreToMaxBytes;
 }
 
 if (typeof module !== "undefined") {
@@ -220,6 +306,7 @@ if (typeof module !== "undefined") {
     getImageStoreStats,
     getImageStoreEntry,
     putImageStoreEntry,
-    cleanupImageStore
+    cleanupImageStore,
+    trimImageStoreToMaxBytes
   };
 }

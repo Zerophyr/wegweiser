@@ -21,7 +21,10 @@ class ModelDropdownManager {
       filterTerm: '',
       selectedIndex: -1,
       isOpening: false,
-      justOpened: false
+      justOpened: false,
+      justClosed: false,
+      ignoreNextInput: false,
+      pointerDownInDropdown: false
     };
 
     this.dropdownElement = null;
@@ -118,6 +121,10 @@ class ModelDropdownManager {
 
     // Focus opens and selects all text
     input.addEventListener('focus', (e) => {
+      if (this.state.justClosed) {
+        this.state.justClosed = false;
+        return;
+      }
       if (!this.state.visible && !this.state.isOpening) {
         this.state.isOpening = true;
         this.state.justOpened = true;
@@ -135,6 +142,10 @@ class ModelDropdownManager {
 
     // Type to filter - now the input value is preserved and visible
     input.addEventListener('input', (e) => {
+      if (this.state.ignoreNextInput) {
+        this.state.ignoreNextInput = false;
+        return;
+      }
       // Open dropdown if not visible when user starts typing
       if (!this.state.visible) {
         this.state.visible = true;
@@ -163,10 +174,35 @@ class ModelDropdownManager {
     // Support closing when clicking outside input while dropdown is open
     document.addEventListener('mousedown', (e) => {
       if (!this.state.visible) return;
+      const insideDropdown = this.dropdownElement && this.dropdownElement.contains(e.target);
+      this.state.pointerDownInDropdown = Boolean(insideDropdown);
       if (input.contains(e.target)) return;
-      if (this.dropdownElement.contains(e.target)) return;
+      if (insideDropdown) return;
       this.hide();
     });
+    document.addEventListener('mouseup', () => {
+      this.state.pointerDownInDropdown = false;
+    });
+
+    input.addEventListener('blur', () => {
+      window.requestAnimationFrame(() => {
+        if (!this.state.visible) return;
+        if (this.state.pointerDownInDropdown) return;
+        if (this.dropdownElement.contains(document.activeElement)) return;
+        this.hide();
+      });
+    });
+  }
+
+  isDebugEnabled() {
+    if (this.config.debug) return true;
+    const root = typeof globalThis !== 'undefined' ? globalThis : null;
+    return Boolean(root && root.DEBUG_MODEL_DROPDOWN);
+  }
+
+  debugLog(...args) {
+    if (!this.isDebugEnabled()) return;
+    console.log('[ModelDropdown]', ...args);
   }
 
   floatInput() {
@@ -367,9 +403,18 @@ class ModelDropdownManager {
   }
 
   handleDropdownClick(e) {
-    const item = e.target.closest('.model-dropdown-item');
-    const starIcon = e.target.closest('.model-star-icon');
-    const closeBtn = e.target.closest('#model-dropdown-close');
+    const target = e.target;
+    const item = target?.closest ? target.closest('.model-dropdown-item') : null;
+    const starIcon = target?.closest ? target.closest('.model-star-icon') : null;
+    const closeBtn = target?.closest ? target.closest('#model-dropdown-close') : null;
+
+    this.debugLog('click', {
+      targetTag: target?.tagName || null,
+      itemFound: Boolean(item),
+      modelId: item?.dataset?.modelId || null,
+      star: Boolean(starIcon),
+      close: Boolean(closeBtn)
+    });
 
     if (closeBtn) {
       e.stopPropagation();
@@ -433,10 +478,21 @@ class ModelDropdownManager {
   async selectModel(modelId) {
     // Call user's callback with await to ensure completion
     if (this.config.onModelSelect) {
-      const success = await this.config.onModelSelect(modelId);
+      this.debugLog('selectModel:start', { modelId });
+      this.state.ignoreNextInput = true;
+      let success = false;
+      try {
+        success = await this.config.onModelSelect(modelId);
+      } finally {
+        this.state.ignoreNextInput = false;
+      }
+      this.debugLog('selectModel:result', { modelId, success });
       if (success !== false) {
         // Add to recently used
         this.addToRecentlyUsed(modelId);
+        if (this.config.inputElement) {
+          this.config.inputElement.blur();
+        }
         this.hide();
       }
     }
@@ -480,6 +536,7 @@ class ModelDropdownManager {
   }
 
   show(filterTerm = '') {
+    this.state.justClosed = false;
     this.state.filterTerm = filterTerm;
     this.state.selectedIndex = -1;
     this.render();
@@ -495,7 +552,12 @@ class ModelDropdownManager {
     }
     this.state.visible = false;
     this.state.selectedIndex = -1;
+    this.state.pointerDownInDropdown = false;
+    this.state.justClosed = true;
     this.dockInput();
+    setTimeout(() => {
+      this.state.justClosed = false;
+    }, 200);
   }
 
   render() {
@@ -550,6 +612,17 @@ class ModelDropdownManager {
       <button id="model-dropdown-close" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: ${parseInt(closeSize) + 6}px; padding: 0; width: ${closeSize}; height: ${closeSize}; display: flex; align-items: center; justify-content: center;">×</button>
     `;
     dropdown.appendChild(closeHeader);
+
+    const closeButton = closeHeader.querySelector('#model-dropdown-close');
+    if (closeButton) {
+      closeButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hide();
+        if (this.config.inputElement) {
+          this.config.inputElement.blur();
+        }
+      });
+    }
 
     // Favorites section
     if (favModels.length > 0) {

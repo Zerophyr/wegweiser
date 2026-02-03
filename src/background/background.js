@@ -414,6 +414,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
+  if (msg?.type === MESSAGE_TYPES.CLOSE_SIDEPANEL) {
+    (async () => {
+      try {
+        const tabId = sender?.tab?.id;
+        if (!tabId || !chrome.sidePanel || typeof chrome.sidePanel.close !== "function") {
+          sendResponse({ ok: false, error: "Side panel close not available" });
+          return;
+        }
+        await chrome.sidePanel.close({ tabId });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  }
+
   if (msg?.type === MESSAGE_TYPES.OPENROUTER_QUERY) {
     (async () => {
       try {

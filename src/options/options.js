@@ -16,11 +16,14 @@ const modelsStatusEl = document.getElementById("models-status");
 const saveBtn = document.getElementById("save");
 const statusEl = document.getElementById("status");
 const historyLimitInput = document.getElementById("history-limit");
+const collapseOnSpacesToggle = document.getElementById("collapse-on-spaces");
 const promptHistoryEl = document.getElementById("prompt-history");
 const debugStreamToggle = document.getElementById("debug-stream-toggle");
 const downloadDebugLogBtn = document.getElementById("download-debug-log-btn");
 const clearDebugLogBtn = document.getElementById("clear-debug-log-btn");
 const clearImageCacheBtn = document.getElementById("clear-image-cache-btn");
+const imageCacheLimitInput = document.getElementById("image-cache-limit");
+const imageCacheLimitValue = document.getElementById("image-cache-limit-value");
 
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
@@ -42,6 +45,23 @@ let pendingDeleteItem = null; // { item, timeout }
 let pendingClearAllHistory = null; // { items, timeout }
 let currentProvider = "openrouter";
 const DEBUG_STREAM_KEY = "or_debug_stream";
+const IMAGE_CACHE_LIMIT_KEY = "or_image_cache_limit_mb";
+const IMAGE_CACHE_LIMIT_DEFAULT = 512;
+const IMAGE_CACHE_LIMIT_MIN = 128;
+const IMAGE_CACHE_LIMIT_MAX = 2048;
+const IMAGE_CACHE_LIMIT_STEP = 64;
+
+function normalizeImageCacheLimitMb(value) {
+  if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
+  const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
+  const snapped = Math.round(clamped / IMAGE_CACHE_LIMIT_STEP) * IMAGE_CACHE_LIMIT_STEP;
+  return Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, snapped));
+}
+
+function updateImageCacheLimitLabel(value) {
+  if (!imageCacheLimitValue) return;
+  imageCacheLimitValue.textContent = `${value} MB`;
+}
 
 function setupKeyVisibilityToggles() {
   if (typeof bindVisibilityToggles !== "function") return;
@@ -140,6 +160,14 @@ function applyProviderSettings(providerId, localItems) {
 
   if (localItems.or_history_limit) {
     historyLimitInput.value = localItems.or_history_limit;
+  }
+  if (imageCacheLimitInput) {
+    const normalizedLimit = normalizeImageCacheLimitMb(localItems.or_image_cache_limit_mb);
+    imageCacheLimitInput.value = normalizedLimit;
+    updateImageCacheLimitLabel(normalizedLimit);
+  }
+  if (collapseOnSpacesToggle) {
+    collapseOnSpacesToggle.checked = localItems.or_collapse_on_spaces !== false;
   }
 }
 
@@ -279,7 +307,9 @@ async function loadProviderState(providerId) {
     "or_model_provider",
     "or_recent_models",
     "or_recent_models_naga",
-    "or_history_limit"
+    "or_history_limit",
+    "or_image_cache_limit_mb",
+    "or_collapse_on_spaces"
   ]);
   const syncItems = await chrome.storage.sync.get([
     "or_favorites",
@@ -306,7 +336,9 @@ Promise.all([
     "or_recent_models",
     "or_recent_models_naga",
     "or_history_limit",
-    "or_debug_stream"
+    "or_debug_stream",
+    "or_image_cache_limit_mb",
+    "or_collapse_on_spaces"
   ]),
   chrome.storage.sync.get([
     "or_favorites",
@@ -328,6 +360,9 @@ Promise.all([
   }
   if (clearDebugLogBtn) {
     clearDebugLogBtn.disabled = !debugEnabled;
+  }
+  if (collapseOnSpacesToggle) {
+    collapseOnSpacesToggle.checked = localItems.or_collapse_on_spaces !== false;
   }
 });
 
@@ -608,12 +643,18 @@ saveBtn.addEventListener("click", async () => {
   const nagaProvisioningKey = nagaProvisioningKeyInput ? nagaProvisioningKeyInput.value.trim() : "";
   const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
+  const collapseOnSpaces = collapseOnSpacesToggle ? Boolean(collapseOnSpacesToggle.checked) : true;
+  const imageCacheLimitMb = imageCacheLimitInput
+    ? normalizeImageCacheLimitMb(parseInt(imageCacheLimitInput.value, 10))
+    : IMAGE_CACHE_LIMIT_DEFAULT;
 
   // Model is optional - if not set, will use default from constants
   const dataToSave = {
     [settings.apiKeyKey]: apiKey,
     or_history_limit: historyLimit,
-    or_provider: settings.id
+    or_provider: settings.id,
+    or_collapse_on_spaces: collapseOnSpaces,
+    [IMAGE_CACHE_LIMIT_KEY]: imageCacheLimitMb
   };
   if (settings.id === "naga") {
     dataToSave[settings.provisioningKeyKey] = nagaProvisioningKey;
@@ -871,6 +912,14 @@ if (clearImageCacheBtn) {
       console.error("Failed to clear image cache:", e);
       toast.error("Failed to clear image cache");
     }
+  });
+}
+
+if (imageCacheLimitInput) {
+  imageCacheLimitInput.addEventListener("input", () => {
+    const normalized = normalizeImageCacheLimitMb(parseInt(imageCacheLimitInput.value, 10));
+    imageCacheLimitInput.value = normalized;
+    updateImageCacheLimitLabel(normalized);
   });
 }
 
