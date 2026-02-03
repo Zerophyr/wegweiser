@@ -1488,6 +1488,15 @@ if (spacesBtn) {
     const spacesUrl = chrome.runtime.getURL('src/spaces/spaces.html');
     const tabs = await chrome.tabs.query({ url: spacesUrl });
 
+    if (tabs.length > 0) {
+      // Focus existing tab
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      await chrome.windows.update(tabs[0].windowId, { focused: true });
+    } else {
+      // Open new tab
+      await chrome.tabs.create({ url: spacesUrl });
+    }
+
     if (collapseOnSpaces) {
       try {
         await chrome.runtime.sendMessage({ type: "close_sidepanel" });
@@ -1499,15 +1508,6 @@ if (spacesBtn) {
       } catch (e) {
         // ignore window close errors
       }
-    }
-
-    if (tabs.length > 0) {
-      // Focus existing tab
-      chrome.tabs.update(tabs[0].id, { active: true });
-      chrome.windows.update(tabs[0].windowId, { focused: true });
-    } else {
-      // Open new tab
-      chrome.tabs.create({ url: spacesUrl });
     }
   };
 
