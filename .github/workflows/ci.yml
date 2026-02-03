@@ -1,0 +1,40 @@
+name: CI Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Package extension
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          mkdir -p dist
+          ZIP_NAME="wegweiser-v${VERSION}.zip"
+          tar -a -c -f "dist/${ZIP_NAME}" manifest.json icons src
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wegweiser-build
+          path: dist/*.zip

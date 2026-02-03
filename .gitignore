@@ -51,3 +51,8 @@ temp/
 *.tmp
 
 .worktrees/
+# Ignore local agent files and docs for public repo
+CLAUDE.md
+.claude/
+.context/
+docs/
