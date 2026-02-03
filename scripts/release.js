@@ -33,6 +33,16 @@ function run(command, options = {}) {
   execSync(command, { stdio: "inherit", ...options });
 }
 
+function ensureCleanWorkingTree() {
+  const output = execSync("git status --porcelain", {
+    cwd: rootDir,
+    encoding: "utf8"
+  });
+  if (output.trim().length > 0) {
+    throw new Error("Working tree is not clean. Commit or stash changes before release.");
+  }
+}
+
 function ensureVersionsMatch(manifest, pkg) {
   if (manifest.version !== pkg.version) {
     throw new Error(`Version mismatch: manifest ${manifest.version} vs package ${pkg.version}`);
@@ -57,8 +67,17 @@ function buildZip(version) {
     fs.unlinkSync(zipPath);
   }
   const includeList = ["manifest.json", "icons", "src"];
-  const cmd = `tar -a -c -f "${zipPath}" ${includeList.join(" ")}`;
-  run(cmd, { cwd: rootDir });
+  try {
+    const cmd = `tar -a -c -f "${zipPath}" ${includeList.join(" ")}`;
+    run(cmd, { cwd: rootDir });
+  } catch (err) {
+    if (process.platform !== "win32") {
+      throw err;
+    }
+    const includePaths = includeList.map((entry) => `"${entry}"`).join(", ");
+    const psCmd = `powershell -NoProfile -Command "Compress-Archive -Path ${includePaths} -DestinationPath \\"${zipPath}\\" -Force"`;
+    run(psCmd, { cwd: rootDir });
+  }
   return zipPath;
 }
 
@@ -70,6 +89,7 @@ function trySignCrx(version) {
   }
 
   const extensionDir = rootDir;
+  const pemPath = path.join(rootDir, path.basename(extensionDir) + ".pem");
   const cmd = `"${chromePath}" --pack-extension="${extensionDir}" --pack-extension-key="${keyPath}"`;
   run(cmd, { cwd: rootDir });
 
@@ -84,6 +104,11 @@ function trySignCrx(version) {
   }
   const crxTarget = path.join(distDir, `wegweiser-v${version}.crx`);
   fs.renameSync(crxSource, crxTarget);
+  const normalizedKeyPath = path.resolve(keyPath);
+  const normalizedPemPath = path.resolve(pemPath);
+  if (normalizedKeyPath !== normalizedPemPath && fs.existsSync(pemPath)) {
+    fs.unlinkSync(pemPath);
+  }
   return crxTarget;
 }
 
@@ -104,6 +129,7 @@ function main() {
 
   console.log(`Release mode: ${args.bump}${args.dryRun ? " (dry-run)" : ""}`);
 
+  ensureCleanWorkingTree();
   run("npm test", { cwd: rootDir });
 
   const manifest = readJson(manifestPath);

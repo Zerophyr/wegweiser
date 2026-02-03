@@ -14,4 +14,21 @@ describe("release script scaffold", () => {
     );
     expect(content).toMatch(/dist/);
   });
+
+  test("release script checks for clean git status", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../scripts/release.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/git status --porcelain/);
+  });
+
+  test("release script handles PEM cleanup and zip fallback", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../scripts/release.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/\.pem/);
+    expect(content).toMatch(/Compress-Archive/);
+  });
 });
