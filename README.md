@@ -182,6 +182,10 @@ Artifacts are written to `dist/`:
 - `wegweiser-vX.Y.Z.zip` (Chrome Web Store upload)
 - Optional `wegweiser-vX.Y.Z.crx` if `CHROME_PATH` and `CWS_PRIVATE_KEY_PATH` are set
 
+Notes:
+- Release requires a clean git working tree (uncommitted changes will abort).
+- On Windows, ZIP creation falls back to PowerShell `Compress-Archive` if `tar` is unavailable.
+
 ## 📁 Project Structure
 
 ```

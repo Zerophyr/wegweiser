@@ -259,6 +259,8 @@ When modifying markdown support, update both `src/modules/markdown.js` and the p
 - Run `npm run release` to bump versions, run tests, build, and package the upload ZIP.
 - Flags: `--minor`, `--major`, `--dry-run`.
 - Signed CRX is optional: set `CHROME_PATH` and `CWS_PRIVATE_KEY_PATH` to enable.
+- Release requires a clean git working tree (uncommitted changes will abort).
+- Windows fallback uses PowerShell `Compress-Archive` if `tar` is unavailable.
 
 ## Storage Keys Reference
 All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
