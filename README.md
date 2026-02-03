@@ -127,66 +127,6 @@ _(Coming soon)_
 5. **Image storage**: Clear generated images and set the storage limit (IndexedDB)
 6. **Spaces behavior**: Toggle auto-collapse when opening Spaces
 
-## 🛠️ Development
-
-### Prerequisites
-```bash
-npm install
-```
-
-### TypeScript Development
-```bash
-# Build TypeScript
-npm run build:ts
-
-# Watch mode
-npm run watch:ts
-```
-
-### Testing
-```bash
-# Run tests
-npm test
-
-# Watch mode
-npm run test:watch
-
-# Coverage report
-npm run test:coverage
-```
-
-### Linting & Formatting
-```bash
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-```
-
-### Release (Local Automation)
-```bash
-# Patch bump (default)
-npm run release
-
-# Minor bump
-npm run release -- --minor
-
-# Major bump
-npm run release -- --major
-
-# Dry-run (no file writes)
-npm run release -- --dry-run
-```
-
-Artifacts are written to `dist/`:
-- `wegweiser-vX.Y.Z.zip` (Chrome Web Store upload)
-- Optional `wegweiser-vX.Y.Z.crx` if `CHROME_PATH` and `CWS_PRIVATE_KEY_PATH` are set
-
-Notes:
-- Release requires a clean git working tree (uncommitted changes will abort).
-- On Windows, ZIP creation falls back to PowerShell `Compress-Archive` if `tar` is unavailable.
-
 ## 📁 Project Structure
 
 ```
@@ -202,11 +142,8 @@ Wegweiser-extension/
 │   └── shared/             # Shared helpers + constants
 │       └── image-store.js   # IndexedDB-backed image storage
 ├── icons/                  # Extension icons
-├── tests/                  # Jest tests
-├── docs/                   # Documentation + plans
 ├── manifest.json
-├── README.md
-└── CLAUDE.md
+└── README.md
 ```
 
 ## 🔒 Privacy & Security
@@ -332,7 +269,7 @@ MIT License - See LICENSE file for details
 
 ## 📞 Support
 
-- **Issues**: Report bugs on [GitHub Issues](https://github.com/your-repo/issues)
+- **Issues**: Report bugs on [GitHub Issues](https://github.com/Zerophyr/wegweiser/issues)
 - **Questions**: Check the [FAQ](#faq) or open a discussion
 - **Feature Requests**: Submit via GitHub Issues
 
