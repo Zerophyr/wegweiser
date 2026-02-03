@@ -57,6 +57,24 @@ function updatePackageLockVersion(packageLock, version) {
   return packageLock;
 }
 
+function hasTypeScriptSources(dirPath) {
+  if (!fs.existsSync(dirPath)) return false;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      if (hasTypeScriptSources(fullPath)) return true;
+    } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldRunTsBuild() {
+  return hasTypeScriptSources(path.join(rootDir, "src"));
+}
+
 function buildZip(version) {
   if (!fs.existsSync(distDir)) {
     fs.mkdirSync(distDir, { recursive: true });
@@ -154,7 +172,7 @@ function main() {
     writeJson(packageLockPath, packageLock);
   }
 
-  if (fs.existsSync(path.join(rootDir, "tsconfig.json"))) {
+  if (fs.existsSync(path.join(rootDir, "tsconfig.json")) && shouldRunTsBuild()) {
     run("npm run build:ts", { cwd: rootDir });
   }
 

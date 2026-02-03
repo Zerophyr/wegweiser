@@ -31,4 +31,13 @@ describe("release script scaffold", () => {
     expect(content).toMatch(/\.pem/);
     expect(content).toMatch(/Compress-Archive/);
   });
+
+  test("release script guards TypeScript build to avoid tests-only config", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../scripts/release.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/shouldRunTsBuild/);
+    expect(content).toMatch(/src/);
+  });
 });
