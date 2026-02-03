@@ -157,16 +157,6 @@ Wegweiser-extension/
 - **Image Cleanup** - Manual clear option available in Options
 - **No Telemetry** - No data collected or shared
 
-## 🎯 Quality Metrics
-
-| Category | Score | Notes |
-|----------|-------|-------|
-| **Security** | 8/10 | API key isolation, CSP, input validation |
-| **Performance** | 9/10 | Optimized rendering, smart caching |
-| **Code Quality** | 8/10 | TypeScript ready, modular, tested |
-| **User Experience** | 8.5/10 | Themes, shortcuts, markdown, toasts |
-| **Overall** | 8.5/10 | Production-ready |
-
 ## 📝 Changelog
 
 ### v1.1.1 (Latest)
