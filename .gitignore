@@ -56,3 +56,5 @@ CLAUDE.md
 .claude/
 .context/
 docs/
+.local-backup-docs/
+.local-backup-meta/
