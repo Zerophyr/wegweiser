@@ -1,3 +1,4 @@
+export {};
 const {
   createDebugStreamLog,
   pushDebugStreamEntry,
@@ -54,3 +55,4 @@ describe("debug stream log helpers", () => {
     expect(filename).toBe("wegweiser-stream-debug-2026-01-28_22-06-06Z.json");
   });
 });
+

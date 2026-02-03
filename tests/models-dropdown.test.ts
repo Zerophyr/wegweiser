@@ -1,3 +1,4 @@
+export {};
 const { ModelDropdownManager } = require("../src/modules/models-dropdown.js");
 
 describe("ModelDropdownManager storage keys", () => {
@@ -213,3 +214,4 @@ describe("ModelDropdownManager storage keys", () => {
     inputRemoveSpy.mockRestore();
   });
 });
+

@@ -1,3 +1,4 @@
+export {};
 let spacesLoaded = false;
 
 const win = window as unknown as {
@@ -48,3 +49,4 @@ describe("spaces context modal helpers", () => {
     expect(labelNone).toBe("");
   });
 });
+

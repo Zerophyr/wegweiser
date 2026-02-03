@@ -1,3 +1,4 @@
+export {};
 const { createMemoryImageStore, putImageStoreEntry, cleanupImageStore } = require("../src/shared/image-store.js");
 
 describe("image store cleanup", () => {
@@ -14,3 +15,4 @@ describe("image store cleanup", () => {
     expect(entry).toBeNull();
   });
 });
+

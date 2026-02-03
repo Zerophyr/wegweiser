@@ -1,3 +1,4 @@
+export {};
 const {
   initVisibilityToggle,
   bindVisibilityToggles
@@ -81,3 +82,4 @@ test("module can be evaluated twice without const redeclare errors", () => {
     vm.runInContext(code, context);
   }).not.toThrow();
 });
+

@@ -1,3 +1,4 @@
+export {};
 let spacesLoaded = false;
 
 const win = window as unknown as {
@@ -66,3 +67,4 @@ describe("spaces summarization helpers", () => {
     expect(win.getSummaryMinLength?.(12)).toBe(200);
   });
 });
+

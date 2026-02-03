@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -11,3 +12,4 @@ describe("background sidepanel close", () => {
     expect(content).toMatch(/chrome\.tabs\.query/);
   });
 });
+

@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -22,3 +23,4 @@ describe("background image routing", () => {
     expect(content).toMatch(/images\/generations/);
   });
 });
+

@@ -1,3 +1,4 @@
+export {};
 let spacesLoaded = false;
 
 const win = window as unknown as {
@@ -37,3 +38,4 @@ describe("spaces archive helpers", () => {
     expect(document.querySelector(".chat-archive-toggle")).not.toBeNull();
   });
 });
+

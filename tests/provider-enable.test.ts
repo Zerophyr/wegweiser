@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -39,3 +40,4 @@ describe("provider enable settings", () => {
     expect(content).toMatch(/PROVIDER_ENABLED_NAGA/);
   });
 });
+

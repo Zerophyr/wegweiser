@@ -1,3 +1,4 @@
+export {};
 let spacesLoaded = false;
 
 const win = window as unknown as {
@@ -32,3 +33,4 @@ describe("spaces storage helpers", () => {
       .toBe("Image Storage: 3.0MB");
   });
 });
+

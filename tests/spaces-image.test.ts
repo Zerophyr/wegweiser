@@ -1,3 +1,4 @@
+export {};
 const win = window as any;
 
 describe("spaces image lightbox", () => {
@@ -13,3 +14,4 @@ describe("spaces image lightbox", () => {
     expect(document.querySelector(".image-lightbox")).not.toBeNull();
   });
 });
+

@@ -1,3 +1,4 @@
+export {};
 const { clearPromptAfterSend } = require("../src/shared/utils.js");
 
 describe("clearPromptAfterSend", () => {
@@ -8,3 +9,4 @@ describe("clearPromptAfterSend", () => {
     expect(el.style.height).toBe("auto");
   });
 });
+

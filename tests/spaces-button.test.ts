@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -21,3 +22,4 @@ describe("spaces button behavior", () => {
     expect(closeIndex).toBeGreaterThan(openIndex);
   });
 });
+

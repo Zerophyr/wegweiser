@@ -1,3 +1,4 @@
+export {};
 const { prepareImageCacheEntry } = require("../src/shared/image-cache.js");
 const { putImageCacheEntry } = require("../src/shared/image-cache.js");
 
@@ -86,3 +87,4 @@ describe("image cache trimming", () => {
     expect(storageData.or_image_cache["img-new"]).toBeDefined();
   });
 });
+

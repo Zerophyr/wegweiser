@@ -1,3 +1,4 @@
+export {};
 const { applyMarkdownStyles } = require("../src/modules/markdown");
 
 describe("topic headings", () => {
@@ -6,3 +7,4 @@ describe("topic headings", () => {
     expect(html).toContain("topic-heading");
   });
 });
+

@@ -1,3 +1,4 @@
+export {};
 const fs = require('fs');
 const path = require('path');
 
@@ -10,3 +11,4 @@ describe('sidepanel answer persistence', () => {
     expect(js).toMatch(/getCurrentTabId/);
   });
 });
+

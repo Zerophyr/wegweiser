@@ -1,3 +1,4 @@
+export {};
 const { bumpVersion } = require("../scripts/release-utils.js");
 
 describe("bumpVersion", () => {
@@ -13,3 +14,4 @@ describe("bumpVersion", () => {
     expect(bumpVersion("1.1.1", "major")).toBe("2.0.0");
   });
 });
+

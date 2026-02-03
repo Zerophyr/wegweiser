@@ -1,3 +1,4 @@
+export {};
 const fs = require('fs');
 const path = require('path');
 
@@ -12,3 +13,4 @@ describe('spaces modal close button styles', () => {
     expect(block).toMatch(/min-height:\s*32px/);
   });
 });
+

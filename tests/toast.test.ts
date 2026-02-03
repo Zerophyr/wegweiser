@@ -1,3 +1,4 @@
+export {};
 /**
  * @jest-environment jsdom
  */
@@ -385,3 +386,4 @@ describe('Toast Notification System', () => {
     });
   });
 });
+

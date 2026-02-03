@@ -1,3 +1,4 @@
+export {};
 const {
   createMemoryImageStore,
   getImageStoreStats,
@@ -49,3 +50,4 @@ describe("image store (memory adapter)", () => {
     expect(stats.bytesUsed).toBe("data:image/png;base64,abc".length);
   });
 });
+

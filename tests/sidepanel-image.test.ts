@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -10,3 +11,4 @@ describe("sidepanel image toggle", () => {
     expect(html).toMatch(/image-toggle/i);
   });
 });
+

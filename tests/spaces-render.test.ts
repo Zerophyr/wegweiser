@@ -1,3 +1,4 @@
+export {};
 let spacesLoaded = false;
 
 const win = window as unknown as {
@@ -150,3 +151,4 @@ describe("renderChatMessages", () => {
     expect(result?.[0].content).toBe('Only');
   });
 });
+

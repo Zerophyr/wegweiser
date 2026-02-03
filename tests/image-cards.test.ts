@@ -1,3 +1,4 @@
+export {};
 const { buildImageCard } = require("../src/modules/image-cards.js");
 
 describe("image cards", () => {
@@ -12,3 +13,4 @@ describe("image cards", () => {
     expect(el.querySelector(".image-download-btn")).not.toBeNull();
   });
 });
+

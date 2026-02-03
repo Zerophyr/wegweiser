@@ -1,3 +1,4 @@
+export {};
 const fs = require("fs");
 const path = require("path");
 
@@ -41,3 +42,4 @@ describe("release script scaffold", () => {
     expect(content).toMatch(/src/);
   });
 });
+
