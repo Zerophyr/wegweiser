@@ -9,6 +9,7 @@
     "test:coverage": "jest --coverage",
     "build:ts": "tsc",
     "watch:ts": "tsc --watch",
+    "release": "node scripts/release.js",
     "lint": "eslint . --ext .js,.ts",
     "format": "prettier --write \"**/*.{js,ts,json,md}\""
   },

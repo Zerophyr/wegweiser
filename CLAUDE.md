@@ -255,6 +255,11 @@ When modifying markdown support, update both `src/modules/markdown.js` and the p
 - **Message flow**: Look for `console.log` statements showing message types and payloads
 - **Streaming debug log**: Options → "Streaming Debug Log" (download last 500 stream events, includes summary start/response/error)
 
+### Release Automation (Local)
+- Run `npm run release` to bump versions, run tests, build, and package the upload ZIP.
+- Flags: `--minor`, `--major`, `--dry-run`.
+- Signed CRX is optional: set `CHROME_PATH` and `CWS_PRIVATE_KEY_PATH` to enable.
+
 ## Storage Keys Reference
 All storage keys are defined in `src/shared/constants.js` as `STORAGE_KEYS.*`:
 - `PROVIDER` - Last selected model provider (used as default when picking a model)

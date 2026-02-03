@@ -163,6 +163,25 @@ npm run lint
 npm run format
 ```
 
+### Release (Local Automation)
+```bash
+# Patch bump (default)
+npm run release
+
+# Minor bump
+npm run release -- --minor
+
+# Major bump
+npm run release -- --major
+
+# Dry-run (no file writes)
+npm run release -- --dry-run
+```
+
+Artifacts are written to `dist/`:
+- `wegweiser-vX.Y.Z.zip` (Chrome Web Store upload)
+- Optional `wegweiser-vX.Y.Z.crx` if `CHROME_PATH` and `CWS_PRIVATE_KEY_PATH` are set
+
 ## 📁 Project Structure
 
 ```
