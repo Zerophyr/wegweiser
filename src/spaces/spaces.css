@@ -1443,11 +1443,16 @@ body {
 }
 
 .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: var(--color-text-muted);
   font-size: 24px;
   cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   line-height: 1;
 }

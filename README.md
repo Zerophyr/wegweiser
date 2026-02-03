@@ -1,4 +1,4 @@
-# 🤖 Wegweiser v1.1.1
+# 🤖 Wegweiser v1.1.3
 
 > Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
@@ -8,6 +8,7 @@
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
 - 🔄 **Model Selection** - Combined model list across OpenRouter + NagaAI (only providers with keys)
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
+- 💾 **Per-Tab Answer Persistence** - Sidebar answers stay until cleared, scoped to the current tab
 - 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries

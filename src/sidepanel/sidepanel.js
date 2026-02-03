@@ -202,6 +202,76 @@ function setAnswerLoading(isLoading) {
   }
 }
 
+// ---- Sidepanel answer persistence ----
+const ANSWER_CACHE_KEY_PREFIX = "or_sidepanel_answer_";
+let answerPersistTimeout = null;
+
+function getAnswerStorage() {
+  if (chrome?.storage?.session) {
+    return chrome.storage.session;
+  }
+  return chrome?.storage?.local || null;
+}
+
+async function getCurrentTabId() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0]?.id || "default";
+  } catch (e) {
+    console.warn("Failed to resolve current tab id:", e);
+    return "default";
+  }
+}
+
+function scheduleAnswerPersist() {
+  if (answerPersistTimeout) {
+    clearTimeout(answerPersistTimeout);
+  }
+  answerPersistTimeout = setTimeout(() => {
+    answerPersistTimeout = null;
+    persistAnswers().catch((e) => {
+      console.warn("Failed to persist answers:", e);
+    });
+  }, 200);
+}
+
+async function persistAnswers() {
+  const storage = getAnswerStorage();
+  if (!storage || !answerEl) return;
+  const tabId = await getCurrentTabId();
+  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
+  const html = answerEl.innerHTML || "";
+  const metaText = metaEl?.textContent || "";
+  if (!html.trim()) {
+    if (typeof storage.remove === "function") {
+      await storage.remove([key]);
+    } else {
+      await storage.set({ [key]: null });
+    }
+    return;
+  }
+  await storage.set({ [key]: { html, metaText } });
+}
+
+async function restorePersistedAnswers() {
+  const storage = getAnswerStorage();
+  if (!storage || !answerEl) return;
+  const tabId = await getCurrentTabId();
+  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
+  const stored = await storage.get([key]);
+  const payload = stored?.[key];
+  if (payload?.html) {
+    answerEl.innerHTML = payload.html;
+    if (payload.metaText) {
+      metaEl.textContent = payload.metaText;
+    }
+    updateAnswerVisibility();
+  } else {
+    answerEl.innerHTML = "";
+    updateAnswerVisibility();
+  }
+}
+
 function closeExportMenus() {
   document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
 }
@@ -1534,6 +1604,7 @@ if (clearAnswerBtn) {
     answerEl.innerHTML = "";
     updateAnswerVisibility();
     metaEl.textContent = "Answers cleared.";
+    scheduleAnswerPersist();
 
     // Cancel any previous pending clear
     if (pendingClearTimeout) {
@@ -1557,6 +1628,7 @@ if (clearAnswerBtn) {
             updateAnswerVisibility();
             metaEl.textContent = "Answers restored.";
             savedAnswersHtml = null;
+            scheduleAnswerPersist();
           }
         }
       }
@@ -1600,6 +1672,14 @@ function hideTypingIndicator() {
 document.addEventListener("DOMContentLoaded", async () => {
   // Hide answer box initially if empty
   updateAnswerVisibility();
+  await restorePersistedAnswers();
+
+  if (answerEl && typeof MutationObserver !== "undefined") {
+    const observer = new MutationObserver(() => {
+      scheduleAnswerPersist();
+    });
+    observer.observe(answerEl, { childList: true, subtree: true, characterData: true });
+  }
 
   if (typeof cleanupImageCache === "function") {
     cleanupImageCache().catch((e) => {

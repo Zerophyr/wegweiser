@@ -114,6 +114,7 @@ Sidepanel UI (src/sidepanel/sidepanel.js) - renders markdown, displays sources
 
 **Storage Strategy**:
 - **chrome.storage.local**: API keys (OpenRouter + Naga), provisioning key, history, caches, debug log toggle
+- **chrome.storage.session**: Per-tab sidebar answer persistence (auto-cleared when Chrome session ends)
 - **chrome.storage.sync**: Favorites, theme preferences (synced across devices)
 - **IndexedDB**: Generated images (large data URLs stored outside local storage quota)
   - Options has a "Clear Images" button that wipes the IndexedDB image store
