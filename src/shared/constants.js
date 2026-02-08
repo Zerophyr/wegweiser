@@ -15,6 +15,8 @@ export const STORAGE_KEYS = {
   RECENT_MODELS_NAGA: "or_recent_models_naga",
   HISTORY_LIMIT: "or_history_limit",
   HISTORY: "or_history",
+  PROJECTS: "or_projects",
+  PROJECT_THREADS: "or_project_threads",
   WEB_SEARCH: "or_web_search",
   REASONING: "or_reasoning",
   MODELS_CACHE: "or_models_cache",
@@ -29,10 +31,17 @@ export const STORAGE_KEYS = {
   DEBUG_STREAM: "or_debug_stream",
   IMAGE_CACHE: "or_image_cache",
   COLLAPSE_ON_SPACES: "or_collapse_on_spaces",
+  COLLAPSE_ON_PROJECTS: "or_collapse_on_projects",
   IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb",
   PROVIDER_ENABLED_OPENROUTER: "or_provider_enabled_openrouter",
   PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga",
   CONTEXT_SESSION_PREFIX: "or_context_session_"
+};
+
+export const LEGACY_STORAGE_KEYS = {
+  SPACES: "or_spaces",
+  THREADS: "or_threads",
+  COLLAPSE_ON_SPACES: "or_collapse_on_spaces"
 };
 
 // Encryption settings (local storage only)
