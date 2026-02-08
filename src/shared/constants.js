@@ -31,7 +31,8 @@ export const STORAGE_KEYS = {
   COLLAPSE_ON_SPACES: "or_collapse_on_spaces",
   IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb",
   PROVIDER_ENABLED_OPENROUTER: "or_provider_enabled_openrouter",
-  PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga"
+  PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga",
+  CONTEXT_SESSION_PREFIX: "or_context_session_"
 };
 
 // Message types for chrome.runtime.sendMessage

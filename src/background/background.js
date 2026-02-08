@@ -50,10 +50,60 @@ let lastConfigLoadAt = 0;
 
 // Conversation context management (per tab)
 const conversationContexts = new Map(); // tabId -> messages array
+const contextStorage = (chrome?.storage?.session) ? chrome.storage.session : chrome.storage.local;
+const contextStoragePrefix = STORAGE_KEYS.CONTEXT_SESSION_PREFIX || "or_context_session_";
+let contextLoadPromise = null;
+
+function getContextStorageKey(tabId) {
+  const keyId = tabId === undefined || tabId === null ? "default" : String(tabId);
+  return `${contextStoragePrefix}${keyId}`;
+}
+
+function parseStoredTabId(tabId) {
+  if (tabId === "default") return "default";
+  const asNumber = Number(tabId);
+  return Number.isNaN(asNumber) ? tabId : asNumber;
+}
+
+async function ensureContextLoaded() {
+  if (contextLoadPromise) return contextLoadPromise;
+  contextLoadPromise = (async () => {
+    if (!contextStorage?.get) return;
+    const all = await contextStorage.get(null);
+    if (!all) return;
+    Object.keys(all).forEach((key) => {
+      if (!key.startsWith(contextStoragePrefix)) return;
+      const tabKey = key.slice(contextStoragePrefix.length);
+      const messages = all[key];
+      if (Array.isArray(messages)) {
+        conversationContexts.set(parseStoredTabId(tabKey), messages);
+      }
+    });
+  })().catch((e) => {
+    console.warn("Failed to load stored context:", e);
+  });
+  return contextLoadPromise;
+}
+
+async function persistContextForTab(tabId) {
+  if (!contextStorage?.set) return;
+  const key = getContextStorageKey(tabId);
+  const messages = conversationContexts.get(tabId) || [];
+  await contextStorage.set({ [key]: messages });
+}
+
+async function removeContextForTab(tabId) {
+  if (!contextStorage?.remove) return;
+  const key = getContextStorageKey(tabId);
+  await contextStorage.remove([key]);
+}
 
 // ---- Tab cleanup to prevent memory leak ----
 chrome.tabs.onRemoved.addListener((tabId) => {
   conversationContexts.delete(tabId);
+  removeContextForTab(tabId).catch((e) => {
+    console.warn("Failed to remove context for tab", tabId, e);
+  });
   console.log(`Cleaned up context for tab ${tabId}`);
 });
 
@@ -476,35 +526,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.CLEAR_CONTEXT) {
     (async () => {
       try {
+        await ensureContextLoaded();
         const tabId = msg.tabId || 'default';
         conversationContexts.delete(tabId);
+        await removeContextForTab(tabId);
         sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
     })();
-      return true;
-    }
+    return true;
+  }
 
-    if (msg?.type === MESSAGE_TYPES.SUMMARIZE_THREAD) {
-      (async () => {
-        try {
+  if (msg?.type === MESSAGE_TYPES.SUMMARIZE_THREAD) {
+    (async () => {
+      try {
         const result = await callOpenRouterWithMessages(
           msg.messages || [],
           msg.model || null,
           msg.provider || null
         );
-          sendResponse({ ok: true, summary: result.answer, tokens: result.tokens });
-        } catch (e) {
-          sendResponse({ ok: false, error: e?.message || String(e) });
-        }
-      })();
-      return true;
-    }
+        sendResponse({ ok: true, summary: result.answer, tokens: result.tokens });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  }
 
   if (msg?.type === "get_context_size") {
     (async () => {
       try {
+        await ensureContextLoaded();
         const tabId = msg.tabId || 'default';
         const contextSize = conversationContexts.has(tabId) ? conversationContexts.get(tabId).length : 0;
         sendResponse({ ok: true, contextSize });
@@ -595,9 +648,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg?.type === "get_context" && msg.tabId) {
-    const context = conversationContexts.get(msg.tabId) || [];
-    sendResponse({ ok: true, context: context });
-    return false;
+    (async () => {
+      try {
+        await ensureContextLoaded();
+        const context = conversationContexts.get(msg.tabId) || [];
+        sendResponse({ ok: true, context: context });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
   }
 
   if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
@@ -873,6 +933,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  await ensureContextLoaded();
   const providerConfig = getProviderConfig(cfg.modelProvider);
 
   // Get or initialize conversation context for this tab
@@ -890,6 +951,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
   }
 
   console.log(`[Context] Tab ${tabId}: ${context.length} messages in context`);
+  await persistContextForTab(tabId);
 
   // If web search is enabled, append :online to the model (OpenRouter only)
   let modelName = cfg.model;
@@ -963,6 +1025,7 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
       }
 
       console.log(`[Context] Tab ${tabId}: ${context.length} messages after response`);
+      await persistContextForTab(tabId);
 
       return {
         answer: content,
@@ -1198,6 +1261,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
+  await ensureContextLoaded();
   const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
   const streamStartedAt = Date.now();
 
@@ -1235,6 +1299,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
       context.splice(0, context.length - DEFAULTS.MAX_CONTEXT_MESSAGES);
     }
     conversationContexts.set(tabId, context);
+    await persistContextForTab(tabId);
   }
 
   // Use custom model if provided, otherwise use config model
@@ -1491,6 +1556,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
 
     // Save updated context back to Map
     conversationContexts.set(tabId, context);
+    await persistContextForTab(tabId);
 
     // Save to history
     await addHistoryEntry(prompt, fullContent);
