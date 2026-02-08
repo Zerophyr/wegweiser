@@ -1660,7 +1660,7 @@ if (spacesBtn) {
   const openSpacesPage = async () => {
     const stored = await getLocalStorage(["or_collapse_on_spaces"]);
     const collapseOnSpaces = stored.or_collapse_on_spaces !== false;
-    const spacesUrl = chrome.runtime.getURL('src/spaces/spaces.html');
+    const spacesUrl = chrome.runtime.getURL('src/projects/projects.html');
     const tabs = await chrome.tabs.query({ url: spacesUrl });
 
     if (tabs.length > 0) {

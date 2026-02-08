@@ -5,7 +5,7 @@ describe("spaces image lightbox", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="chat-messages"></div>';
     win.__TEST__ = true;
-    require("../src/spaces/spaces.js");
+    require("../src/projects/projects.js");
   });
 
   test("openImageLightbox attaches modal", () => {

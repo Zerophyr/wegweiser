@@ -14,7 +14,7 @@ const win = window as unknown as {
 function loadSpaces() {
   if (spacesLoaded) return;
   win.__TEST__ = true;
-  require("../src/spaces/spaces.js");
+  require("../src/projects/projects.js");
   spacesLoaded = true;
 }
 

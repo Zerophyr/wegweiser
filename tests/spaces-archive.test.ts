@@ -12,7 +12,7 @@ function loadSpaces() {
   if (spacesLoaded) return;
   win.__TEST__ = true;
   (global as any).applyMarkdownStyles = (text: string) => text;
-  require("../src/spaces/spaces.js");
+  require("../src/projects/projects.js");
   spacesLoaded = true;
 }
 

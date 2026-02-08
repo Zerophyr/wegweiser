@@ -1,4 +1,4 @@
-// spaces.js - Spaces feature logic
+// projects.js - Projects feature logic
 
 // Storage keys (match constants.js)
 const STORAGE_KEYS = {
