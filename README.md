@@ -7,62 +7,15 @@
 ### Core Functionality
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
 - 🔄 **Model Selection** - Combined model list across OpenRouter + NagaAI (only providers with keys)
+- 🏠 **Spaces** - Full-page workspace to organize projects, threads, and custom instructions
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
 - 💾 **Per-Tab Answer Persistence** - Sidebar answers stay until cleared, scoped to the current tab
+- 💰 **Token Insights** - Token estimate + usage bar before and after sending
+- 🧾 **Adaptive Summaries** - Automatic summaries keep long Spaces threads usable
 - 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
-
-### Spaces (v1.1.1)
-- 🏠 **Spaces** - Organize conversations by project or topic in a full-page experience
-- 🎨 **5-Column Grid Layout** - Beautiful card-based overview with square cards
-- 😀 **Emoji Icons** - Custom emoji picker to easily identify spaces
-- 📁 **Multiple Threads** - Create and manage threads within each space
-- ⚙️ **Custom Instructions** - Set AI behavior per space with system prompts
-- 🤖 **Per-Space Models** - Choose different models for different projects
-- 🌐 **Per-Space Web Search** - Enable/disable web search per space
-- 🧠 **Per-Space Reasoning** - Enable/disable reasoning mode per space
-- 🔄 **Chat Toggles** - Temporarily override web search/reasoning per message
-- ⚙️ **Quick Settings Access** - Gear icon next to “Create Space” opens Options
-- 🔗 **Source Citations** - Clickable [1], [2] references with clean URL removal
-- 📋 **Copy Answers** - One-click copy button for AI responses in threads
-- 🧾 **Adaptive Summaries** - Older turns are summarized to keep token usage low (short summaries accepted for small histories)
-- 🗂️ **Archived Messages** - Expand “Earlier messages (N)” to view full history
-- 🏷️ **Summary Badge** - "Summary updated" indicator after refresh
-- 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX from the three-dot menu
-- 💬 **Contextual Instructions** - Custom instructions adapt framing based on thread state to prevent model re-introductions
-- 💾 **Persistent Storage** - All conversations saved locally with full history archived
-- 📊 **Storage Monitoring** - Visual usage tracking with tiered warnings (70%/85%/95%)
-
-### Quality of Life Features (v0.9.0)
-- 📋 **Copy Answers** - One-click copy button for each AI response
-- 🛑 **Stop Generation** - Cancel long-running requests with dedicated stop button
-- 📏 **Smart Textarea** - Auto-resizing input field (up to 200px)
-- ⌨️ **Enhanced Shortcuts** - Ctrl+Enter to send, Shift+Enter for new line, Escape to focus input
-- 💰 **Token Estimate** - Approximate token count shown before sending
-- 📊 **Token Usage Bar** - Visual progress bar with color-coded feedback (green/yellow/red)
-- ⏱️ **Response Time** - Track generation speed for each response
-- 🎯 **Context Badges** - Visual indicators showing conversation context usage
-
-### Advanced Features
-- 📝 **Markdown Support** - Beautiful formatting for AI responses with code blocks, headers, lists, and more
-- 🎨 **Custom Themes** - Choose from Dark or Light themes
-- 🔔 **Toast Notifications** - Visual feedback for all actions
-- 📤 **Export History** - Export conversations as JSON or CSV
-- 🔗 **Sources Display** - Clean source citations with favicon indicators and modal view
-- 🔄 **Real-time Streaming** - Server-sent events for live response generation
-- 🧭 **Provider Badges** - OR/NG badges in model lists to show provider availability
-- 🧪 **Streaming Debug Log** - Optional log of the last 500 streaming events (Options)
-- 🖼️ **IndexedDB Image Storage** - Image generations stored outside chrome.storage to avoid quota limits
-- 🧹 **Image Cache Cleanup** - Clear generated images from Options
-- 🎚️ **Image Cache Limit** - Adjustable cache size (128–2048 MB, default 512 MB)
-
-### Security & Performance (v0.6.0)
-- 🔒 **Enhanced Security** - API keys stored locally, CSP protection, input validation
-- ⚡ **Optimized Rendering** - 66% faster response rendering
-- 💾 **Smart Caching** - 1-hour model list cache, reduced API calls
-- 🔄 **Retry Logic** - Automatic retry with exponential backoff
-- 🧹 **Memory Management** - No memory leaks, automatic cleanup
+- 🖼️ **Image Generation** - Generate images and view/download in the sidebar or Spaces
 
 ## 🚀 Installation
 
@@ -161,7 +114,6 @@ Wegweiser-extension/
 
 ### v1.1.4 (Latest)
 - 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled
-- 🧪 **Release Script Control** - Manual versioning; release script no longer auto-bumps versions
 
 ### v1.1.1
 - 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
