@@ -18,6 +18,18 @@ const IMAGE_CACHE_LIMIT_MIN = 128;
 const IMAGE_CACHE_LIMIT_MAX = 2048;
 const IMAGE_CACHE_LIMIT_STEP = 64;
 
+const getLocalStorage = (keys) => (
+  typeof window.getEncrypted === "function"
+    ? window.getEncrypted(keys)
+    : chrome.storage.local.get(keys)
+);
+const setLocalStorage = (values) => (
+  typeof window.setEncrypted === "function"
+    ? window.setEncrypted(values)
+    : chrome.storage.local.set(values)
+);
+// encrypted-storage
+
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
   const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
@@ -125,7 +137,7 @@ function updateChatModelIndicator(space) {
 
 async function loadProviderSetting() {
   try {
-    const stored = await chrome.storage.local.get(['or_provider', 'or_model_provider']);
+    const stored = await getLocalStorage(['or_provider', 'or_model_provider']);
     currentProvider = normalizeProviderSafe(stored.or_model_provider || stored.or_provider);
   } catch (e) {
     console.warn('Failed to load provider setting:', e);
@@ -382,7 +394,7 @@ function openSpacesContextModal(thread, space) {
 
 async function loadSpaces() {
   try {
-    const result = await chrome.storage.local.get([STORAGE_KEYS.SPACES]);
+    const result = await getLocalStorage([STORAGE_KEYS.SPACES]);
     return result[STORAGE_KEYS.SPACES] || [];
   } catch (e) {
     console.error('Error loading spaces:', e);
@@ -391,12 +403,12 @@ async function loadSpaces() {
 }
 
 async function saveSpaces(spaces) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.SPACES]: spaces });
+  await setLocalStorage({ [STORAGE_KEYS.SPACES]: spaces });
 }
 
 async function loadThreads(spaceId = null) {
   try {
-    const result = await chrome.storage.local.get([STORAGE_KEYS.THREADS]);
+    const result = await getLocalStorage([STORAGE_KEYS.THREADS]);
     const threads = result[STORAGE_KEYS.THREADS] || [];
     if (spaceId) {
       return threads.filter(t => t.spaceId === spaceId);
@@ -409,7 +421,7 @@ async function loadThreads(spaceId = null) {
 }
 
 async function saveThreads(threads) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.THREADS]: threads });
+  await setLocalStorage({ [STORAGE_KEYS.THREADS]: threads });
 }
 
 async function getThreadCount(spaceId) {
@@ -450,7 +462,7 @@ async function getImageStorageUsage() {
   let percentUsed = null;
 
   try {
-    const localItems = await chrome.storage.local.get([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
+    const localItems = await getLocalStorage([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
     const limitMb = normalizeImageCacheLimitMb(localItems[STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
     quotaBytes = limitMb * 1024 * 1024;
     if (typeof stats?.bytesUsed === 'number' && quotaBytes > 0) {
@@ -1723,7 +1735,7 @@ async function loadModels() {
       spaceModelMap = new Map(response.models.map((model) => [model.id, model]));
 
       const [localItems, syncItems] = await Promise.all([
-        chrome.storage.local.get(['or_recent_models', 'or_recent_models_naga']),
+        getLocalStorage(['or_recent_models', 'or_recent_models_naga']),
         chrome.storage.sync.get(['or_favorites', 'or_favorites_naga'])
       ]);
 
@@ -1779,7 +1791,7 @@ async function loadModels() {
             const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
             spaceRecentModelsByProvider[provider] = next;
 
-            await chrome.storage.local.set({
+            await setLocalStorage({
               [getProviderStorageKeySafe('or_recent_models', provider)]: next
             });
 

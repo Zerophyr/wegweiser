@@ -15,6 +15,18 @@ if (typeof initTheme === 'function') {
   initTheme();
 }
 
+const getLocalStorage = (keys) => (
+  typeof window.getEncrypted === "function"
+    ? window.getEncrypted(keys)
+    : chrome.storage.local.get(keys)
+);
+const setLocalStorage = (values) => (
+  typeof window.setEncrypted === "function"
+    ? window.setEncrypted(values)
+    : chrome.storage.local.set(values)
+);
+// encrypted-storage
+
 const promptEl = document.getElementById("prompt");
 const answerEl = document.getElementById("answer");
 const answerSection = document.getElementById("answer-section");
@@ -160,7 +172,7 @@ async function refreshFavoritesOnly() {
 
 async function loadProviderSetting() {
   try {
-    const stored = await chrome.storage.local.get(["or_provider", "or_model_provider"]);
+    const stored = await getLocalStorage(["or_provider", "or_model_provider"]);
     currentProvider = normalizeProviderSafe(stored.or_model_provider || stored.or_provider);
   } catch (e) {
     console.warn("Failed to load provider setting:", e);
@@ -195,7 +207,7 @@ function updateSetupPanelVisibility(isReady) {
 }
 
 async function refreshSidebarSetupState() {
-  const localItems = await chrome.storage.local.get([
+  const localItems = await getLocalStorage([
     "or_api_key",
     "naga_api_key",
     "or_provider_enabled_openrouter",
@@ -1423,7 +1435,7 @@ async function loadModels() {
     modelMap = new Map(combinedModels.map((model) => [model.id, model]));
 
     const [localItems, syncItems] = await Promise.all([
-      chrome.storage.local.get(["or_recent_models", "or_recent_models_naga"]),
+      getLocalStorage(["or_recent_models", "or_recent_models_naga"]),
       chrome.storage.sync.get(["or_favorites", "or_favorites_naga"])
     ]);
     loadFavoritesAndRecents(localItems, syncItems);
@@ -1510,7 +1522,7 @@ async function loadModels() {
           const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
           recentModelsByProvider[provider] = next;
 
-          await chrome.storage.local.set({
+          await setLocalStorage({
             [getProviderStorageKeySafe("or_recent_models", provider)]: next
           });
 
@@ -1548,7 +1560,7 @@ async function loadModels() {
 // ---- Web Search and Reasoning toggles ----
 async function loadToggleSettings() {
   try {
-    const settings = await chrome.storage.local.get(["webSearchEnabled", "reasoningEnabled", "imageModeEnabled"]);
+    const settings = await getLocalStorage(["webSearchEnabled", "reasoningEnabled", "imageModeEnabled"]);
     webSearchEnabled = settings.webSearchEnabled || false;
     reasoningEnabled = settings.reasoningEnabled || false;
     imageModeEnabled = settings.imageModeEnabled || false;
@@ -1576,7 +1588,7 @@ async function loadToggleSettings() {
 
 async function saveToggleSettings() {
   try {
-    await chrome.storage.local.set({
+    await setLocalStorage({
       webSearchEnabled,
       reasoningEnabled,
       imageModeEnabled
@@ -1624,7 +1636,7 @@ if (setupOpenOptionsBtn) {
 const spacesBtn = document.getElementById('spaces-btn');
 if (spacesBtn) {
   const openSpacesPage = async () => {
-    const stored = await chrome.storage.local.get(["or_collapse_on_spaces"]);
+    const stored = await getLocalStorage(["or_collapse_on_spaces"]);
     const collapseOnSpaces = stored.or_collapse_on_spaces !== false;
     const spacesUrl = chrome.runtime.getURL('src/spaces/spaces.html');
     const tabs = await chrome.tabs.query({ url: spacesUrl });

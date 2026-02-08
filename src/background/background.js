@@ -10,6 +10,8 @@ import {
   API_CONFIG,
   PROVIDERS
 } from '/src/shared/constants.js';
+import '/src/shared/crypto-store.js';
+import '/src/shared/encrypted-storage.js';
 import '/src/shared/debug-log.js';
 import {
   buildCombinedModelId,
@@ -22,6 +24,17 @@ const {
   pushDebugStreamEntry = () => null,
   buildDebugLogMeta = () => ({ count: 0, startAt: null, endAt: null })
 } = globalThis;
+
+const getLocalStorage = (keys) => (
+  typeof globalThis.getEncrypted === "function"
+    ? globalThis.getEncrypted(keys)
+    : chrome.storage.local.get(keys)
+);
+const setLocalStorage = (values) => (
+  typeof globalThis.setEncrypted === "function"
+    ? globalThis.setEncrypted(values)
+    : chrome.storage.local.set(values)
+);
 
 // Cache management
 const lastBalanceByProvider = {};
@@ -155,7 +168,7 @@ function buildBalanceHeaders(apiKey, providerConfig, provisioningKey) {
 
 async function getApiKeyForProvider(providerId) {
   const provider = normalizeProviderId(providerId);
-  const keys = await chrome.storage.local.get([
+  const keys = await getLocalStorage([
     STORAGE_KEYS.API_KEY,
     STORAGE_KEYS.API_KEY_NAGA
   ]);
@@ -270,7 +283,7 @@ async function loadConfig() {
   }
 
   // SECURITY FIX: Use chrome.storage.local instead of sync for API key
-  const items = await chrome.storage.local.get([
+  const items = await getLocalStorage([
     STORAGE_KEYS.PROVIDER,
     STORAGE_KEYS.API_KEY,
     STORAGE_KEYS.API_KEY_NAGA,
@@ -301,17 +314,17 @@ async function loadConfig() {
 
 // ---- History helpers (storage.local) ----
 async function loadHistory() {
-  const res = await chrome.storage.local.get({ [STORAGE_KEYS.HISTORY]: [] });
+  const res = await getLocalStorage([STORAGE_KEYS.HISTORY]);
   return res[STORAGE_KEYS.HISTORY] || [];
 }
 
 async function saveHistory(history) {
-  await chrome.storage.local.set({ [STORAGE_KEYS.HISTORY]: history });
+  await setLocalStorage({ [STORAGE_KEYS.HISTORY]: history });
 }
 
 async function addHistoryEntry(prompt, answer) {
   const history = await loadHistory();
-  const settings = await chrome.storage.local.get([STORAGE_KEYS.HISTORY_LIMIT]);
+  const settings = await getLocalStorage([STORAGE_KEYS.HISTORY_LIMIT]);
   const historyLimit = settings[STORAGE_KEYS.HISTORY_LIMIT] || DEFAULTS.HISTORY_LIMIT;
 
   const entry = {
@@ -437,7 +450,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         debugStreamEnabled = Boolean(msg.enabled);
-        await chrome.storage.local.set({
+        await setLocalStorage({
           [STORAGE_KEYS.DEBUG_STREAM]: debugStreamEnabled
         });
         sendResponse({ ok: true, enabled: debugStreamEnabled });
@@ -622,13 +635,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         const provider = normalizeProviderId(msg.provider || cachedConfig.modelProvider || cachedConfig.provider);
-        const keyItems = await chrome.storage.local.get([
+        const keyItems = await getLocalStorage([
           STORAGE_KEYS.API_KEY,
           STORAGE_KEYS.API_KEY_NAGA
         ]);
 
         // Save to local storage to match loadConfig()
-        await chrome.storage.local.set({
+        await setLocalStorage({
           [STORAGE_KEYS.MODEL]: msg.model,
           [STORAGE_KEYS.MODEL_PROVIDER]: provider
         });
@@ -663,14 +676,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
     (async () => {
       try {
-        const keys = await chrome.storage.local.get({
-          [STORAGE_KEYS.API_KEY]: "",
-          [STORAGE_KEYS.API_KEY_NAGA]: "",
-          [STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER]: DEFAULTS.PROVIDER_ENABLED_OPENROUTER,
-          [STORAGE_KEYS.PROVIDER_ENABLED_NAGA]: DEFAULTS.PROVIDER_ENABLED_NAGA
-        });
+        const keys = await getLocalStorage([
+          STORAGE_KEYS.API_KEY,
+          STORAGE_KEYS.API_KEY_NAGA,
+          STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER,
+          STORAGE_KEYS.PROVIDER_ENABLED_NAGA
+        ]);
 
-        const isOpenRouterEnabled = Boolean(keys[STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER]);
+        const isOpenRouterEnabled = keys[STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER] !== false;
         const isNagaEnabled = Boolean(keys[STORAGE_KEYS.PROVIDER_ENABLED_NAGA]);
 
         const providersToLoad = [
@@ -730,7 +743,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         const provider = normalizeProviderId(msg.provider);
-        await chrome.storage.local.set({ [STORAGE_KEYS.PROVIDER]: provider });
+        await setLocalStorage({ [STORAGE_KEYS.PROVIDER]: provider });
         const { modelsKey, timeKey } = getModelsCacheKeys(provider);
         await chrome.storage.local.remove([modelsKey, timeKey]);
         cachedConfig = {

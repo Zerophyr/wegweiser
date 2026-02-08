@@ -96,10 +96,10 @@ async function decryptJson(payload) {
   return JSON.parse(decoded);
 }
 
-if (typeof window !== "undefined") {
-  window.getOrCreateKey = getOrCreateKey;
-  window.encryptJson = encryptJson;
-  window.decryptJson = decryptJson;
+if (typeof globalThis !== "undefined") {
+  globalThis.getOrCreateKey = getOrCreateKey;
+  globalThis.encryptJson = encryptJson;
+  globalThis.decryptJson = decryptJson;
 }
 
 if (typeof module !== "undefined") {

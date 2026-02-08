@@ -27,6 +27,18 @@ const clearImageCacheBtn = document.getElementById("clear-image-cache-btn");
 const imageCacheLimitInput = document.getElementById("image-cache-limit");
 const imageCacheLimitValue = document.getElementById("image-cache-limit-value");
 
+const getLocalStorage = (keys) => (
+  typeof window.getEncrypted === "function"
+    ? window.getEncrypted(keys)
+    : chrome.storage.local.get(keys)
+);
+const setLocalStorage = (values) => (
+  typeof window.setEncrypted === "function"
+    ? window.setEncrypted(values)
+    : chrome.storage.local.set(values)
+);
+// encrypted-storage
+
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
 let modelMap = new Map(); // combinedId -> model
@@ -194,7 +206,7 @@ function initModelDropdown() {
       const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
       recentModelsByProvider[provider] = next;
 
-      await chrome.storage.local.set({
+      await setLocalStorage({
         [getProviderStorageKeySafe("or_recent_models", provider)]: next
       });
 
@@ -287,7 +299,7 @@ async function syncProviderToggleState(provider, apiKeyValue, localItems) {
   updateEnableStatus(provider, enabled);
 
   if (!hasKey && storedEnabled) {
-    await chrome.storage.local.set({ [PROVIDER_ENABLE_KEYS[provider]]: false });
+    await setLocalStorage({ [PROVIDER_ENABLE_KEYS[provider]]: false });
   }
 }
 
@@ -309,7 +321,7 @@ async function loadProviderCards(localItems) {
 // ---- Load stored settings (API key, model, favorites, history limit) ----
 // SECURITY FIX: API key now stored in chrome.storage.local (not synced across devices)
 Promise.all([
-  chrome.storage.local.get([
+  getLocalStorage([
     "or_api_key",
     "naga_api_key",
     "naga_provisioning_key",
@@ -352,7 +364,7 @@ Promise.all([
 // ---- Load and render prompt history ----
 async function loadPromptHistory() {
   try {
-    const res = await chrome.storage.local.get(["or_history"]);
+    const res = await getLocalStorage(["or_history"]);
     const history = res.or_history || [];
     currentHistory = history; // Store for detail view
     renderPromptHistory(history);
@@ -550,10 +562,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function commitDeleteHistoryItem(id) {
   try {
-    const res = await chrome.storage.local.get(["or_history"]);
+    const res = await getLocalStorage(["or_history"]);
     const history = res.or_history || [];
     const filtered = history.filter(item => item.id !== id);
-    await chrome.storage.local.set({ or_history: filtered });
+    await setLocalStorage({ or_history: filtered });
     // Update in-memory copy
     currentHistory = filtered;
   } catch (e) {
@@ -618,7 +630,7 @@ async function loadModels() {
 
 // Auto-load models when page opens if API key exists
 Promise.all([
-  chrome.storage.local.get([
+  getLocalStorage([
     "or_api_key",
     "naga_api_key",
     "naga_provisioning_key",
@@ -661,7 +673,7 @@ saveBtn.addEventListener("click", async () => {
 
   // SECURITY FIX: Store API key in local storage (not synced)
   await Promise.all([
-    chrome.storage.local.set(dataToSave),
+    setLocalStorage(dataToSave),
     chrome.storage.sync.set({
       or_favorites: Array.from(favoriteModelsByProvider.openrouter || []),
       or_favorites_naga: Array.from(favoriteModelsByProvider.naga || [])
@@ -680,7 +692,7 @@ saveBtn.addEventListener("click", async () => {
 
 async function saveProviderKey(provider, value) {
   const key = PROVIDER_KEY_STORAGE[provider];
-  await chrome.storage.local.set({ [key]: value });
+  await setLocalStorage({ [key]: value });
 }
 
 async function updateProviderModelsAfterChange() {
@@ -702,7 +714,7 @@ function wireProviderKeyInput(provider, inputEl) {
     }
     debounceId = setTimeout(async () => {
       await saveProviderKey(provider, value);
-      const localItems = await chrome.storage.local.get([
+      const localItems = await getLocalStorage([
         PROVIDER_ENABLE_KEYS[provider]
       ]);
       await syncProviderToggleState(provider, value, localItems);
@@ -724,7 +736,7 @@ function wireProviderEnableToggle(provider, toggleEl, inputEl) {
       updateEnableStatus(provider, false);
       return;
     }
-    await chrome.storage.local.set({ [PROVIDER_ENABLE_KEYS[provider]]: toggleEl.checked });
+    await setLocalStorage({ [PROVIDER_ENABLE_KEYS[provider]]: toggleEl.checked });
     updateEnableStatus(provider, toggleEl.checked);
     await updateProviderModelsAfterChange();
   });
@@ -743,7 +755,7 @@ if (nagaProvisioningKeyInput) {
       clearTimeout(provisioningDebounce);
     }
     provisioningDebounce = setTimeout(async () => {
-      await chrome.storage.local.set({ naga_provisioning_key: value });
+      await setLocalStorage({ naga_provisioning_key: value });
       await notifyProviderSettingsUpdated("naga");
     }, 300);
   });
@@ -850,7 +862,7 @@ async function clearAllHistory() {
     items: itemsToDelete,
     timeout: setTimeout(async () => {
       try {
-        await chrome.storage.local.set({ or_history: [] });
+        await setLocalStorage({ or_history: [] });
         currentHistory = [];
       } catch (e) {
         console.error("Error clearing history:", e);
@@ -869,7 +881,7 @@ document.getElementById("clear-all-history-btn")?.addEventListener("click", clea
 if (debugStreamToggle) {
   debugStreamToggle.addEventListener("change", async () => {
     const enabled = Boolean(debugStreamToggle.checked);
-    await chrome.storage.local.set({ [DEBUG_STREAM_KEY]: enabled });
+    await setLocalStorage({ [DEBUG_STREAM_KEY]: enabled });
     if (downloadDebugLogBtn) {
       downloadDebugLogBtn.disabled = !enabled;
     }
@@ -957,7 +969,7 @@ if (imageCacheLimitInput) {
 const themeSelect = document.getElementById("theme-select");
 
 // Load current theme
-chrome.storage.local.get(['or_theme']).then((result) => {
+getLocalStorage(['or_theme']).then((result) => {
   if (result.or_theme && themeSelect) {
     themeSelect.value = result.or_theme;
   }

@@ -78,10 +78,10 @@ async function setEncrypted(values) {
   return chrome.storage.local.set(payload);
 }
 
-if (typeof window !== "undefined") {
-  window.getEncrypted = getEncrypted;
-  window.setEncrypted = setEncrypted;
-  window.migratePlaintextKey = migratePlaintextKey;
+if (typeof globalThis !== "undefined") {
+  globalThis.getEncrypted = getEncrypted;
+  globalThis.setEncrypted = setEncrypted;
+  globalThis.migratePlaintextKey = migratePlaintextKey;
 }
 
 if (typeof module !== "undefined") {
