@@ -1,13 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
-const { bumpVersion } = require("./release-utils");
 
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const manifestPath = path.join(rootDir, "manifest.json");
 const packagePath = path.join(rootDir, "package.json");
-const packageLockPath = path.join(rootDir, "package-lock.json");
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -19,12 +17,8 @@ function writeJson(filePath, data) {
 
 function parseArgs(args) {
   const result = {
-    bump: "patch",
     dryRun: false
   };
-  if (args.includes("--major")) result.bump = "major";
-  if (args.includes("--minor")) result.bump = "minor";
-  if (args.includes("--patch")) result.bump = "patch";
   if (args.includes("--dry-run")) result.dryRun = true;
   return result;
 }
@@ -47,14 +41,6 @@ function ensureVersionsMatch(manifest, pkg) {
   if (manifest.version !== pkg.version) {
     throw new Error(`Version mismatch: manifest ${manifest.version} vs package ${pkg.version}`);
   }
-}
-
-function updatePackageLockVersion(packageLock, version) {
-  packageLock.version = version;
-  if (packageLock.packages && packageLock.packages[""]) {
-    packageLock.packages[""].version = version;
-  }
-  return packageLock;
 }
 
 function hasTypeScriptSources(dirPath) {
@@ -145,7 +131,7 @@ function writeReleaseMeta(version, uploadZip, signedPath) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  console.log(`Release mode: ${args.bump}${args.dryRun ? " (dry-run)" : ""}`);
+  console.log(`Release mode${args.dryRun ? " (dry-run)" : ""}`);
 
   ensureCleanWorkingTree();
   run("npm test", { cwd: rootDir });
@@ -154,22 +140,12 @@ function main() {
   const pkg = readJson(packagePath);
   ensureVersionsMatch(manifest, pkg);
 
-  const nextVersion = bumpVersion(manifest.version, args.bump);
-  console.log(`Bumping version: ${manifest.version} -> ${nextVersion}`);
+  const nextVersion = manifest.version;
+  console.log(`Release version: ${nextVersion}`);
 
   if (args.dryRun) {
-    console.log("Dry-run enabled: skipping writes, build, and packaging.");
+    console.log("Dry-run enabled: skipping build and packaging.");
     return;
-  }
-
-  manifest.version = nextVersion;
-  pkg.version = nextVersion;
-  writeJson(manifestPath, manifest);
-  writeJson(packagePath, pkg);
-
-  if (fs.existsSync(packageLockPath)) {
-    const packageLock = updatePackageLockVersion(readJson(packageLockPath), nextVersion);
-    writeJson(packageLockPath, packageLock);
   }
 
   if (fs.existsSync(path.join(rootDir, "tsconfig.json")) && shouldRunTsBuild()) {

@@ -41,5 +41,14 @@ describe("release script scaffold", () => {
     expect(content).toMatch(/shouldRunTsBuild/);
     expect(content).toMatch(/src/);
   });
+
+  test("release script does not auto-bump versions", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../scripts/release.js"),
+      "utf8"
+    );
+    expect(content).not.toMatch(/bumpVersion/);
+    expect(content).not.toMatch(/Bumping version/);
+  });
 });
 
