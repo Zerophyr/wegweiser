@@ -54,6 +54,26 @@ describe("ModelDropdownManager storage keys", () => {
     });
   });
 
+  test("loadRecentlyUsedModels uses encrypted storage when available", async () => {
+    const globalAny = global as any;
+    globalAny.getEncrypted = jest.fn().mockResolvedValue({ recent_key: ["openai/gpt-4o"] });
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      favoritesKey: "fav_key",
+      recentModelsKey: "recent_key",
+      onModelSelect: jest.fn()
+    });
+
+    await dropdown.loadRecentlyUsedModels();
+
+    expect(globalAny.getEncrypted).toHaveBeenCalledWith(["recent_key"]);
+    expect(dropdown.state.recentlyUsedModels).toEqual(["openai/gpt-4o"]);
+
+    delete globalAny.getEncrypted;
+  });
+
   test("renders displayName when provided", () => {
     const globalAny = global as any;
     globalAny.groupModelsByProvider = jest.fn(() => ({

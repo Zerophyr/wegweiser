@@ -542,8 +542,17 @@ class ModelDropdownManager {
   }
 
   async loadRecentlyUsedModels() {
-    const data = await chrome.storage.local.get([this.config.recentModelsKey]);
-    this.state.recentlyUsedModels = data[this.config.recentModelsKey] || [];
+    let data = {};
+    try {
+      if (typeof globalThis !== 'undefined' && typeof globalThis.getEncrypted === 'function') {
+        data = await globalThis.getEncrypted([this.config.recentModelsKey]);
+      } else {
+        data = await chrome.storage.local.get([this.config.recentModelsKey]);
+      }
+    } catch (e) {
+      data = {};
+    }
+    this.setRecentlyUsed(data[this.config.recentModelsKey]);
   }
 
   setModels(models) {
