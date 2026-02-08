@@ -57,5 +57,3 @@ CLAUDE.md
 docs/
 .local-backup-docs/
 .local-backup-meta/
-# Local-only scripts
-scripts/
