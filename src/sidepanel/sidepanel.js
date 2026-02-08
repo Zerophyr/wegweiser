@@ -214,6 +214,23 @@ let contextViz = null;
 // ---- Active streaming port ----
 let activePort = null;
 
+async function refreshContextVisualization() {
+  if (!contextViz) return;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id || 'default';
+    const res = await chrome.runtime.sendMessage({
+      type: "get_context_size",
+      tabId
+    });
+    const size = res?.contextSize || 0;
+    contextViz.update(size, 'assistant');
+  } catch (e) {
+    console.warn("Failed to refresh context visualization:", e);
+    contextViz.update(0, 'assistant');
+  }
+}
+
 // ---- Utility functions ----
 // Token estimation using constants
 function estimateTokens(text) {
@@ -1757,6 +1774,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const contextVizContainer = document.getElementById('context-viz-section');
   if (contextVizContainer) {
     contextViz = new ContextVisualization(contextVizContainer);
+    await refreshContextVisualization();
   }
 });
 
