@@ -1,4 +1,4 @@
-# 🤖 Wegweiser v1.1.4
+# 🤖 Wegweiser v1.1.5
 
 > Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
@@ -13,6 +13,7 @@
 - 💰 **Token Insights** - Token estimate + usage bar before and after sending
 - 🧾 **Adaptive Summaries** - Automatic summaries keep long Spaces threads usable
 - 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
+- 🔐 **Encrypted Local Storage** - Sensitive data encrypted at rest with a device-local key
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 - 🖼️ **Image Generation** - Generate images and view/download in the sidebar or Spaces
@@ -113,7 +114,12 @@ Wegweiser-extension/
 
 ## 📝 Changelog
 
-### v1.1.4 (Latest)
+### v1.1.5 (Latest)
+- 🔐 **Encrypted Local Storage** - Sensitive local data encrypted at rest with a device-local key
+- 🧩 **Automatic Migration** - Plaintext settings are migrated to encrypted storage on first read
+- 🛡️ **No Passphrase Required** - Encryption is transparent with no extra steps for users
+
+### v1.1.4
 - 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled
 - 🧠 **Context Timeline Reliability** - Sidebar context timeline persists across reopen/service worker idle
 - 🧠 **Context Badge Refresh** - Context icon now updates on sidebar reopen
