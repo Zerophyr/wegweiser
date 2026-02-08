@@ -24,10 +24,12 @@ const ENCRYPTED_STORAGE_KEYS = Array.isArray(globalThis?.ENCRYPTED_STORAGE_KEYS)
   ? globalThis.ENCRYPTED_STORAGE_KEYS
   : DEFAULT_ENCRYPTED_STORAGE_KEYS;
 
-const {
-  encryptJson = async (value) => value,
-  decryptJson = async (value) => value
-} = globalThis || {};
+const encryptJsonSafe = (typeof globalThis !== "undefined" && typeof globalThis.encryptJson === "function")
+  ? globalThis.encryptJson
+  : async (value) => value;
+const decryptJsonSafe = (typeof globalThis !== "undefined" && typeof globalThis.decryptJson === "function")
+  ? globalThis.decryptJson
+  : async (value) => value;
 
 function isEncryptedPayload(value) {
   return Boolean(value && typeof value === "object" && value.alg === "AES-GCM" && value.iv && value.data);
@@ -36,7 +38,7 @@ function isEncryptedPayload(value) {
 async function migratePlaintextKey(key, value) {
   if (value === undefined) return value;
   if (isEncryptedPayload(value)) return value;
-  const encrypted = await encryptJson(value);
+  const encrypted = await encryptJsonSafe(value);
   await chrome.storage.local.set({ [key]: encrypted });
   return encrypted;
 }
@@ -56,7 +58,7 @@ async function getEncrypted(keys) {
       const encrypted = isEncryptedPayload(value)
         ? value
         : await migratePlaintextKey(key, value);
-      result[key] = await decryptJson(encrypted);
+      result[key] = await decryptJsonSafe(encrypted);
     } else {
       result[key] = value;
     }
@@ -70,7 +72,7 @@ async function setEncrypted(values) {
   for (const [key, value] of Object.entries(values || {})) {
     if (value === undefined) continue;
     if (ENCRYPTED_STORAGE_KEYS.includes(key)) {
-      payload[key] = await encryptJson(value);
+      payload[key] = await encryptJsonSafe(value);
     } else {
       payload[key] = value;
     }
