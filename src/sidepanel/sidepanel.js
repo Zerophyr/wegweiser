@@ -29,6 +29,10 @@ const webSearchToggle = document.getElementById("web-search-toggle");
 const reasoningToggle = document.getElementById("reasoning-toggle");
 const imageToggle = document.getElementById("image-toggle");
 const settingsIcon = document.getElementById("settings-icon");
+const setupPanel = document.getElementById("setup-panel");
+const setupOpenOptionsBtn = document.getElementById("setup-open-options");
+const promptContainer = document.getElementById("prompt-container");
+const modelSection = document.getElementById("model-section");
 const typingIndicator = document.getElementById("typing-indicator");
 const stopBtn = document.getElementById("stopBtn");
 const estimatedCostEl = document.getElementById("estimated-cost");
@@ -51,6 +55,7 @@ let recentModelsByProvider = {
   naga: []
 };
 let selectedCombinedModelId = null;
+let sidebarSetupRequired = false;
 
 function normalizeProviderSafe(providerId) {
   if (typeof normalizeProviderId === "function") {
@@ -160,6 +165,45 @@ async function loadProviderSetting() {
   } catch (e) {
     console.warn("Failed to load provider setting:", e);
   }
+}
+
+// ---- Setup panel (no provider enabled) ----
+function isProviderReady(localItems) {
+  const openrouterEnabled = localItems.or_provider_enabled_openrouter !== false;
+  const nagaEnabled = Boolean(localItems.or_provider_enabled_naga);
+  const openrouterKey = typeof localItems.or_api_key === "string" ? localItems.or_api_key.trim() : "";
+  const nagaKey = typeof localItems.naga_api_key === "string" ? localItems.naga_api_key.trim() : "";
+  const openrouterReady = openrouterEnabled && Boolean(openrouterKey);
+  const nagaReady = nagaEnabled && Boolean(nagaKey);
+  return openrouterReady || nagaReady;
+}
+
+function updateSetupPanelVisibility(isReady) {
+  sidebarSetupRequired = !isReady;
+  if (setupPanel) {
+    setupPanel.style.display = isReady ? "none" : "flex";
+  }
+  if (promptContainer) {
+    promptContainer.style.display = isReady ? "" : "none";
+  }
+  if (modelSection) {
+    modelSection.style.display = isReady ? "" : "none";
+  }
+  if (!isReady && modelStatusEl) {
+    modelStatusEl.textContent = "Enable a provider to load models.";
+  }
+}
+
+async function refreshSidebarSetupState() {
+  const localItems = await chrome.storage.local.get([
+    "or_api_key",
+    "naga_api_key",
+    "or_provider_enabled_openrouter",
+    "or_provider_enabled_naga"
+  ]);
+  const ready = isProviderReady(localItems);
+  updateSetupPanelVisibility(ready);
+  return ready;
 }
 // ---- Model dropdown manager ----
 let modelDropdown = null;
@@ -1346,6 +1390,10 @@ document.addEventListener("keydown", (e) => {
 // ---- Model loading and selection ----
 async function loadModels() {
   try {
+    if (sidebarSetupRequired) {
+      modelStatusEl.textContent = "Enable a provider to load models.";
+      return;
+    }
     modelStatusEl.textContent = "Loading models...";
     const res = await chrome.runtime.sendMessage({ type: "get_models" });
 
@@ -1549,6 +1597,12 @@ settingsIcon.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 
+if (setupOpenOptionsBtn) {
+  setupOpenOptionsBtn.addEventListener("click", () => {
+    chrome.runtime.openOptionsPage();
+  });
+}
+
 // ---- Spaces button - open Spaces page ----
 const spacesBtn = document.getElementById('spaces-btn');
 if (spacesBtn) {
@@ -1690,9 +1744,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Load toggle settings
   loadToggleSettings();
 
+  const providerReady = await refreshSidebarSetupState();
   await loadProviderSetting();
-  refreshBalance();
-  loadModels();
+  if (providerReady) {
+    refreshBalance();
+    loadModels();
+  } else if (balanceEl) {
+    balanceEl.textContent = "–";
+  }
 
   // Initialize context visualization
   const contextVizContainer = document.getElementById('context-viz-section');
@@ -1705,9 +1764,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "provider_settings_updated") {
     (async () => {
+      const providerReady = await refreshSidebarSetupState();
       await loadProviderSetting();
-      await loadModels();
-      await refreshBalance();
+      if (providerReady) {
+        await loadModels();
+        await refreshBalance();
+      } else if (balanceEl) {
+        balanceEl.textContent = "–";
+      }
     })();
   }
   if (msg?.type === "favorites_updated") {
