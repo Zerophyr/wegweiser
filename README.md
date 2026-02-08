@@ -1,4 +1,4 @@
-# 🤖 Wegweiser v1.1.3
+# 🤖 Wegweiser v1.1.4
 
 > Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
 
@@ -159,7 +159,11 @@ Wegweiser-extension/
 
 ## 📝 Changelog
 
-### v1.1.1 (Latest)
+### v1.1.4 (Latest)
+- 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled
+- 🧪 **Release Script Control** - Manual versioning; release script no longer auto-bumps versions
+
+### v1.1.1
 - 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
 - ✅ **Short Summary Acceptance** - Minimum summary length adapts to history size
 - 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
