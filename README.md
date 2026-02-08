@@ -86,8 +86,9 @@ _(Coming soon)_
 4. Enter API keys in the provider cards (NagaAI: add provisioning key to see balance)
 5. Enable the providers you want to load models for (Enable is disabled until a key is present)
 6. Models refresh automatically when providers are enabled/disabled
-7. Select your preferred model from the search dropdown
-8. Click "Save" if you changed the model
+7. If no provider is enabled, the sidebar shows a setup panel with an “Open Options” shortcut
+8. Select your preferred model from the search dropdown
+9. Click "Save" if you changed the model
 
 ## 📖 User Guide
 
