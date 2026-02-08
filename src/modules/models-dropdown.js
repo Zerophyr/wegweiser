@@ -533,6 +533,10 @@ class ModelDropdownManager {
 
     if (typeof this.config.onAddRecent === 'function') {
       await this.config.onAddRecent(modelId, [...this.state.recentlyUsedModels]);
+    } else if (typeof globalThis !== 'undefined' && typeof globalThis.setEncrypted === 'function') {
+      await globalThis.setEncrypted({
+        [this.config.recentModelsKey]: this.state.recentlyUsedModels
+      });
     } else {
       // Save to storage
       await chrome.storage.local.set({

@@ -1560,10 +1560,32 @@ async function loadModels() {
 // ---- Web Search and Reasoning toggles ----
 async function loadToggleSettings() {
   try {
-    const settings = await getLocalStorage(["webSearchEnabled", "reasoningEnabled", "imageModeEnabled"]);
-    webSearchEnabled = settings.webSearchEnabled || false;
-    reasoningEnabled = settings.reasoningEnabled || false;
+    const settings = await getLocalStorage([
+      "or_web_search",
+      "or_reasoning",
+      "imageModeEnabled",
+      "webSearchEnabled",
+      "reasoningEnabled"
+    ]);
+    const legacyWebSearch = settings.webSearchEnabled;
+    const legacyReasoning = settings.reasoningEnabled;
+    webSearchEnabled = Boolean(
+      settings.or_web_search !== undefined ? settings.or_web_search : legacyWebSearch
+    );
+    reasoningEnabled = Boolean(
+      settings.or_reasoning !== undefined ? settings.or_reasoning : legacyReasoning
+    );
     imageModeEnabled = settings.imageModeEnabled || false;
+
+    if (
+      (settings.or_web_search === undefined && legacyWebSearch !== undefined) ||
+      (settings.or_reasoning === undefined && legacyReasoning !== undefined)
+    ) {
+      await setLocalStorage({
+        or_web_search: webSearchEnabled,
+        or_reasoning: reasoningEnabled
+      });
+    }
 
     if (webSearchEnabled) {
       webSearchToggle.classList.add("active");
@@ -1589,8 +1611,8 @@ async function loadToggleSettings() {
 async function saveToggleSettings() {
   try {
     await setLocalStorage({
-      webSearchEnabled,
-      reasoningEnabled,
+      or_web_search: webSearchEnabled,
+      or_reasoning: reasoningEnabled,
       imageModeEnabled
     });
   } catch (e) {

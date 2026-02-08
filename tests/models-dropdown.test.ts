@@ -39,6 +39,9 @@ describe("ModelDropdownManager storage keys", () => {
   });
 
   test("addToRecentlyUsed uses configured recentModelsKey", async () => {
+    const globalAny = global as any;
+    globalAny.setEncrypted = jest.fn().mockResolvedValue(undefined);
+
     const input = document.getElementById("model-input");
     const dropdown = new ModelDropdownManager({
       inputElement: input,
@@ -49,9 +52,11 @@ describe("ModelDropdownManager storage keys", () => {
 
     await dropdown.addToRecentlyUsed("openai/gpt-4o");
 
-    expect(global.chrome.storage.local.set).toHaveBeenCalledWith({
+    expect(globalAny.setEncrypted).toHaveBeenCalledWith({
       recent_key: ["openai/gpt-4o"]
     });
+
+    delete globalAny.setEncrypted;
   });
 
   test("loadRecentlyUsedModels uses encrypted storage when available", async () => {

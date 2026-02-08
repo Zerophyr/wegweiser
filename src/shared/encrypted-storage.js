@@ -58,7 +58,11 @@ async function getEncrypted(keys) {
       const encrypted = isEncryptedPayload(value)
         ? value
         : await migratePlaintextKey(key, value);
-      result[key] = await decryptJsonSafe(encrypted);
+      try {
+        result[key] = await decryptJsonSafe(encrypted);
+      } catch (e) {
+        result[key] = undefined;
+      }
     } else {
       result[key] = value;
     }

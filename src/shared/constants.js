@@ -57,6 +57,10 @@ export const ENCRYPTED_STORAGE_KEYS = [
   STORAGE_KEYS.PROVIDER_ENABLED_NAGA
 ];
 
+if (typeof globalThis !== "undefined") {
+  globalThis.ENCRYPTED_STORAGE_KEYS = ENCRYPTED_STORAGE_KEYS;
+}
+
 // Excluded from encryption (cache + image data)
 export const NON_ENCRYPTED_KEYS = [
   STORAGE_KEYS.MODELS_CACHE,
