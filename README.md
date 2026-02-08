@@ -114,6 +114,8 @@ Wegweiser-extension/
 
 ### v1.1.4 (Latest)
 - 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled
+- 🧠 **Context Timeline Reliability** - Sidebar context timeline persists across reopen/service worker idle
+- 🧠 **Context Badge Refresh** - Context icon now updates on sidebar reopen
 
 ### v1.1.1
 - 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
