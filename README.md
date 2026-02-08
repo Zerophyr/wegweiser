@@ -102,6 +102,7 @@ Wegweiser-extension/
 ## 🔒 Privacy & Security
 
 - **Local API Key Storage** - API keys stored locally only (not synced)
+- **Encrypted at Rest** - Sensitive local data is encrypted with a device-local key (no passphrase)
 - **Masked Keys** - API/provisioning keys are hidden by default with a visibility toggle
 - **Content Security Policy** - Strict CSP prevents injection attacks
 - **Input Validation** - All user input sanitized
