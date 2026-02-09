@@ -997,3 +997,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadPromptHistory();
   setupKeyVisibilityToggles();
 });
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "models_updated") {
+    loadModels();
+  }
+});

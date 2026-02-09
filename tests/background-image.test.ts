@@ -23,6 +23,14 @@ describe("background image routing", () => {
     expect(content).toMatch(/images\/generations/);
   });
 
+  test("background rejects non-image models", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/IMAGE_MODEL_REQUIRED/);
+  });
+
   test("naga image generation supports url fallback conversion", () => {
     const content = fs.readFileSync(
       path.join(__dirname, "../src/background/background.js"),
@@ -38,6 +46,24 @@ describe("background image routing", () => {
     );
     expect(content).toMatch(/isNagaChatImageModel/);
     expect(content).toMatch(/chat\/completions/);
+  });
+});
+
+describe("model cache refresh", () => {
+  test("models updated message type exists", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/shared/constants.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/MODELS_UPDATED/);
+  });
+
+  test("background broadcasts models_updated", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/models_updated/);
   });
 });
 

@@ -14,6 +14,7 @@ import '/src/shared/crypto-store.js';
 import '/src/shared/encrypted-storage.js';
 import '/src/shared/projects-migration.js';
 import '/src/shared/debug-log.js';
+import '/src/shared/model-capabilities.js';
 import {
   buildCombinedModelId,
   buildModelDisplayName,
@@ -21,10 +22,19 @@ import {
 } from '/src/shared/model-utils.js';
 
 const {
+  deriveModelCapabilities = () => ({
+    supportsChat: false,
+    supportsImages: false,
+    outputsImage: false,
+    isImageOnly: false
+  }),
+  resolveImageRouteFromCapabilities = () => null,
   createDebugStreamLog = () => ({ entries: [], maxEntries: 0 }),
   pushDebugStreamEntry = () => null,
   buildDebugLogMeta = () => ({ count: 0, startAt: null, endAt: null })
 } = globalThis;
+
+const MODELS_UPDATED_EVENT = MESSAGE_TYPES.MODELS_UPDATED || "models_updated";
 
 const getLocalStorage = (keys) => (
   typeof globalThis.getEncrypted === "function"
@@ -186,17 +196,35 @@ async function getApiKeyForProvider(providerId) {
 
 function parseModelsPayload(payload) {
   const list = Array.isArray(payload) ? payload : (payload?.data || []);
-  return list.map((model) => ({
-    id: model.id,
-    name: model.name || model.id,
-    ownedBy: model.owned_by || model.ownedBy || model.owner || "",
-    capabilities: model.capabilities || model.capability || null,
-    architecture: model.architecture || model.arch || null,
-    metadata: model.metadata || null,
-    supportsReasoning: typeof model.supports_reasoning === "boolean"
-      ? model.supports_reasoning
-      : (typeof model.supportsReasoning === "boolean" ? model.supportsReasoning : undefined)
-  }));
+  return list.map((model) => {
+    const supportedEndpoints = Array.isArray(model?.supported_endpoints)
+      ? model.supported_endpoints
+      : (Array.isArray(model?.supportedEndpoints) ? model.supportedEndpoints : []);
+    const architecture = model?.architecture || model?.arch || null;
+    const derived = deriveModelCapabilities({
+      supported_endpoints: supportedEndpoints,
+      architecture
+    });
+    const rawCapabilities = model?.capabilities || model?.capability || null;
+
+    return {
+      id: model.id,
+      name: model.name || model.id,
+      ownedBy: model.owned_by || model.ownedBy || model.owner || "",
+      supportedEndpoints,
+      architecture,
+      capabilities: rawCapabilities,
+      metadata: model.metadata || null,
+      supportsReasoning: typeof model.supports_reasoning === "boolean"
+        ? model.supports_reasoning
+        : (typeof model.supportsReasoning === "boolean" ? model.supportsReasoning : undefined),
+      reasoning: typeof model.reasoning === "boolean" ? model.reasoning : undefined,
+      supportsChat: Boolean(derived?.supportsChat),
+      supportsImages: Boolean(derived?.supportsImages),
+      outputsImage: Boolean(derived?.outputsImage),
+      isImageOnly: Boolean(derived?.isImageOnly)
+    };
+  });
 }
 
 function getNagaStartupsCacheKeys() {
@@ -204,6 +232,17 @@ function getNagaStartupsCacheKeys() {
     startupsKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE,
     timeKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME
   };
+}
+
+function broadcastModelsUpdated(provider) {
+  try {
+    chrome.runtime.sendMessage({
+      type: MODELS_UPDATED_EVENT,
+      provider
+    });
+  } catch (e) {
+    // ignore if no listeners
+  }
 }
 
 async function getNagaStartupsMap() {
@@ -245,22 +284,9 @@ async function getNagaStartupsMap() {
   return map;
 }
 
-async function getProviderModels(providerId, apiKey) {
+async function refreshProviderModels(providerId, apiKey) {
   const provider = normalizeProviderId(providerId);
   if (!apiKey) return [];
-
-  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
-  const cacheData = await chrome.storage.local.get([
-    modelsKey,
-    timeKey
-  ]);
-
-  const now = Date.now();
-  if (cacheData[modelsKey] &&
-      cacheData[timeKey] &&
-      (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
-    return cacheData[modelsKey];
-  }
 
   const providerConfig = getProviderConfig(provider);
   const res = await fetch(`${providerConfig.baseUrl}/models`, {
@@ -281,12 +307,46 @@ async function getProviderModels(providerId, apiKey) {
     });
   }
 
+  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
+  const now = Date.now();
   await chrome.storage.local.set({
     [modelsKey]: models,
     [timeKey]: now
   });
 
+  broadcastModelsUpdated(provider);
   return models;
+}
+
+async function getProviderModels(providerId, apiKey) {
+  const provider = normalizeProviderId(providerId);
+  if (!apiKey) return [];
+
+  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
+  const cacheData = await chrome.storage.local.get([
+    modelsKey,
+    timeKey
+  ]);
+
+  const now = Date.now();
+  const cachedModels = Array.isArray(cacheData[modelsKey]) ? cacheData[modelsKey] : [];
+  const cacheTime = cacheData[timeKey] || 0;
+  const cacheFresh = cachedModels.length &&
+    cacheTime &&
+    (now - cacheTime) < CACHE_TTL.MODELS;
+
+  if (cacheFresh) {
+    return cachedModels;
+  }
+
+  if (cachedModels.length) {
+    refreshProviderModels(provider, apiKey).catch((err) => {
+      console.warn(`Failed to refresh ${provider} models:`, err);
+    });
+    return cachedModels;
+  }
+
+  return refreshProviderModels(provider, apiKey);
 }
 
 async function loadConfig() {
@@ -399,6 +459,32 @@ async function fetchImageAsDataUrl(imageUrl) {
   return buildDataUrlFromBase64(base64, mimeType);
 }
 
+function resolveModelCapabilitiesFromList(models, modelId) {
+  if (!Array.isArray(models) || !modelId) {
+    return {
+      supportsChat: false,
+      supportsImages: false,
+      outputsImage: false,
+      isImageOnly: false
+    };
+  }
+  const match = models.find((model) => model?.id === modelId);
+  if (!match) {
+    return {
+      supportsChat: false,
+      supportsImages: false,
+      outputsImage: false,
+      isImageOnly: false
+    };
+  }
+  return {
+    supportsChat: Boolean(match.supportsChat),
+    supportsImages: Boolean(match.supportsImages),
+    outputsImage: Boolean(match.outputsImage),
+    isImageOnly: Boolean(match.isImageOnly)
+  };
+}
+
 async function callImageGeneration(prompt, providerId, modelId) {
   if (!prompt || typeof prompt !== "string") {
     throw new Error(ERROR_MESSAGES.NO_PROMPT);
@@ -416,39 +502,19 @@ async function callImageGeneration(prompt, providerId, modelId) {
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
   try {
+    const models = await getProviderModels(provider, apiKey);
+    const capabilities = resolveModelCapabilitiesFromList(models, model);
+    let route = resolveImageRouteFromCapabilities(capabilities);
+
     if (providerConfig.id === "naga" && isNagaChatImageModel(model)) {
-      const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: buildAuthHeaders(apiKey, providerConfig),
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: prompt }]
-        }),
-        signal: controller.signal
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
-      }
-
-      const message = data?.choices?.[0]?.message || {};
-      const imageUrl = extractOpenRouterImageUrl(message);
-      if (!imageUrl) {
-        throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
-      }
-
-      const mimeMatch = imageUrl.match(/^data:([^;]+);base64,/);
-      const mimeType = mimeMatch?.[1] || "image/png";
-
-      return {
-        imageId: crypto.randomUUID(),
-        mimeType,
-        dataUrl: imageUrl
-      };
+      route = "chat";
     }
 
-    if (providerConfig.id === "naga") {
+    if (!route) {
+      throw new Error(ERROR_MESSAGES.IMAGE_MODEL_REQUIRED);
+    }
+
+    if (route === "images") {
       const res = await fetch(`${providerConfig.baseUrl}/images/generations`, {
         method: "POST",
         headers: buildAuthHeaders(apiKey, providerConfig),
@@ -805,7 +871,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 provider: entry.id,
                 displayName,
                 name: displayName,
-                vendorLabel: model.vendorLabel
+                vendorLabel: model.vendorLabel,
+                supportsChat: Boolean(model.supportsChat),
+                supportsImages: Boolean(model.supportsImages),
+                outputsImage: Boolean(model.outputsImage),
+                isImageOnly: Boolean(model.isImageOnly),
+                capabilities: model.capabilities || null
               });
             });
           } catch (e) {
