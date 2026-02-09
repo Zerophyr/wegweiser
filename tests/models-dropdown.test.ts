@@ -238,5 +238,20 @@ describe("ModelDropdownManager storage keys", () => {
     inputAddSpy.mockRestore();
     inputRemoveSpy.mockRestore();
   });
+
+  test("UI listens for models_updated", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const sidepanel = fs.readFileSync(
+      path.join(__dirname, "../src/sidepanel/sidepanel.js"),
+      "utf8"
+    );
+    const projects = fs.readFileSync(
+      path.join(__dirname, "../src/projects/projects.js"),
+      "utf8"
+    );
+    expect(sidepanel).toMatch(/models_updated/);
+    expect(projects).toMatch(/models_updated/);
+  });
 });
 

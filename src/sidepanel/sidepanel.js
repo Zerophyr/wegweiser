@@ -1996,6 +1996,9 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
     })();
   }
+  if (msg?.type === "models_updated") {
+    loadModels();
+  }
   if (msg?.type === "favorites_updated") {
     refreshFavoritesOnly();
   }
