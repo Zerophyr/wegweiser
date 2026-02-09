@@ -23,6 +23,14 @@ describe("background image routing", () => {
     expect(content).toMatch(/images\/generations/);
   });
 
+  test("background rejects non-image models", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/IMAGE_MODEL_REQUIRED/);
+  });
+
   test("naga image generation supports url fallback conversion", () => {
     const content = fs.readFileSync(
       path.join(__dirname, "../src/background/background.js"),

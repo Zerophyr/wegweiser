@@ -492,8 +492,9 @@ async function callImageGeneration(prompt, providerId, modelId) {
     const models = await getProviderModels(provider, apiKey);
     const capabilities = resolveModelCapabilitiesFromList(models, model);
     const route = resolveImageRouteFromCapabilities(capabilities);
+
     if (!route) {
-      throw new Error(ERROR_MESSAGES.IMAGE_MODEL_REQUIRED || "Selected model is not image-capable.");
+      throw new Error(ERROR_MESSAGES.IMAGE_MODEL_REQUIRED);
     }
 
     if (route === "images") {
