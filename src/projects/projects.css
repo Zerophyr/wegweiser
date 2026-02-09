@@ -1191,6 +1191,15 @@ body {
   font-size: 12px;
 }
 
+.chat-toggle.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-toggle.disabled .chat-toggle-switch {
+  background: var(--color-border);
+}
+
 .chat-toggle input {
   display: none;
 }

@@ -768,6 +768,11 @@ class ModelDropdownManager {
     badge.textContent = badgeInfo.label;
     badge.style.cssText = `display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 999px; background: ${badgeInfo.background}; color: ${badgeInfo.color}; text-transform: uppercase;`;
 
+    const imageBadge = document.createElement('span');
+    imageBadge.className = 'model-image-badge';
+    imageBadge.textContent = 'IMG';
+    imageBadge.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 999px; background: #b45309; color: #fff; text-transform: uppercase;';
+
     const starIcon = document.createElement('span');
     starIcon.textContent = starType;
     starIcon.className = 'model-star-icon';
@@ -776,6 +781,9 @@ class ModelDropdownManager {
 
     const rightControls = document.createElement('span');
     rightControls.style.cssText = 'display: inline-flex; align-items: center; gap: 6px;';
+    if (model?.outputsImage) {
+      rightControls.appendChild(imageBadge);
+    }
     rightControls.appendChild(badge);
     rightControls.appendChild(starIcon);
 

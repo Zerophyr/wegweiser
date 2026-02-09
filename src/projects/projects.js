@@ -150,6 +150,35 @@ function updateChatModelIndicator(Project) {
   elements.chatModelIndicator.textContent = `Model: ${getProjectModelLabel(Project)}`;
 }
 
+function getProjectModelRecord(Project) {
+  if (!Project?.model) return null;
+  const provider = normalizeProviderSafe(Project.modelProvider || currentProvider);
+  const combinedId = buildCombinedModelIdSafe(provider, Project.model);
+  return ProjectModelMap.get(combinedId) || null;
+}
+
+function isImageOnlyModel(model) {
+  return Boolean(model?.isImageOnly);
+}
+
+function setChatImageToggleState(enabled, disabled = true) {
+  if (!elements.chatImageMode) return;
+  elements.chatImageMode.checked = enabled;
+  elements.chatImageMode.disabled = disabled;
+  const label = elements.chatImageMode.closest('.chat-toggle');
+  if (label) {
+    label.classList.toggle('disabled', disabled);
+    label.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+}
+
+function applyProjectImageMode(Project) {
+  const model = getProjectModelRecord(Project);
+  const enableImage = isImageOnlyModel(model);
+  imageModeEnabled = enableImage;
+  setChatImageToggleState(enableImage, true);
+}
+
 async function loadProviderSetting() {
   try {
     const stored = await getLocalStorage(['or_provider', 'or_model_provider']);
@@ -1683,10 +1712,7 @@ async function openThread(threadId) {
     currentProjectData = Project;
     elements.chatWebSearch.checked = Project.webSearch || false;
     elements.chatReasoning.checked = Project.reasoning || false;
-    if (elements.chatImageMode) {
-      elements.chatImageMode.checked = false;
-      imageModeEnabled = false;
-    }
+    applyProjectImageMode(Project);
     updateChatModelIndicator(Project);
   }
 
@@ -1706,10 +1732,7 @@ async function createNewThread() {
     currentProjectData = Project;
     elements.chatWebSearch.checked = Project.webSearch || false;
     elements.chatReasoning.checked = Project.reasoning || false;
-    if (elements.chatImageMode) {
-      elements.chatImageMode.checked = false;
-      imageModeEnabled = false;
-    }
+    applyProjectImageMode(Project);
   }
 
   const thread = await createThread(currentProjectId);
@@ -2034,6 +2057,10 @@ async function loadModels() {
           elements.ProjectModelInput.value = getModelDisplayName(selected);
         }
       }
+
+      if (currentProjectData) {
+        applyProjectImageMode(currentProjectData);
+      }
     }
   } catch (err) {
     console.error('Error loading models:', err);
@@ -2125,6 +2152,10 @@ function bindEvents() {
 
   if (elements.chatImageMode) {
     elements.chatImageMode.addEventListener('change', () => {
+      if (elements.chatImageMode.disabled) {
+        elements.chatImageMode.checked = imageModeEnabled;
+        return;
+      }
       imageModeEnabled = elements.chatImageMode.checked;
     });
   }

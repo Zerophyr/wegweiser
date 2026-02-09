@@ -169,6 +169,12 @@ body {
   fill: var(--color-link);
 }
 
+.toggle-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .toggle-label {
   font-size: 11px;
   color: var(--color-text-muted);

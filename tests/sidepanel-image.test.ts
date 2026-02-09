@@ -10,5 +10,14 @@ describe("sidepanel image toggle", () => {
     );
     expect(html).toMatch(/image-toggle/i);
   });
+
+  test("sidepanel enforces image-only model rules", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/sidepanel/sidepanel.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/isImageOnly/);
+    expect(content).toMatch(/aria-disabled/);
+  });
 });
 

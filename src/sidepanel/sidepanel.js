@@ -126,6 +126,31 @@ function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || "";
 }
 
+function isImageOnlyModel(model) {
+  return Boolean(model?.isImageOnly);
+}
+
+function setImageToggleUi(enabled, disabled = true) {
+  if (!imageToggle) return;
+  imageToggle.classList.toggle("active", enabled);
+  imageToggle.setAttribute("aria-pressed", enabled.toString());
+  imageToggle.setAttribute("aria-disabled", disabled ? "true" : "false");
+  imageToggle.classList.toggle("disabled", disabled);
+}
+
+function isImageToggleDisabled() {
+  if (!imageToggle) return true;
+  return imageToggle.classList.contains("disabled") ||
+    imageToggle.getAttribute("aria-disabled") === "true";
+}
+
+async function applyImageModeForModel(model) {
+  const enableImage = isImageOnlyModel(model);
+  imageModeEnabled = enableImage;
+  setImageToggleUi(enableImage, true);
+  await saveToggleSettings();
+}
+
 function buildCombinedFavoritesList() {
   const combined = [];
   ["openrouter", "naga"].forEach((provider) => {
@@ -1611,12 +1636,13 @@ async function loadModels() {
               console.log('[ModelSelect] response', res);
             }
 
-            if (res?.ok) {
-              selectedCombinedModelId = modelId;
-              currentProvider = provider;
-              modelStatusEl.textContent = `Using: ${displayName}`;
-              return true;
-            }
+          if (res?.ok) {
+            selectedCombinedModelId = modelId;
+            currentProvider = provider;
+            modelStatusEl.textContent = `Using: ${displayName}`;
+            await applyImageModeForModel(selectedModel);
+            return true;
+          }
 
             modelStatusEl.textContent = "Failed to set model";
             return false;
@@ -1683,12 +1709,15 @@ async function loadModels() {
         modelInput.value = displayName;
       }
       modelStatusEl.textContent = `Using: ${displayName}`;
+      await applyImageModeForModel(selected);
     } else {
       modelStatusEl.textContent = "Ready";
+      await applyImageModeForModel(null);
     }
   } catch (e) {
     console.error("Error loading models:", e);
     modelStatusEl.textContent = "Error loading models";
+    await applyImageModeForModel(null);
   }
 }
 
@@ -1737,6 +1766,8 @@ async function loadToggleSettings() {
         imageToggle.classList.add("active");
       }
       imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
+      imageToggle.setAttribute('aria-disabled', 'true');
+      imageToggle.classList.add('disabled');
     }
   } catch (e) {
     console.error("Error loading toggle settings:", e);
@@ -1771,6 +1802,9 @@ reasoningToggle.addEventListener("click", async () => {
 
 if (imageToggle) {
   imageToggle.addEventListener("click", async () => {
+    if (isImageToggleDisabled()) {
+      return;
+    }
     imageModeEnabled = !imageModeEnabled;
     imageToggle.classList.toggle("active");
     imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
