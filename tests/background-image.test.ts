@@ -22,5 +22,13 @@ describe("background image routing", () => {
     expect(content).toMatch(/modalities/);
     expect(content).toMatch(/images\/generations/);
   });
+
+  test("naga image generation supports url fallback conversion", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/fetchImageAsDataUrl/);
+  });
 });
 

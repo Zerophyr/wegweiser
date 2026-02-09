@@ -361,6 +361,31 @@ function buildDataUrlFromBase64(base64, mimeType = "image/png") {
   return `data:${mimeType};base64,${base64}`;
 }
 
+function arrayBufferToBase64(buffer) {
+  if (!buffer) return "";
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function fetchImageAsDataUrl(imageUrl) {
+  if (!imageUrl) return "";
+  const res = await fetch(imageUrl);
+  if (!res.ok) {
+    throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
+  }
+  const blob = await res.blob();
+  const buffer = await blob.arrayBuffer();
+  const base64 = arrayBufferToBase64(buffer);
+  const mimeType = blob.type || res.headers.get("content-type") || "image/png";
+  return buildDataUrlFromBase64(base64, mimeType);
+}
+
 async function callImageGeneration(prompt, providerId, modelId) {
   if (!prompt || typeof prompt !== "string") {
     throw new Error(ERROR_MESSAGES.NO_PROMPT);
@@ -386,6 +411,7 @@ async function callImageGeneration(prompt, providerId, modelId) {
           model,
           prompt,
           n: 1,
+          size: "1024x1024",
           response_format: "b64_json"
         }),
         signal: controller.signal
@@ -396,15 +422,24 @@ async function callImageGeneration(prompt, providerId, modelId) {
         throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
       }
 
-      const imageBase64 = data?.data?.[0]?.b64_json || "";
-      const dataUrl = buildDataUrlFromBase64(imageBase64);
+      const firstImage = data?.data?.[0] || {};
+      const imageBase64 = firstImage?.b64_json || "";
+      const imageUrl = firstImage?.url || "";
+      let dataUrl = "";
+      if (imageBase64) {
+        dataUrl = buildDataUrlFromBase64(imageBase64);
+      } else if (imageUrl) {
+        dataUrl = await fetchImageAsDataUrl(imageUrl);
+      }
       if (!dataUrl) {
         throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
       }
 
+      const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/png";
       return {
         imageId: crypto.randomUUID(),
-        mimeType: "image/png",
+        mimeType,
         dataUrl
       };
     }
