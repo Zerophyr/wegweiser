@@ -30,6 +30,13 @@ const setLocalStorage = (values) => (
 );
 // encrypted-storage
 
+const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
+const chatMigrationPromise = (typeof window !== "undefined" && typeof window.migrateLegacyChatToIdb === "function")
+  ? window.migrateLegacyChatToIdb().catch((err) => {
+    console.warn("Chat migration failed:", err);
+  })
+  : Promise.resolve();
+
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
   const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
@@ -392,8 +399,72 @@ function openSpacesContextModal(thread, space) {
 
 // ============ STORAGE FUNCTIONS ============
 
+function normalizeThreadProjectId(thread) {
+  if (!thread || typeof thread !== 'object') return thread;
+  const projectId = thread.projectId || thread.ProjectId || thread.spaceId || null;
+  const normalized = { ...thread, projectId };
+  delete normalized.ProjectId;
+  delete normalized.spaceId;
+  return normalized;
+}
+
+function ensureThreadMessage(message, threadId, index, baseTime) {
+  const createdAt = message.createdAt || message.meta?.createdAt || (baseTime + index);
+  const id = message.id || `${threadId}_msg_${index}`;
+  return {
+    ...message,
+    id,
+    threadId,
+    createdAt
+  };
+}
+
+async function persistThreadToChatStore(thread) {
+  if (!chatStore || typeof chatStore.putThread !== 'function') return;
+  if (!thread || !thread.id) return;
+
+  const normalized = normalizeThreadProjectId(thread);
+  const messages = Array.isArray(thread.messages) ? thread.messages : [];
+  const archivedMessages = Array.isArray(thread.archivedMessages) ? thread.archivedMessages : [];
+  const summary = typeof thread.summary === 'string' ? thread.summary : '';
+  const summaryUpdatedAt = thread.summaryUpdatedAt || null;
+  const archivedUpdatedAt = thread.archivedUpdatedAt || null;
+  const baseTime = normalized.updatedAt || normalized.createdAt || Date.now();
+
+  const threadRecord = { ...normalized };
+  delete threadRecord.messages;
+  delete threadRecord.summary;
+  delete threadRecord.summaryUpdatedAt;
+  delete threadRecord.archivedMessages;
+  delete threadRecord.archivedUpdatedAt;
+
+  if (typeof chatStore.deleteThread === 'function') {
+    await chatStore.deleteThread(threadRecord.id);
+  }
+
+  await chatStore.putThread(threadRecord);
+
+  for (let i = 0; i < messages.length; i += 1) {
+    await chatStore.putMessage(ensureThreadMessage(messages[i], threadRecord.id, i, baseTime));
+  }
+
+  if (typeof chatStore.setSummary === 'function' && (summary || summaryUpdatedAt)) {
+    await chatStore.setSummary(threadRecord.id, summary, summaryUpdatedAt);
+  }
+
+  if (typeof chatStore.setArchivedMessages === 'function' && (archivedMessages.length || archivedUpdatedAt)) {
+    const archivedWithIds = archivedMessages.map((msg, index) => (
+      ensureThreadMessage(msg, threadRecord.id, index, baseTime)
+    ));
+    await chatStore.setArchivedMessages(threadRecord.id, archivedWithIds, archivedUpdatedAt);
+  }
+}
+
 async function loadSpaces() {
   try {
+    if (chatStore && typeof chatStore.getProjects === 'function') {
+      return await chatStore.getProjects();
+    }
     const result = await getLocalStorage([STORAGE_KEYS.SPACES]);
     return result[STORAGE_KEYS.SPACES] || [];
   } catch (e) {
@@ -403,11 +474,52 @@ async function loadSpaces() {
 }
 
 async function saveSpaces(spaces) {
+  if (chatStore && typeof chatStore.putProject === 'function') {
+    const existing = (typeof chatStore.getProjects === 'function')
+      ? await chatStore.getProjects()
+      : [];
+    const nextIds = new Set((spaces || []).map((space) => space.id));
+    for (const space of (spaces || [])) {
+      if (space && space.id) {
+        await chatStore.putProject(space);
+      }
+    }
+    if (typeof chatStore.deleteProject === 'function') {
+      for (const project of existing || []) {
+        if (project?.id && !nextIds.has(project.id)) {
+          await chatStore.deleteProject(project.id);
+        }
+      }
+    }
+    return;
+  }
   await setLocalStorage({ [STORAGE_KEYS.SPACES]: spaces });
 }
 
 async function loadThreads(spaceId = null) {
   try {
+    if (chatStore && typeof chatStore.getThreads === 'function') {
+      const rawThreads = spaceId && typeof chatStore.getThreadsByProject === 'function'
+        ? await chatStore.getThreadsByProject(spaceId)
+        : await chatStore.getThreads();
+      const filteredThreads = (rawThreads || []).filter((thread) => thread?.projectId !== '__sidepanel__');
+      const hydrated = [];
+      for (const thread of filteredThreads) {
+        const messages = await chatStore.getMessages?.(thread.id) || [];
+        const summaryData = await chatStore.getSummary?.(thread.id);
+        const archivedData = await chatStore.getArchivedMessages?.(thread.id);
+        hydrated.push({
+          ...thread,
+          spaceId: thread.spaceId || thread.projectId || spaceId || null,
+          messages,
+          summary: summaryData?.summary || '',
+          summaryUpdatedAt: summaryData?.summaryUpdatedAt || null,
+          archivedMessages: archivedData?.archivedMessages || [],
+          archivedUpdatedAt: archivedData?.archivedUpdatedAt || null
+        });
+      }
+      return hydrated;
+    }
     const result = await getLocalStorage([STORAGE_KEYS.THREADS]);
     const threads = result[STORAGE_KEYS.THREADS] || [];
     if (spaceId) {
@@ -421,6 +533,23 @@ async function loadThreads(spaceId = null) {
 }
 
 async function saveThreads(threads) {
+  if (chatStore && typeof chatStore.putThread === 'function') {
+    const existing = (typeof chatStore.getThreads === 'function')
+      ? await chatStore.getThreads()
+      : [];
+    const nextIds = new Set((threads || []).map((thread) => thread.id));
+    if (typeof chatStore.deleteThread === 'function') {
+      for (const thread of existing || []) {
+        if (thread?.id && !nextIds.has(thread.id)) {
+          await chatStore.deleteThread(thread.id);
+        }
+      }
+    }
+    for (const thread of (threads || [])) {
+      await persistThreadToChatStore(thread);
+    }
+    return;
+  }
   await setLocalStorage({ [STORAGE_KEYS.THREADS]: threads });
 }
 
@@ -1220,13 +1349,14 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.sanitizeFilename = sanitizeFilename;
   window.getFullThreadMessages = getFullThreadMessages;
   window.openImageLightbox = openImageLightbox;
+  window.loadThreads = loadThreads;
 }
 
 async function renderStorageUsage() {
   const usage = await checkStorageUsage();
 
   elements.storageFill.style.width = `${Math.min(usage.percentUsed, 100)}%`;
-  elements.storageText.textContent = buildStorageLabel('Local Storage (settings + chats)', usage.bytesInUse, usage.maxBytes);
+  elements.storageText.textContent = buildStorageLabel('Local Storage (settings)', usage.bytesInUse, usage.maxBytes);
 
   // Update fill color based on usage
   elements.storageFill.classList.remove('warning', 'danger');
@@ -2548,6 +2678,7 @@ function setupChatInput() {
 // ============ INITIALIZATION ============
 
 async function init() {
+  await chatMigrationPromise;
   initElements();
   bindEvents();
   setupChatInput();

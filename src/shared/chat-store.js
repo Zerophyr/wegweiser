@@ -101,6 +101,30 @@ function createIndexedDbChatStore(idb) {
         req.onerror = () => reject(req.error);
       }));
     },
+    async deleteProject(projectId) {
+      if (!projectId) return null;
+      return run(STORE_NAMES.PROJECTS, "readwrite", (store) => store.delete(projectId));
+    },
+    async getThreads() {
+      return run(STORE_NAMES.THREADS, "readonly", (store) => new Promise((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }));
+    },
+    async getThreadsByProject(projectId) {
+      if (!projectId) return [];
+      return run(STORE_NAMES.THREADS, "readonly", (store) => new Promise((resolve, reject) => {
+        const index = store.index("projectId");
+        const req = index.getAll(projectId);
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }));
+    },
+    async deleteThread(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.THREADS, "readwrite", (store) => store.delete(threadId));
+    },
     async putThread(record) {
       return run(STORE_NAMES.THREADS, "readwrite", (store) => store.put(record));
     },
@@ -124,6 +148,21 @@ function createIndexedDbChatStore(idb) {
         req.onerror = () => reject(req.error);
       }));
     },
+    async deleteMessages(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.MESSAGES, "readwrite", (store) => new Promise((resolve, reject) => {
+        const index = store.index("threadId");
+        const req = index.getAll(threadId);
+        req.onsuccess = () => {
+          const records = req.result || [];
+          records.forEach((record) => {
+            if (record?.id) store.delete(record.id);
+          });
+          resolve(records.length);
+        };
+        req.onerror = () => reject(req.error);
+      }));
+    },
     async putSummary(record) {
       return run(STORE_NAMES.SUMMARIES, "readwrite", (store) => store.put(record));
     },
@@ -135,6 +174,10 @@ function createIndexedDbChatStore(idb) {
         req.onerror = () => reject(req.error);
       }));
     },
+    async deleteSummary(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.SUMMARIES, "readwrite", (store) => store.delete(threadId));
+    },
     async putArchive(record) {
       return run(STORE_NAMES.ARCHIVES, "readwrite", (store) => store.put(record));
     },
@@ -145,6 +188,10 @@ function createIndexedDbChatStore(idb) {
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => reject(req.error);
       }));
+    },
+    async deleteArchive(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.ARCHIVES, "readwrite", (store) => store.delete(threadId));
     }
   };
 }
@@ -336,6 +383,17 @@ async function getProject(projectId, store) {
   return decryptJson(record);
 }
 
+async function deleteProject(projectId, store) {
+  const adapter = store || getDefaultStore();
+  if (!projectId) return null;
+  if (typeof adapter.deleteProject === "function") {
+    await adapter.deleteProject(projectId);
+  } else {
+    adapter.projects.delete(projectId);
+  }
+  return true;
+}
+
 async function getProjects(store) {
   const adapter = store || getDefaultStore();
   const list = typeof adapter.getProjects === "function"
@@ -349,6 +407,81 @@ async function getProjects(store) {
   return result;
 }
 
+async function getThreads(store) {
+  const adapter = store || getDefaultStore();
+  const list = typeof adapter.getThreads === "function"
+    ? await adapter.getThreads()
+    : Array.from(adapter.threads.values());
+  const result = [];
+  for (const record of list || []) {
+    const decrypted = await decryptJson(record);
+    if (decrypted) result.push(decrypted);
+  }
+  return result;
+}
+
+async function getThreadsByProject(projectId, store) {
+  const adapter = store || getDefaultStore();
+  if (!projectId) return [];
+  const list = typeof adapter.getThreadsByProject === "function"
+    ? await adapter.getThreadsByProject(projectId)
+    : Array.from(adapter.threads.values()).filter((record) => record?.projectId === projectId);
+  const result = [];
+  for (const record of list || []) {
+    const decrypted = await decryptJson(record);
+    if (decrypted) result.push(decrypted);
+  }
+  return result;
+}
+
+async function deleteThread(threadId, store) {
+  const adapter = store || getDefaultStore();
+  if (!threadId) return null;
+  if (typeof adapter.deleteThread === "function") {
+    await adapter.deleteThread(threadId);
+  } else {
+    adapter.threads.delete(threadId);
+  }
+  if (typeof adapter.deleteMessages === "function") {
+    await adapter.deleteMessages(threadId);
+  } else {
+    adapter.messages.delete(threadId);
+  }
+  if (typeof adapter.deleteSummary === "function") {
+    await adapter.deleteSummary(threadId);
+  } else {
+    adapter.summaries.delete(threadId);
+  }
+  if (typeof adapter.deleteArchive === "function") {
+    await adapter.deleteArchive(threadId);
+  } else {
+    adapter.archives.delete(threadId);
+  }
+  return true;
+}
+
+if (typeof window !== "undefined") {
+  window.chatStore = {
+    createMemoryChatStore,
+    createIndexedDbChatStore,
+    putProject,
+    getProject,
+    getProjects,
+    deleteProject,
+    getThreads,
+    getThreadsByProject,
+    putThread,
+    getThread,
+    deleteThread,
+    putMessage,
+    getMessages,
+    setSummary,
+    getSummary,
+    setArchivedMessages,
+    getArchivedMessages
+  };
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     createMemoryChatStore,
@@ -356,8 +489,12 @@ if (typeof module !== "undefined") {
     putProject,
     getProject,
     getProjects,
+    deleteProject,
+    getThreads,
     putThread,
     getThread,
+    getThreadsByProject,
+    deleteThread,
     putMessage,
     getMessages,
     setSummary,
