@@ -36,6 +36,13 @@ const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
   })
   : Promise.resolve();
 
+const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
+const chatMigrationPromise = (typeof window !== "undefined" && typeof window.migrateLegacyChatToIdb === "function")
+  ? window.migrateLegacyChatToIdb().catch((err) => {
+    console.warn("Chat migration failed:", err);
+  })
+  : Promise.resolve();
+
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
   const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
@@ -398,8 +405,72 @@ function openProjectsContextModal(thread, Project) {
 
 // ============ STORAGE FUNCTIONS ============
 
+function normalizeThreadProjectId(thread) {
+  if (!thread || typeof thread !== 'object') return thread;
+  const projectId = thread.projectId || thread.ProjectId || thread.spaceId || null;
+  const normalized = { ...thread, projectId };
+  delete normalized.ProjectId;
+  delete normalized.spaceId;
+  return normalized;
+}
+
+function ensureThreadMessage(message, threadId, index, baseTime) {
+  const createdAt = message.createdAt || message.meta?.createdAt || (baseTime + index);
+  const id = message.id || `${threadId}_msg_${index}`;
+  return {
+    ...message,
+    id,
+    threadId,
+    createdAt
+  };
+}
+
+async function persistThreadToChatStore(thread) {
+  if (!chatStore || typeof chatStore.putThread !== 'function') return;
+  if (!thread || !thread.id) return;
+
+  const normalized = normalizeThreadProjectId(thread);
+  const messages = Array.isArray(thread.messages) ? thread.messages : [];
+  const archivedMessages = Array.isArray(thread.archivedMessages) ? thread.archivedMessages : [];
+  const summary = typeof thread.summary === 'string' ? thread.summary : '';
+  const summaryUpdatedAt = thread.summaryUpdatedAt || null;
+  const archivedUpdatedAt = thread.archivedUpdatedAt || null;
+  const baseTime = normalized.updatedAt || normalized.createdAt || Date.now();
+
+  const threadRecord = { ...normalized };
+  delete threadRecord.messages;
+  delete threadRecord.summary;
+  delete threadRecord.summaryUpdatedAt;
+  delete threadRecord.archivedMessages;
+  delete threadRecord.archivedUpdatedAt;
+
+  if (typeof chatStore.deleteThread === 'function') {
+    await chatStore.deleteThread(threadRecord.id);
+  }
+
+  await chatStore.putThread(threadRecord);
+
+  for (let i = 0; i < messages.length; i += 1) {
+    await chatStore.putMessage(ensureThreadMessage(messages[i], threadRecord.id, i, baseTime));
+  }
+
+  if (typeof chatStore.setSummary === 'function' && (summary || summaryUpdatedAt)) {
+    await chatStore.setSummary(threadRecord.id, summary, summaryUpdatedAt);
+  }
+
+  if (typeof chatStore.setArchivedMessages === 'function' && (archivedMessages.length || archivedUpdatedAt)) {
+    const archivedWithIds = archivedMessages.map((msg, index) => (
+      ensureThreadMessage(msg, threadRecord.id, index, baseTime)
+    ));
+    await chatStore.setArchivedMessages(threadRecord.id, archivedWithIds, archivedUpdatedAt);
+  }
+}
+
 async function loadProjects() {
   try {
+    if (chatStore && typeof chatStore.getProjects === 'function') {
+      return await chatStore.getProjects();
+    }
     const result = await getLocalStorage([STORAGE_KEYS.PROJECTS]);
     return result[STORAGE_KEYS.PROJECTS] || [];
   } catch (e) {
@@ -408,12 +479,54 @@ async function loadProjects() {
   }
 }
 
-async function saveProjects(Projects) {
-  await setLocalStorage({ [STORAGE_KEYS.PROJECTS]: Projects });
+async function saveProjects(projects) {
+  if (chatStore && typeof chatStore.putProject === 'function') {
+    const existing = (typeof chatStore.getProjects === 'function')
+      ? await chatStore.getProjects()
+      : [];
+    const nextIds = new Set((projects || []).map((project) => project.id));
+    for (const project of (projects || [])) {
+      if (project && project.id) {
+        await chatStore.putProject(project);
+      }
+    }
+    if (typeof chatStore.deleteProject === 'function') {
+      for (const project of existing || []) {
+        if (project?.id && !nextIds.has(project.id)) {
+          await chatStore.deleteProject(project.id);
+        }
+      }
+    }
+    return;
+  }
+  await setLocalStorage({ [STORAGE_KEYS.PROJECTS]: projects });
 }
 
 async function loadThreads(projectId = null) {
   try {
+    if (chatStore && typeof chatStore.getThreads === 'function') {
+      const rawThreads = projectId && typeof chatStore.getThreadsByProject === 'function'
+        ? await chatStore.getThreadsByProject(projectId)
+        : await chatStore.getThreads();
+      const filteredThreads = (rawThreads || []).filter((thread) => thread?.projectId !== '__sidepanel__');
+      const hydrated = [];
+      for (const thread of filteredThreads) {
+        const messages = await chatStore.getMessages?.(thread.id) || [];
+        const summaryData = await chatStore.getSummary?.(thread.id);
+        const archivedData = await chatStore.getArchivedMessages?.(thread.id);
+        hydrated.push({
+          ...thread,
+          projectId: thread.projectId || projectId || null,
+          messages,
+          summary: summaryData?.summary || '',
+          summaryUpdatedAt: summaryData?.summaryUpdatedAt || null,
+          archivedMessages: archivedData?.archivedMessages || [],
+          archivedUpdatedAt: archivedData?.archivedUpdatedAt || null
+        });
+      }
+      return hydrated;
+    }
+
     const result = await getLocalStorage([STORAGE_KEYS.PROJECT_THREADS]);
     const rawThreads = result[STORAGE_KEYS.PROJECT_THREADS];
     let threads = [];
@@ -468,6 +581,23 @@ async function loadThreads(projectId = null) {
 }
 
 async function saveThreads(threads) {
+  if (chatStore && typeof chatStore.putThread === 'function') {
+    const existing = (typeof chatStore.getThreads === 'function')
+      ? await chatStore.getThreads()
+      : [];
+    const nextIds = new Set((threads || []).map((thread) => thread.id));
+    if (typeof chatStore.deleteThread === 'function') {
+      for (const thread of existing || []) {
+        if (thread?.id && !nextIds.has(thread.id)) {
+          await chatStore.deleteThread(thread.id);
+        }
+      }
+    }
+    for (const thread of (threads || [])) {
+      await persistThreadToChatStore(thread);
+    }
+    return;
+  }
   await setLocalStorage({ [STORAGE_KEYS.PROJECT_THREADS]: threads });
 }
 
@@ -500,32 +630,40 @@ function buildStorageLabel(label, bytesUsed, maxBytes = null) {
   return `${label}: ${formatBytes(bytesUsed)}`;
 }
 
-async function getImageStorageUsage() {
-  if (typeof getImageStoreStats !== 'function') {
-    return { bytesUsed: 0, percentUsed: null, quotaBytes: null };
-  }
-  const stats = await getImageStoreStats();
+async function getIndexedDbStorageUsage() {
+  let imageBytes = 0;
+  let chatBytes = 0;
   let quotaBytes = null;
   let percentUsed = null;
 
-  try {
-    const localItems = await getLocalStorage([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
-    const limitMb = normalizeImageCacheLimitMb(localItems[STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
-    quotaBytes = limitMb * 1024 * 1024;
-    if (typeof stats?.bytesUsed === 'number' && quotaBytes > 0) {
-      percentUsed = (stats.bytesUsed / quotaBytes) * 100;
+  if (typeof getImageStoreStats === 'function') {
+    const imageStats = await getImageStoreStats();
+    if (typeof imageStats?.bytesUsed === 'number') {
+      imageBytes = imageStats.bytesUsed;
     }
-  } catch (e) {
-    console.warn('Failed to load image cache limit:', e);
   }
 
-  if (!quotaBytes && navigator?.storage?.estimate) {
+  if (typeof getChatStoreStats === 'function') {
+    const chatStats = await getChatStoreStats();
+    if (typeof chatStats?.bytesUsed === 'number') {
+      chatBytes = chatStats.bytesUsed;
+    }
+  } else if (window?.chatStore?.getStats) {
+    const chatStats = await window.chatStore.getStats();
+    if (typeof chatStats?.bytesUsed === 'number') {
+      chatBytes = chatStats.bytesUsed;
+    }
+  }
+
+  const bytesUsed = imageBytes + chatBytes;
+
+  if (navigator?.storage?.estimate) {
     try {
       const estimate = await navigator.storage.estimate();
       if (typeof estimate?.quota === 'number') {
         quotaBytes = estimate.quota;
-        if (typeof stats?.bytesUsed === 'number' && estimate.quota > 0) {
-          percentUsed = (stats.bytesUsed / estimate.quota) * 100;
+        if (quotaBytes > 0) {
+          percentUsed = (bytesUsed / quotaBytes) * 100;
         }
       }
     } catch (e) {
@@ -534,7 +672,7 @@ async function getImageStorageUsage() {
   }
 
   return {
-    bytesUsed: stats?.bytesUsed || 0,
+    bytesUsed,
     percentUsed,
     quotaBytes
   };
@@ -702,8 +840,6 @@ function initElements() {
   elements.ProjectsSettingsBtn = document.getElementById('projects-settings-btn');
   elements.emptyCreateBtn = document.getElementById('empty-create-btn');
   elements.storageFooter = document.getElementById('storage-footer');
-  elements.storageFill = document.getElementById('storage-fill-local');
-  elements.storageText = document.getElementById('storage-text-local');
   elements.storageFillImages = document.getElementById('storage-fill-images');
   elements.storageTextImages = document.getElementById('storage-text-images');
   elements.storageWarning = document.getElementById('storage-warning');
@@ -1267,43 +1403,69 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.sanitizeFilename = sanitizeFilename;
   window.getFullThreadMessages = getFullThreadMessages;
   window.openImageLightbox = openImageLightbox;
+  window.loadThreads = loadThreads;
 }
 
 async function renderStorageUsage() {
-  const usage = await checkStorageUsage();
-
-  elements.storageFill.style.width = `${Math.min(usage.percentUsed, 100)}%`;
-  elements.storageText.textContent = buildStorageLabel('Local Storage (settings + chats)', usage.bytesInUse, usage.maxBytes);
-
-  // Update fill color based on usage
-  elements.storageFill.classList.remove('warning', 'danger');
-  if (usage.percentUsed >= 85) {
-    elements.storageFill.classList.add('danger');
-  } else if (usage.percentUsed >= 70) {
-    elements.storageFill.classList.add('warning');
+  if (!elements.storageFillImages || !elements.storageTextImages) {
+    return;
   }
 
-  // Show warning banner if needed
-  if (usage.percentUsed >= 95) {
-    showStorageWarning('critical', 'Storage full. Delete threads to free Project.');
-  } else if (usage.percentUsed >= 85) {
-    showStorageWarning('high', 'Storage almost full. Delete threads to continue using Projects.');
-  } else if (usage.percentUsed >= 70) {
-    showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads.');
+  if (!renderStorageUsage._lastUpdate) {
+    renderStorageUsage._lastUpdate = 0;
+    renderStorageUsage._cachedUsage = null;
+    renderStorageUsage._inflight = null;
+  }
+
+  const now = Date.now();
+  const maxAgeMs = 30_000;
+  const hasFreshCache = renderStorageUsage._cachedUsage && (now - renderStorageUsage._lastUpdate) < maxAgeMs;
+
+  if (!hasFreshCache) {
+    if (!renderStorageUsage._inflight) {
+      renderStorageUsage._inflight = getIndexedDbStorageUsage()
+        .then((usage) => {
+          renderStorageUsage._cachedUsage = usage;
+          renderStorageUsage._lastUpdate = Date.now();
+          return usage;
+        })
+        .finally(() => {
+          renderStorageUsage._inflight = null;
+        });
+    }
+    renderStorageUsage._cachedUsage = await renderStorageUsage._inflight;
+  }
+
+  const storageUsage = renderStorageUsage._cachedUsage || { bytesUsed: 0, percentUsed: 0, quotaBytes: null };
+  const percentUsed = typeof storageUsage.percentUsed === 'number' ? storageUsage.percentUsed : 0;
+
+  elements.storageTextImages.textContent = buildStorageLabel('IndexedDB Storage', storageUsage.bytesUsed, storageUsage.quotaBytes);
+  elements.storageFillImages.style.width = `${Math.min(percentUsed, 100)}%`;
+
+  elements.storageFillImages.classList.remove('warning', 'danger');
+  if (percentUsed >= 85) {
+    elements.storageFillImages.classList.add('danger');
+  } else if (percentUsed >= 70) {
+    elements.storageFillImages.classList.add('warning');
+  }
+
+  if (percentUsed >= 95) {
+    showStorageWarning('critical', 'Storage full. Delete images or threads to free space.');
+  } else if (percentUsed >= 85) {
+    showStorageWarning('high', 'Storage almost full. Delete images or threads to continue using Projects.');
+  } else if (percentUsed >= 70) {
+    showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads or images.');
   } else {
     hideStorageWarning();
   }
+}
+renderStorageUsage._cachedUsage = null;
+renderStorageUsage._lastUpdate = 0;
+renderStorageUsage._inflight = null;
 
-  if (elements.storageFillImages && elements.storageTextImages) {
-    elements.storageTextImages.textContent = 'Loading image storage...';
-    const imageUsage = await getImageStorageUsage();
-    elements.storageTextImages.textContent = buildStorageLabel('Image Storage (IndexedDB)', imageUsage.bytesUsed, imageUsage.quotaBytes);
-    if (typeof imageUsage.percentUsed === 'number') {
-      elements.storageFillImages.style.width = `${Math.min(imageUsage.percentUsed, 100)}%`;
-    } else {
-      elements.storageFillImages.style.width = '30%';
-    }
-  }
+function invalidateStorageUsageCache() {
+  renderStorageUsage._cachedUsage = null;
+  renderStorageUsage._lastUpdate = 0;
 }
 
 function showStorageWarning(level, message) {
@@ -1675,6 +1837,7 @@ async function handleProjectFormSubmit(e) {
     }
 
     closeProjectModal();
+    invalidateStorageUsageCache();
     await renderProjectsList();
     await renderStorageUsage();
   } catch (err) {
@@ -1753,6 +1916,7 @@ async function handleDeleteConfirm() {
       if (currentProjectId === deletingItem.id) {
         showView('list');
       }
+      invalidateStorageUsageCache();
       await renderProjectsList();
     } else {
       await deleteThread(deletingItem.id);
@@ -1763,6 +1927,7 @@ async function handleDeleteConfirm() {
         elements.chatEmptyState.style.display = 'flex';
         elements.chatContainer.style.display = 'none';
       }
+      invalidateStorageUsageCache();
       await renderThreadList();
     }
 
@@ -2595,7 +2760,7 @@ function setupChatInput() {
 // ============ INITIALIZATION ============
 
 async function init() {
-  await migrationPromise;
+  await Promise.all([migrationPromise, chatMigrationPromise]);
   initElements();
   bindEvents();
   setupChatInput();
