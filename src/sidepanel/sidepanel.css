@@ -584,6 +584,47 @@ body {
   overflow-wrap: break-word;
 }
 
+.error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 8px;
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: 13px;
+}
+
+.error-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.retry-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.retry-btn:hover {
+  background: var(--color-border-hover);
+  border-color: var(--color-border-hover);
+}
+
+.retry-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .answer-content .topic-heading {
   padding: 6px 10px 6px 12px;
   border-left: 3px solid var(--topic-color, var(--color-topic-1));

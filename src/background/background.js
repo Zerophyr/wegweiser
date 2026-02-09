@@ -1080,10 +1080,12 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
 
 async function callOpenRouterWithMessages(messages, customModel = null, customProvider = null) {
   const cfg = await loadConfig();
-  if (!cfg.apiKey) {
+  const providerId = normalizeProviderId(customProvider || cfg.modelProvider);
+  const apiKey = await getApiKeyForProvider(providerId);
+  if (!apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
-  const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
+  const providerConfig = getProviderConfig(providerId);
   const summaryStartedAt = Date.now();
 
   const requestBody = {
@@ -1097,7 +1099,7 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
       provider: providerConfig.id,
       model: requestBody.model,
       messageCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
-      hasApiKey: Boolean(cfg.apiKey),
+      hasApiKey: Boolean(apiKey),
       hasProvisioningKey: Boolean(cfg.provisioningKey)
     });
   }
@@ -1110,7 +1112,7 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
 
       const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
         method: "POST",
-        headers: buildAuthHeaders(cfg.apiKey, providerConfig),
+        headers: buildAuthHeaders(apiKey, providerConfig),
         body: JSON.stringify(requestBody),
         signal: controller.signal
       });
@@ -1259,7 +1261,8 @@ chrome.runtime.onConnect.addListener((port) => {
           () => isDisconnected,
           msg.messages,  // Custom messages array (for Projects)
           msg.model,     // Custom model (for Projects)
-          msg.provider   // Custom provider (for Projects)
+          msg.provider,  // Custom provider (for Projects)
+          msg.retry === true
         );
       } catch (e) {
         // Only send error if port is still connected
@@ -1276,13 +1279,15 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 // Streaming version of callOpenRouter that sends real-time updates via Port
-async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null, customProvider = null) {
+async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null, customProvider = null, retry = false) {
   const cfg = await loadConfig();
-  if (!cfg.apiKey) {
+  const providerId = normalizeProviderId(customProvider || cfg.modelProvider);
+  const apiKey = await getApiKeyForProvider(providerId);
+  if (!apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
   await ensureContextLoaded();
-  const providerConfig = getProviderConfig(customProvider || cfg.modelProvider);
+  const providerConfig = getProviderConfig(providerId);
   const streamStartedAt = Date.now();
 
   // Helper function to safely send port messages
@@ -1307,12 +1312,20 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   if (isProjectsMode) {
     // Projects mode: use provided messages array
     context = [...customMessages];
-    // Add the new user message
-    context.push({ role: "user", content: prompt });
+    // Add the new user message unless retry would duplicate it
+    const last = context[context.length - 1];
+    const shouldAppend = !retry || !(last && last.role === "user" && last.content === prompt);
+    if (shouldAppend) {
+      context.push({ role: "user", content: prompt });
+    }
   } else {
     // Sidebar mode: use per-tab context
     context = conversationContexts.get(tabId) || [];
-    context.push({ role: "user", content: prompt });
+    const last = context[context.length - 1];
+    const shouldAppend = !retry || !(last && last.role === "user" && last.content === prompt);
+    if (shouldAppend) {
+      context.push({ role: "user", content: prompt });
+    }
 
     // Trim context if needed
     if (context.length > DEFAULTS.MAX_CONTEXT_MESSAGES) {
@@ -1371,7 +1384,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   try {
     res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: buildAuthHeaders(cfg.apiKey, providerConfig),
+      headers: buildAuthHeaders(apiKey, providerConfig),
       body: JSON.stringify(requestBody),
       signal: controller.signal
     });

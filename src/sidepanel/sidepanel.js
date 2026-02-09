@@ -76,6 +76,7 @@ let recentModelsByProvider = {
 };
 let selectedCombinedModelId = null;
 let sidebarSetupRequired = false;
+let lastStreamContext = null;
 
 function normalizeProviderSafe(providerId) {
   if (typeof normalizeProviderId === "function") {
@@ -395,6 +396,18 @@ async function restorePersistedAnswers() {
 
 function closeExportMenus() {
   document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
+}
+
+function buildStreamErrorHtml(message) {
+  const safeMessage = escapeHtml(message || 'Unknown error');
+  return `
+    <div class="error-content">
+      <div class="error-text">${safeMessage}</div>
+      <div class="error-actions">
+        <button class="retry-btn" type="button">Retry</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderSourcesSummary(answerItem, sources) {
@@ -767,9 +780,6 @@ async function askQuestion() {
   askBtn.disabled = true;
   stopBtn.style.display = 'block';
 
-  // Track start time
-  const startTime = Date.now();
-
   // Step 1: Show preparation
   metaEl.textContent = "🔄 Preparing request...";
 
@@ -889,218 +899,295 @@ async function askQuestion() {
       `;
     }
 
-    let reasoningText = reasoningContent?.querySelector(".reasoning-text");
-    let reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-    let fullAnswer = '';
-    let hasCompleted = false;
-    let hasError = false;
-    let currentModel = '';
-    let finalTokens = null;
-    let finalContextSize = contextSize;
-    let hasReceivedReasoning = false;
-    const reasoningStreamState = { inReasoning: false, carry: "" };
-
-    // Connect via Port for streaming
-    const port = chrome.runtime.connect({ name: 'streaming' });
-    activePort = port;
-
-    port.postMessage({
-      type: 'start_stream',
+    const streamContext = {
       prompt,
+      tabId,
+      contextSize,
       webSearch: webSearchEnabled,
       reasoning: reasoningEnabled,
-      tabId
-    });
+      selectedCombinedModelId,
+      currentProvider
+    };
+    lastStreamContext = streamContext;
 
-    // Handle port disconnection (e.g., when stopped)
-    port.onDisconnect.addListener(() => {
-      activePort = null;
-      stopBtn.style.display = 'none';
-      askBtn.disabled = false;
-
-      if (!hasCompleted && !hasError) {
-        const fallbackMessage = typeof getStreamingFallbackMessage === 'function'
-          ? getStreamingFallbackMessage(fullAnswer, hasReceivedReasoning)
-          : null;
-        if (fallbackMessage) {
-          answerContent.innerHTML = `<div class="error-content">${escapeHtml(fallbackMessage)}</div>`;
-          const metaSpan = answerMeta.querySelector('span');
-          if (metaSpan) {
-            metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
-          }
-          metaEl.textContent = "⚠️ Stream ended without an answer.";
-          hideTypingIndicator();
-          updateAnswerVisibility();
-          answerSection.scrollTop = answerSection.scrollHeight;
-        }
+    const resetAnswerForRetry = () => {
+      answerContent.innerHTML = '';
+      const metaSpan = answerMeta.querySelector('span');
+      if (metaSpan) {
+        metaSpan.textContent = `${new Date().toLocaleTimeString()} - Streaming...`;
       }
-    });
-
-    port.onMessage.addListener((msg) => {
-      console.log('[Port] Received message type:', msg.type, 'fullAnswer length:', fullAnswer.length);
-      if (msg.type === 'reasoning' && msg.reasoning) {
+      const timeSpan = answerItem.querySelector(".answer-time");
+      const tokensSpan = answerItem.querySelector(".answer-tokens");
+      const tokenBar = answerItem.querySelector(".token-usage-fill");
+      if (timeSpan) timeSpan.textContent = '--s';
+      if (tokensSpan) tokensSpan.textContent = '-- tokens';
+      if (tokenBar) {
+        tokenBar.style.width = '0%';
+        tokenBar.style.background = '';
+      }
+      const progressBar = answerItem.querySelector(".token-usage-bar");
+      if (progressBar) {
+        progressBar.setAttribute('aria-valuenow', '0');
+      }
+      const sourcesSummary = answerItem.querySelector(".answer-sources-summary");
+      if (sourcesSummary) {
+        sourcesSummary.innerHTML = '';
+      }
+      if (typeof removeReasoningBubbles === "function") {
+        removeReasoningBubbles(answerItem);
+      }
+      if (streamContext.reasoning) {
         ensureReasoningSection();
-        reasoningText = reasoningContent?.querySelector(".reasoning-text");
-        reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-        if (reasoningText) {
-          // Stream reasoning in real-time
-          hasReceivedReasoning = true;
-          // Change "Thinking..." to "Reasoning:" once we receive content
-          if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
-            reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
-          }
-          reasoningText.textContent += msg.reasoning;
-          answerSection.scrollTop = answerSection.scrollHeight;
+        if (reasoningContent) {
+          reasoningContent.innerHTML = `
+            <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
+              <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>💭</span>
+                <span>Thinking...</span>
+              </div>
+              <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
+            </div>
+          `;
         }
-      } else if (msg.type === 'content' && msg.content) {
-        try {
-          // Stream content in real-time
-          let contentChunk = msg.content;
-          let reasoningChunk = "";
-          if (typeof extractReasoningFromStreamChunk === "function") {
-            const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
-            contentChunk = parsed.content;
-            reasoningChunk = parsed.reasoning;
-          }
+      } else if (reasoningContent) {
+        reasoningContent.remove();
+        reasoningContent = null;
+      }
+    };
 
-          if (reasoningChunk) {
-            ensureReasoningSection();
-            reasoningText = reasoningContent?.querySelector(".reasoning-text");
-            reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-            if (reasoningText) {
-              hasReceivedReasoning = true;
-              if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
-                reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
-              }
-              reasoningText.textContent += reasoningChunk;
-              answerSection.scrollTop = answerSection.scrollHeight;
+    const renderStreamError = (message, statusText) => {
+      answerContent.innerHTML = buildStreamErrorHtml(message);
+      const retryBtn = answerContent.querySelector('.retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+          if (activePort) return;
+          retryBtn.disabled = true;
+          resetAnswerForRetry();
+          startStream({ retry: true });
+        });
+      }
+      const metaSpan = answerMeta.querySelector('span');
+      if (metaSpan) {
+        metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+      }
+      metaEl.textContent = statusText || `❌ Error from ${getProviderLabelSafe(currentProvider)}.`;
+      hideTypingIndicator();
+      updateAnswerVisibility();
+      answerSection.scrollTop = answerSection.scrollHeight;
+    };
+
+    const startStream = ({ retry = false } = {}) => {
+      let reasoningText = reasoningContent?.querySelector(".reasoning-text");
+      let reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+      let fullAnswer = '';
+      let hasCompleted = false;
+      let hasError = false;
+      let currentModel = '';
+      let finalTokens = null;
+      let finalContextSize = streamContext.contextSize;
+      let hasReceivedReasoning = false;
+      const reasoningStreamState = { inReasoning: false, carry: "" };
+      const streamStartTime = Date.now();
+
+      if (retry) {
+        const contextInfo = streamContext.contextSize > 0 ? ` (with ${Math.floor(streamContext.contextSize / 2)} previous Q&A)` : '';
+        metaEl.textContent = `🔁 Retrying${contextInfo}...`;
+      }
+
+      // Connect via Port for streaming
+      const port = chrome.runtime.connect({ name: 'streaming' });
+      activePort = port;
+      askBtn.disabled = true;
+      stopBtn.style.display = 'block';
+
+      port.postMessage({
+        type: 'start_stream',
+        prompt: streamContext.prompt,
+        webSearch: streamContext.webSearch,
+        reasoning: streamContext.reasoning,
+        tabId: streamContext.tabId,
+        retry: retry === true
+      });
+
+      // Handle port disconnection (e.g., when stopped)
+      port.onDisconnect.addListener(() => {
+        activePort = null;
+        stopBtn.style.display = 'none';
+        askBtn.disabled = false;
+
+        if (!hasCompleted && !hasError) {
+          const fallbackMessage = typeof getStreamingFallbackMessage === 'function'
+            ? getStreamingFallbackMessage(fullAnswer, hasReceivedReasoning)
+            : null;
+          if (fallbackMessage) {
+            renderStreamError(fallbackMessage, "⚠️ Stream ended without an answer.");
+          }
+        }
+      });
+
+      port.onMessage.addListener((msg) => {
+        console.log('[Port] Received message type:', msg.type, 'fullAnswer length:', fullAnswer.length);
+        if (msg.type === 'reasoning' && msg.reasoning) {
+          ensureReasoningSection();
+          reasoningText = reasoningContent?.querySelector(".reasoning-text");
+          reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+          if (reasoningText) {
+            // Stream reasoning in real-time
+            hasReceivedReasoning = true;
+            // Change "Thinking..." to "Reasoning:" once we receive content
+            if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
+              reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
             }
+            reasoningText.textContent += msg.reasoning;
+            answerSection.scrollTop = answerSection.scrollHeight;
           }
+        } else if (msg.type === 'content' && msg.content) {
+          try {
+            // Stream content in real-time
+            let contentChunk = msg.content;
+            let reasoningChunk = "";
+            if (typeof extractReasoningFromStreamChunk === "function") {
+              const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
+              contentChunk = parsed.content;
+              reasoningChunk = parsed.reasoning;
+            }
 
-          if (!contentChunk) {
-            return;
+            if (reasoningChunk) {
+              ensureReasoningSection();
+              reasoningText = reasoningContent?.querySelector(".reasoning-text");
+              reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
+              if (reasoningText) {
+                hasReceivedReasoning = true;
+                if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
+                  reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
+                }
+                reasoningText.textContent += reasoningChunk;
+                answerSection.scrollTop = answerSection.scrollHeight;
+              }
+            }
+
+            if (!contentChunk) {
+              return;
+            }
+
+            fullAnswer += contentChunk;
+
+            // Extract sources and render
+            const { sources, cleanText } = extractSources(fullAnswer);
+            // Note: applyMarkdownStyles handles escaping internally via markdownToHtml
+            const renderedHTML = applyMarkdownStyles(cleanText);
+
+            answerContent.innerHTML = renderedHTML;
+
+            // Note: Sources are rendered in the completion handler, not during streaming
+            // to avoid them being overwritten by subsequent innerHTML updates
+
+            answerSection.scrollTop = answerSection.scrollHeight;
+          } catch (e) {
+            console.error('[UI] Error rendering content:', e);
+            answerContent.innerHTML = `<div style="color: red;">Error rendering: ${e.message}</div>`;
           }
-
-          fullAnswer += contentChunk;
-
-          // Extract sources and render
-          const { sources, cleanText } = extractSources(fullAnswer);
-          // Note: applyMarkdownStyles handles escaping internally via markdownToHtml
-          const renderedHTML = applyMarkdownStyles(cleanText);
-
-          answerContent.innerHTML = renderedHTML;
-
-          // Note: Sources are rendered in the completion handler, not during streaming
-          // to avoid them being overwritten by subsequent innerHTML updates
-
-          answerSection.scrollTop = answerSection.scrollHeight;
-        } catch (e) {
-          console.error('[UI] Error rendering content:', e);
-          answerContent.innerHTML = `<div style="color: red;">Error rendering: ${e.message}</div>`;
-        }
         } else if (msg.type === 'complete') {
           // Stream complete
           console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
           hasCompleted = true;
-        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        const selectedModel = selectedCombinedModelId ? modelMap.get(selectedCombinedModelId) : null;
-        currentModel = selectedModel ? getModelDisplayName(selectedModel) : (msg.model || 'default model');
-        finalTokens = msg.tokens;
-        finalContextSize = msg.contextSize;
+          const elapsedTime = ((Date.now() - streamStartTime) / 1000).toFixed(2);
+          const selectedModel = streamContext.selectedCombinedModelId ? modelMap.get(streamContext.selectedCombinedModelId) : null;
+          currentModel = selectedModel ? getModelDisplayName(selectedModel) : (msg.model || 'default model');
+          finalTokens = msg.tokens;
+          finalContextSize = msg.contextSize;
 
-        // Update meta and footer
-        const metaSpan = answerMeta.querySelector('span');
-        if (metaSpan) {
-          metaSpan.textContent = `${new Date().toLocaleTimeString()} - ${currentModel}`;
-        }
-        const timeSpan = answerItem.querySelector(".answer-time");
-        const tokensSpan = answerItem.querySelector(".answer-tokens");
-        const tokenBar = answerItem.querySelector(".token-usage-fill");
-        if (timeSpan) timeSpan.textContent = `${elapsedTime}s`;
-        if (tokensSpan) tokensSpan.textContent = `${finalTokens || '—'} tokens`;
-
-        // Update token usage bar using constants
-        if (tokenBar && finalTokens) {
-          const percentage = Math.min((finalTokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100);
-          tokenBar.style.width = `${percentage}%`;
-
-          // Update progress bar aria attributes
-          const progressBar = answerItem.querySelector(".token-usage-bar");
-          if (progressBar) {
-            progressBar.setAttribute('aria-valuenow', Math.round(percentage));
+          // Update meta and footer
+          const metaSpan = answerMeta.querySelector('span');
+          if (metaSpan) {
+            metaSpan.textContent = `${new Date().toLocaleTimeString()} - ${currentModel}`;
           }
+          const timeSpan = answerItem.querySelector(".answer-time");
+          const tokensSpan = answerItem.querySelector(".answer-tokens");
+          const tokenBar = answerItem.querySelector(".token-usage-fill");
+          if (timeSpan) timeSpan.textContent = `${elapsedTime}s`;
+          if (tokensSpan) tokensSpan.textContent = `${finalTokens || '—'} tokens`;
 
-          // Color based on usage: green < 50%, yellow < 80%, red >= 80%
-          if (percentage < 50) {
-            tokenBar.style.background = 'linear-gradient(90deg, var(--color-success), #16a34a)';
-          } else if (percentage < 80) {
-            tokenBar.style.background = 'linear-gradient(90deg, var(--color-warning), #ca8a04)';
-          } else {
-            tokenBar.style.background = 'linear-gradient(90deg, var(--color-error), #dc2626)';
-          }
-        }
+          // Update token usage bar using constants
+          if (tokenBar && finalTokens) {
+            const percentage = Math.min((finalTokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100);
+            tokenBar.style.width = `${percentage}%`;
 
-        // Update context badge
-        if (finalContextSize > 2) {
-          const badge = answerItem.querySelector(".answer-context-badge");
-          if (badge) {
-            badge.textContent = `🧠 ${Math.floor(finalContextSize / 2)} Q&A`;
-            badge.title = `${finalContextSize} messages in conversation context`;
-          }
-        }
+            // Update progress bar aria attributes
+            const progressBar = answerItem.querySelector(".token-usage-bar");
+            if (progressBar) {
+              progressBar.setAttribute('aria-valuenow', Math.round(percentage));
+            }
 
-        if (typeof removeReasoningBubbles === "function") {
-          removeReasoningBubbles(answerItem);
-        }
-
-        // Ensure answer content is visible (final render)
-        if (fullAnswer) {
-          const { sources, cleanText } = extractSources(fullAnswer);
-          // Note: applyMarkdownStyles handles escaping internally
-          answerContent.innerHTML = applyMarkdownStyles(cleanText);
-
-          // Add sources indicator if any
-          if (sources.length > 0) {
-            // Make [number] references clickable
-            makeSourceReferencesClickable(answerContent, sources);
-
-            // Add compact sources indicator button
-            const sourcesIndicator = createSourcesIndicator(sources, answerEl);
-            if (sourcesIndicator) {
-              answerContent.appendChild(sourcesIndicator);
+            // Color based on usage: green < 50%, yellow < 80%, red >= 80%
+            if (percentage < 50) {
+              tokenBar.style.background = 'linear-gradient(90deg, var(--color-success), #16a34a)';
+            } else if (percentage < 80) {
+              tokenBar.style.background = 'linear-gradient(90deg, var(--color-warning), #ca8a04)';
+            } else {
+              tokenBar.style.background = 'linear-gradient(90deg, var(--color-error), #dc2626)';
             }
           }
 
-          renderSourcesSummary(answerItem, sources);
-        }
-
-        // Update context viz
-        if (contextViz && finalContextSize) {
-          try {
-            contextViz.update(finalContextSize, 'assistant');
-          } catch (e) {
-            console.error('[UI] Error updating context viz:', e);
+          // Update context badge
+          if (finalContextSize > 2) {
+            const badge = answerItem.querySelector(".answer-context-badge");
+            if (badge) {
+              badge.textContent = `🧠 ${Math.floor(finalContextSize / 2)} Q&A`;
+              badge.title = `${finalContextSize} messages in conversation context`;
+            }
           }
-        }
 
-        metaEl.textContent = `✅ Answer received using ${currentModel}.`;
-        port.disconnect();
-        activePort = null;
-        stopBtn.style.display = 'none';
+          if (typeof removeReasoningBubbles === "function") {
+            removeReasoningBubbles(answerItem);
+          }
+
+          // Ensure answer content is visible (final render)
+          if (fullAnswer) {
+            const { sources, cleanText } = extractSources(fullAnswer);
+            // Note: applyMarkdownStyles handles escaping internally
+            answerContent.innerHTML = applyMarkdownStyles(cleanText);
+
+            // Add sources indicator if any
+            if (sources.length > 0) {
+              // Make [number] references clickable
+              makeSourceReferencesClickable(answerContent, sources);
+
+              // Add compact sources indicator button
+              const sourcesIndicator = createSourcesIndicator(sources, answerEl);
+              if (sourcesIndicator) {
+                answerContent.appendChild(sourcesIndicator);
+              }
+            }
+
+            renderSourcesSummary(answerItem, sources);
+          }
+
+          // Update context viz
+          if (contextViz && finalContextSize) {
+            try {
+              contextViz.update(finalContextSize, 'assistant');
+            } catch (e) {
+              console.error('[UI] Error updating context viz:', e);
+            }
+          }
+
+          metaEl.textContent = `✅ Answer received using ${currentModel}.`;
+          port.disconnect();
+          activePort = null;
+          stopBtn.style.display = 'none';
         } else if (msg.type === 'error') {
           // Handle error
           hasError = true;
-          answerContent.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
-        const metaSpan = answerMeta.querySelector('span');
-        if (metaSpan) {
-          metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
+          renderStreamError(msg.error, `❌ Error from ${getProviderLabelSafe(currentProvider)}.`);
+          port.disconnect();
+          activePort = null;
+          stopBtn.style.display = 'none';
         }
-        metaEl.textContent = `❌ Error from ${getProviderLabelSafe(currentProvider)}.`;
-        port.disconnect();
-        activePort = null;
-        stopBtn.style.display = 'none';
-      }
-    });
+      });
+    };
+
+    startStream();
 
     // Clear the prompt for next question
     if (typeof clearPromptAfterSend === "function") {

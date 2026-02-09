@@ -137,7 +137,7 @@ body {
 }
 
 /* Projects List */
-\.projects-grid {
+.projects-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 14px;
@@ -150,7 +150,7 @@ body {
 }
 
 /* Project Card - Square Grid Card */
-\.project-card {
+.project-card {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: 16px;
@@ -163,12 +163,12 @@ body {
   aspect-ratio: 1 / 1;
 }
 
-\.project-card:hover {
+.project-card:hover {
   border-color: var(--color-border-hover);
   background: var(--color-bg-tertiary);
 }
 
-\.project-card-icon {
+.project-card-icon {
   font-size: 20px;
   width: 40px;
   height: 40px;
@@ -180,18 +180,18 @@ body {
   margin-bottom: auto;
 }
 
-\.project-card-content {
+.project-card-content {
   display: flex;
   flex-direction: column;
   min-width: 0;
   margin-top: auto;
 }
 
-\.project-card-info {
+.project-card-info {
   min-width: 0;
 }
 
-\.project-card-name {
+.project-card-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
@@ -201,7 +201,7 @@ body {
   white-space: nowrap;
 }
 
-\.project-card \.project-card-menu {
+.project-card .project-card-menu {
   position: absolute !important;
   top: 12px;
   right: 12px;
@@ -210,22 +210,22 @@ body {
   z-index: 10;
 }
 
-\.project-card:hover \.project-card-menu {
+.project-card:hover .project-card-menu {
   opacity: 1;
 }
 
-\.project-card-description {
+.project-card-description {
   display: none;
 }
 
-\.project-card-footer {
+.project-card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
 }
 
-\.project-card-date {
+.project-card-date {
   font-size: 11px;
   color: var(--color-text-muted);
   display: flex;
@@ -233,13 +233,13 @@ body {
   gap: 4px;
 }
 
-\.project-card-date svg {
+.project-card-date svg {
   width: 11px;
   height: 11px;
   fill: var(--color-text-muted);
 }
 
-\.project-card-model {
+.project-card-model {
   font-size: 10px;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -251,11 +251,11 @@ body {
   text-overflow: ellipsis;
 }
 
-\.project-card-meta {
+.project-card-meta {
   display: none;
 }
 
-\.project-card-threads {
+.project-card-threads {
   font-weight: 500;
 }
 
@@ -482,7 +482,7 @@ body {
 }
 
 /* Project View */
-\.project-header {
+.project-header {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -491,7 +491,7 @@ body {
   border-bottom: 1px solid var(--color-border);
 }
 
-\.project-header h2 {
+.project-header h2 {
   flex: 1;
   margin: 0;
   font-size: 18px;
@@ -499,7 +499,7 @@ body {
   text-align: center;
 }
 
-\.project-content {
+.project-content {
   display: flex;
   flex: 1;
   overflow: hidden;
@@ -842,6 +842,47 @@ body {
 
 .chat-content {
   line-height: 1.5;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 8px;
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: 13px;
+}
+
+.error-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.retry-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.retry-btn:hover {
+  background: var(--color-border-hover);
+  border-color: var(--color-border-hover);
+}
+
+.retry-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .chat-content .topic-heading {
@@ -1213,7 +1254,7 @@ body {
   padding: 0 24px 12px;
 }
 
-\.projects-context-btn {
+.projects-context-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1230,24 +1271,24 @@ body {
   transition: all 0.2s ease;
 }
 
-\.projects-context-btn:hover {
+.projects-context-btn:hover {
   border-color: var(--color-primary);
   background: var(--color-bg-tertiary);
 }
 
-\.projects-context-btn.inactive {
+.projects-context-btn.inactive {
   opacity: 0.4;
   cursor: default;
   border-color: var(--color-border);
   background: var(--color-bg-secondary);
 }
 
-\.projects-context-icon {
+.projects-context-icon {
   font-size: 16px;
   line-height: 1;
 }
 
-\.projects-context-badge {
+.projects-context-badge {
   position: absolute;
   top: -4px;
   right: -4px;
@@ -1260,7 +1301,7 @@ body {
   line-height: 1;
 }
 
-\.projects-context-overlay {
+.projects-context-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
@@ -1270,7 +1311,7 @@ body {
   z-index: 1200;
 }
 
-\.projects-context-modal {
+.projects-context-modal {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-primary);
   border-radius: 12px;
@@ -1281,7 +1322,7 @@ body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
-\.projects-context-header {
+.projects-context-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
   display: flex;
@@ -1289,7 +1330,7 @@ body {
   justify-content: space-between;
 }
 
-\.projects-context-header h3 {
+.projects-context-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
@@ -1299,7 +1340,7 @@ body {
   gap: 8px;
 }
 
-\.projects-context-close {
+.projects-context-close {
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -1307,7 +1348,7 @@ body {
   cursor: pointer;
 }
 
-\.projects-context-body {
+.projects-context-body {
   padding: 16px 20px;
   overflow-y: auto;
   display: flex;
@@ -1315,14 +1356,14 @@ body {
   gap: 16px;
 }
 
-\.projects-context-section {
+.projects-context-section {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   background: var(--color-bg-elevated);
 }
 
-\.projects-context-section h4 {
+.projects-context-section h4 {
   margin: 0 0 8px 0;
   font-size: 12px;
   color: var(--color-text-muted);
@@ -1331,18 +1372,18 @@ body {
   letter-spacing: 0.04em;
 }
 
-\.projects-context-item {
+.projects-context-item {
   display: flex;
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--color-border);
 }
 
-\.projects-context-item:last-child {
+.projects-context-item:last-child {
   border-bottom: none;
 }
 
-\.projects-context-role {
+.projects-context-role {
   font-size: 11px;
   font-weight: 600;
   color: var(--color-link);
@@ -1350,17 +1391,17 @@ body {
   min-width: 60px;
 }
 
-\.projects-context-role.assistant {
+.projects-context-role.assistant {
   color: var(--color-topic-2);
 }
 
-\.projects-context-text {
+.projects-context-text {
   font-size: 12px;
   color: var(--color-text);
   line-height: 1.5;
 }
 
-\.projects-context-archive-toggle {
+.projects-context-archive-toggle {
   width: 100%;
   background: transparent;
   border: none;
@@ -1374,36 +1415,36 @@ body {
   padding: 0;
 }
 
-\.projects-context-archive-content {
+.projects-context-archive-content {
   margin-top: 10px;
   display: none;
   flex-direction: column;
   gap: 8px;
 }
 
-\.projects-context-archive-content.open {
+.projects-context-archive-content.open {
   display: flex;
 }
 
-\.projects-context-footer {
+.projects-context-footer {
   padding: 12px 20px 16px;
   border-top: 1px solid var(--color-border);
 }
 
-\.projects-context-bar {
+.projects-context-bar {
   height: 6px;
   background: var(--color-bg-tertiary);
   border-radius: 999px;
   overflow: hidden;
 }
 
-\.projects-context-bar-fill {
+.projects-context-bar-fill {
   height: 100%;
   background: var(--color-success);
   transition: width 0.2s ease;
 }
 
-\.projects-context-warning {
+.projects-context-warning {
   margin-top: 8px;
   font-size: 11px;
   color: var(--color-warning);
@@ -1689,13 +1730,13 @@ body {
 
 /* Responsive grid for smaller screens */
 @media (max-width: 800px) {
-  \.projects-grid {
+  .projects-grid {
     grid-template-columns: repeat(4, 1fr);
   }
 }
 
 @media (max-width: 650px) {
-  \.projects-grid {
+  .projects-grid {
     grid-template-columns: repeat(3, 1fr);
     padding: 16px;
     gap: 12px;
@@ -1703,7 +1744,7 @@ body {
 }
 
 @media (max-width: 500px) {
-  \.projects-grid {
+  .projects-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -1763,5 +1804,6 @@ body {
     transform: scale(1);
   }
 }
+
 
 

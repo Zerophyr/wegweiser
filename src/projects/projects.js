@@ -12,6 +12,8 @@ const STORAGE_KEYS = {
 
 // Provider state
 let currentProvider = 'openrouter';
+let lastStreamContext = null;
+let retryInProgress = false;
 const MAX_CONTEXT_MESSAGES = 16;
 const IMAGE_CACHE_LIMIT_DEFAULT = 512;
 const IMAGE_CACHE_LIMIT_MIN = 128;
@@ -2346,6 +2348,137 @@ function updateAssistantFooter(ui, meta) {
   }
 }
 
+function getTypingIndicatorHtml() {
+  return `
+    <div class="typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+}
+
+function getStreamErrorHtml(message) {
+  const safeMessage = escapeHtml(message || 'Unknown error');
+  return `
+    <div class="error-content">
+      <div class="error-text">${safeMessage}</div>
+      <div class="error-actions">
+        <button class="retry-btn" type="button">Retry</button>
+      </div>
+    </div>
+  `;
+}
+
+function resetStreamingUi(ui) {
+  if (!ui) return ui;
+  if (ui.content) {
+    ui.content.innerHTML = getTypingIndicatorHtml();
+  }
+  if (ui.metaText) {
+    ui.metaText.textContent = 'Streaming...';
+  }
+  if (ui.timeEl) {
+    ui.timeEl.textContent = '--s';
+  }
+  if (ui.tokensEl) {
+    ui.tokensEl.textContent = '-- tokens';
+  }
+  if (ui.contextBadgeEl) {
+    ui.contextBadgeEl.style.display = 'none';
+    ui.contextBadgeEl.textContent = '';
+  }
+  if (ui.sourcesSummaryEl) {
+    ui.sourcesSummaryEl.textContent = '';
+  }
+  if (ui.wrapper) {
+    const reasoningBubble = ui.wrapper.querySelector('.chat-reasoning-bubble');
+    if (reasoningBubble) {
+      reasoningBubble.remove();
+    }
+  }
+  const tokenStyle = typeof getTokenBarStyle === 'function'
+    ? getTokenBarStyle(null)
+    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
+  if (ui.tokenFillEl) {
+    ui.tokenFillEl.style.width = `${tokenStyle.percent}%`;
+    ui.tokenFillEl.style.background = tokenStyle.gradient;
+  }
+  if (ui.tokenBarEl) {
+    ui.tokenBarEl.setAttribute('aria-valuenow', '0');
+  }
+  return ui;
+}
+
+function renderStreamError(ui, message, retryContext) {
+  if (!ui || !ui.content) return;
+  ui.content.innerHTML = getStreamErrorHtml(message);
+  const retryBtn = ui.content.querySelector('.retry-btn');
+  if (!retryBtn) return;
+  retryBtn.addEventListener('click', async () => {
+    if (retryInProgress || isStreaming) return;
+    retryBtn.disabled = true;
+    await retryStreamFromContext(retryContext, ui);
+  });
+}
+
+async function retryStreamFromContext(retryContext, ui) {
+  if (!retryContext || isStreaming) {
+    if (typeof showToast === 'function') {
+      showToast('Nothing to retry yet', 'error');
+    }
+    return;
+  }
+  retryInProgress = true;
+  try {
+    const thread = await getThread(retryContext.threadId);
+    const Project = await getProject(retryContext.projectId);
+    if (!thread || !Project) {
+      if (typeof showToast === 'function') {
+        showToast('Retry failed: Project or thread not found', 'error');
+      }
+      return;
+    }
+    const effectiveProject = {
+      ...Project,
+      model: retryContext.model,
+      modelProvider: retryContext.modelProvider,
+      modelDisplayName: retryContext.modelDisplayName,
+      customInstructions: retryContext.customInstructions
+    };
+
+    resetStreamingUi(ui);
+    elements.sendBtn.style.display = 'none';
+    elements.stopBtn.style.display = 'block';
+    isStreaming = true;
+    const startTime = Date.now();
+    await streamMessage(
+      retryContext.prompt,
+      effectiveProject,
+      thread,
+      ui,
+      startTime,
+      {
+        webSearch: retryContext.webSearch,
+        reasoning: retryContext.reasoning,
+        retryContext,
+        retry: true
+      }
+    );
+  } catch (err) {
+    console.error('Stream retry failed:', err);
+    if (typeof showToast === 'function') {
+      showToast(err?.message || 'Retry failed', 'error');
+    }
+  } finally {
+    elements.sendBtn.style.display = 'block';
+    elements.stopBtn.style.display = 'none';
+    isStreaming = false;
+    retryInProgress = false;
+    await renderThreadList();
+  }
+}
+
 async function sendImageMessage(content, Project) {
   if (!currentThreadId || !currentProjectId) return;
 
@@ -2529,6 +2662,22 @@ async function sendMessage() {
 
     renderChatMessages(thread.messages, thread);
 
+  const webSearch = elements.chatWebSearch?.checked;
+  const reasoning = elements.chatReasoning?.checked;
+  const streamContext = {
+    prompt: content,
+    projectId: currentProjectId,
+    threadId: currentThreadId,
+    model: Project.model || null,
+    modelProvider: Project.modelProvider || currentProvider,
+    modelDisplayName: Project.modelDisplayName || null,
+    customInstructions: Project.customInstructions || '',
+    summary: thread.summary || '',
+    webSearch: Boolean(webSearch),
+    reasoning: Boolean(reasoning)
+  };
+  lastStreamContext = streamContext;
+
   const startTime = Date.now();
   const streamingUi = createStreamingAssistantMessage();
   elements.chatMessages.appendChild(streamingUi.messageDiv);
@@ -2541,7 +2690,11 @@ async function sendMessage() {
 
   // Start streaming
   try {
-    await streamMessage(content, Project, thread, streamingUi, startTime);
+    await streamMessage(content, Project, thread, streamingUi, startTime, {
+      webSearch: streamContext.webSearch,
+      reasoning: streamContext.reasoning,
+      retryContext: streamContext
+    });
   } catch (err) {
     console.error('Stream error:', err);
     showToast(err.message || 'Failed to send message', 'error');
@@ -2555,7 +2708,7 @@ async function sendMessage() {
   }
 }
 
-async function streamMessage(content, Project, thread, streamingUi, startTime) {
+async function streamMessage(content, Project, thread, streamingUi, startTime, options = {}) {
   return new Promise((resolve, reject) => {
     // Create port for streaming
     streamPort = chrome.runtime.connect({ name: 'streaming' });
@@ -2679,9 +2832,7 @@ async function streamMessage(content, Project, thread, streamingUi, startTime) {
         streamPort = null;
         resolve();
       } else if (msg.type === 'error') {
-        if (assistantBubble) {
-          assistantBubble.innerHTML = `<div class="error-content">${escapeHtml(msg.error)}</div>`;
-        }
+        renderStreamError(streamingUi, msg.error, options.retryContext || lastStreamContext);
         if (streamingUi?.metaText) {
           streamingUi.metaText.textContent = `Error - ${new Date().toLocaleTimeString()}`;
         }
@@ -2705,8 +2856,12 @@ async function streamMessage(content, Project, thread, streamingUi, startTime) {
     const messages = buildStreamMessages(thread.messages, content, Project.customInstructions, thread.summary);
 
     // Use chat toggles (temporary override) instead of Project settings
-    const webSearch = elements.chatWebSearch.checked;
-    const reasoning = elements.chatReasoning.checked;
+    const webSearch = typeof options.webSearch === 'boolean'
+      ? options.webSearch
+      : elements.chatWebSearch.checked;
+    const reasoning = typeof options.reasoning === 'boolean'
+      ? options.reasoning
+      : elements.chatReasoning.checked;
 
     // Send stream request
     streamPort.postMessage({
@@ -2717,7 +2872,8 @@ async function streamMessage(content, Project, thread, streamingUi, startTime) {
       provider: Project.modelProvider || currentProvider,
       webSearch: webSearch,
       reasoning: reasoning,
-      tabId: `Project_${Project.id}`
+      tabId: `Project_${Project.id}`,
+      retry: options.retry === true
     });
   });
 }
