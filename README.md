@@ -7,16 +7,16 @@
 ### Core Functionality
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
 - 🔄 **Model Selection** - Combined model list across OpenRouter + NagaAI (only providers with keys)
-- 🏠 **Spaces** - Full-page workspace to organize projects, threads, and custom instructions
+- 🏠 **Projects** - Full-page workspace to organize projects, threads, and custom instructions
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
 - 💾 **Per-Tab Answer Persistence** - Sidebar answers stay until cleared, scoped to the current tab
 - 💰 **Token Insights** - Token estimate + usage bar before and after sending
-- 🧾 **Adaptive Summaries** - Automatic summaries keep long Spaces threads usable
+- 🧾 **Adaptive Summaries** - Automatic summaries keep long Projects threads usable
 - 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
 - 🔐 **Encrypted Local Storage** - Sensitive data encrypted at rest with a device-local key
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
-- 🖼️ **Image Generation** - Generate images and view/download in the sidebar or Spaces
+- 🖼️ **Image Generation** - Generate images and view/download in the sidebar or Projects
 
 ## 🚀 Installation
 
@@ -79,7 +79,7 @@ _(Coming soon)_
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
 5. **Image storage**: Clear generated images and set the storage limit (IndexedDB)
-6. **Spaces behavior**: Toggle auto-collapse when opening Spaces
+6. **Projects behavior**: Toggle auto-collapse when opening Projects
 
 ## 📁 Project Structure
 
@@ -88,7 +88,7 @@ Wegweiser-extension/
 ├── src/
 │   ├── background/         # Service worker
 │   ├── sidepanel/          # Sidebar UI
-│   ├── spaces/             # Spaces UI
+│   ├── projects/           # Projects UI
 │   ├── image-viewer/        # Image viewer tab for generated images
 │   ├── options/            # Options page
 │   ├── modules/            # UI modules (markdown, toast, models, themes)
@@ -125,7 +125,7 @@ Wegweiser-extension/
 - 🧠 **Context Badge Refresh** - Context icon now updates on sidebar reopen
 
 ### v1.1.1
-- 🧾 **Adaptive Summaries** - Summarize older Space turns to reduce token usage
+- 🧾 **Adaptive Summaries** - Summarize older Project turns to reduce token usage
 - ✅ **Short Summary Acceptance** - Minimum summary length adapts to history size
 - 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
 - 🏷️ **Summary Badge** - Visual indicator after summary refresh
@@ -136,26 +136,26 @@ Wegweiser-extension/
 - 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX via three-dot menu
 - 💬 **Contextual Instructions** - Custom instructions adapt framing to prevent model re-introductions mid-thread
 - 🎚️ **Image Cache Limit** - Slider in Options to cap IndexedDB image storage
-- 🧭 **Spaces Shortcut** - Settings gear in Spaces + optional sidepanel auto-close
+- 🧭 **Projects Shortcut** - Settings gear in Projects + optional sidepanel auto-close
 
 ### v1.1.0
-- 🎨 **Grid Layout** - Spaces now display in a 5-column grid with square cards
-- 😀 **Emoji Icons** - Custom emoji picker for space icons
-- 🌐 **Web Search Toggle** - Enable/disable web search per space
-- 🧠 **Reasoning Toggle** - Enable/disable reasoning mode per space
+- 🎨 **Grid Layout** - Projects now display in a 5-column grid with square cards
+- 😀 **Emoji Icons** - Custom emoji picker for Project icons
+- 🌐 **Web Search Toggle** - Enable/disable web search per Project
+- 🧠 **Reasoning Toggle** - Enable/disable reasoning mode per Project
 - 🔄 **Chat Toggles** - Temporarily override web search/reasoning above chat input
-- 🔗 **Source Citations** - Clickable citation numbers [1], [2] in spaces
+- 🔗 **Source Citations** - Clickable citation numbers [1], [2] in Projects
 - 🧹 **Clean URLs** - Plain URLs removed from answers, only citations remain
-- 📋 **Copy Button** - Copy AI responses in space threads
+- 📋 **Copy Button** - Copy AI responses in Project threads
 - 🎯 **Improved Sources** - Better URL extraction and cleanup in all responses
 
 ### v1.0.0
-- 🏠 **Spaces Feature** - Full-page experience for organizing conversations by project
-- 📁 **Thread Management** - Create, rename, and delete threads within spaces
-- ⚙️ **Custom Instructions** - Per-space system prompts for AI behavior
-- 🤖 **Per-Space Models** - Choose different models for different projects
+- 🏠 **Projects Feature** - Full-page experience for organizing conversations by project
+- 📁 **Thread Management** - Create, rename, and delete threads within Projects
+- ⚙️ **Custom Instructions** - Per-Project system prompts for AI behavior
+- 🤖 **Per-Project Models** - Choose different models for different projects
 - 💾 **Persistent Storage** - Unlimited conversation history with local storage
 - 📊 **Storage Monitoring** - Visual usage tracking with warnings at 70%/85%/95%
-- 🏠 **Home Button** - Quick access to Spaces from sidebar header
+- 🏠 **Home Button** - Quick access to Projects from sidebar header
 - 🔄 **Extended Streaming** - Background script supports custom message arrays
 

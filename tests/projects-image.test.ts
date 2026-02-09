@@ -1,7 +1,7 @@
 export {};
 const win = window as any;
 
-describe("spaces image lightbox", () => {
+describe("projects image lightbox", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="chat-messages"></div>';
     win.__TEST__ = true;

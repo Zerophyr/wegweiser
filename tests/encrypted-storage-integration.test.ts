@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('encrypted storage integration', () => {
-  test('background/options/spaces/sidepanel use encrypted storage wrapper', () => {
+test('background/options/projects/sidepanel use encrypted storage wrapper', () => {
     const files = [
       path.join(__dirname, '..', 'src', 'background', 'background.js'),
       path.join(__dirname, '..', 'src', 'options', 'options.js'),

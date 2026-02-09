@@ -1,9 +1,9 @@
 export {};
-let spacesLoaded = false;
+let projectsLoaded = false;
 
 const win = window as unknown as {
   __TEST__?: boolean;
-  buildSpacesContextData?: (thread: any) => {
+  buildProjectsContextData?: (thread: any) => {
     summary: string;
     liveMessages: any[];
     archivedMessages: any[];
@@ -11,19 +11,19 @@ const win = window as unknown as {
   buildContextBadgeLabel?: (contextSize: number) => string;
 };
 
-function loadSpaces() {
-  if (spacesLoaded) return;
+function loadProjects() {
+  if (projectsLoaded) return;
   win.__TEST__ = true;
   require("../src/projects/projects.js");
-  spacesLoaded = true;
+  projectsLoaded = true;
 }
 
-describe("spaces context modal helpers", () => {
+describe("projects context modal helpers", () => {
   beforeEach(() => {
-    loadSpaces();
+    loadProjects();
   });
 
-  test("buildSpacesContextData returns summary + live + archived messages", () => {
+  test("buildProjectsContextData returns summary + live + archived messages", () => {
     const thread = {
       summary: "Summary text",
       messages: [
@@ -34,7 +34,7 @@ describe("spaces context modal helpers", () => {
       archivedMessages: [{ role: "user", content: "Old" }]
     };
 
-    const result = win.buildSpacesContextData?.(thread);
+    const result = win.buildProjectsContextData?.(thread);
 
     expect(result?.summary).toBe("Summary text");
     expect(result?.liveMessages.length).toBe(3);

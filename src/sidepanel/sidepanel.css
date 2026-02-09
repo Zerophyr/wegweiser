@@ -86,7 +86,7 @@ body {
   fill: var(--color-text-muted);
 }
 
-#spaces-btn {
+#projects-btn {
   width: 32px;
   height: 32px;
   display: flex;
@@ -99,18 +99,18 @@ body {
   transition: all 0.2s ease;
 }
 
-#spaces-btn:hover {
+#projects-btn:hover {
   background: var(--color-bg-tertiary);
   border-color: var(--color-border-hover);
 }
 
-#spaces-btn svg {
+#projects-btn svg {
   width: 18px;
   height: 18px;
   fill: var(--color-text-muted);
 }
 
-#spaces-btn:hover svg {
+#projects-btn:hover svg {
   fill: var(--color-text);
 }
 

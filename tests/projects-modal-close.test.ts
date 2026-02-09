@@ -2,7 +2,7 @@ export {};
 const fs = require('fs');
 const path = require('path');
 
-describe('spaces modal close button styles', () => {
+describe('projects modal close button styles', () => {
   test('modal close has minimum hit area', () => {
     const cssPath = path.join(__dirname, '..', 'src', 'projects', 'projects.css');
     const css = fs.readFileSync(cssPath, 'utf8');

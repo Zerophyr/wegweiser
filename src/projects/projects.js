@@ -2,8 +2,8 @@
 
 // Storage keys (match constants.js)
 const STORAGE_KEYS = {
-  SPACES: 'or_spaces',
-  THREADS: 'or_threads',
+  PROJECTS: 'or_projects',
+  PROJECT_THREADS: 'or_project_threads',
   API_KEY: 'or_api_key',
   MODEL: 'or_model',
   MODEL_PROVIDER: 'or_model_provider',
@@ -29,6 +29,12 @@ const setLocalStorage = (values) => (
     : chrome.storage.local.set(values)
 );
 // encrypted-storage
+
+const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
+  ? window.migrateLegacySpaceKeys().catch((err) => {
+    console.warn("Projects migration failed:", err);
+  })
+  : Promise.resolve();
 
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
@@ -110,29 +116,29 @@ function buildCombinedRecentList(recentsByProvider) {
   return combined;
 }
 
-function getSpaceModelLabel(space) {
-  if (!space || !space.model) return 'Default';
-  if (space.modelDisplayName) return space.modelDisplayName;
+function getProjectModelLabel(Project) {
+  if (!Project || !Project.model) return 'Default';
+  if (Project.modelDisplayName) return Project.modelDisplayName;
   if (typeof buildModelDisplayName === 'function') {
-    return buildModelDisplayName(space.modelProvider || 'openrouter', space.model);
+    return buildModelDisplayName(Project.modelProvider || 'openrouter', Project.model);
   }
-  return space.model.split('/').pop() || space.model;
+  return Project.model.split('/').pop() || Project.model;
 }
 
-function updateChatModelIndicator(space) {
+function updateChatModelIndicator(Project) {
   if (!elements.chatModelIndicator) return;
-  if (!space) {
+  if (!Project) {
     elements.chatModelIndicator.textContent = '';
     return;
   }
   if (typeof formatThreadModelLabel === 'function') {
     elements.chatModelIndicator.textContent = formatThreadModelLabel({
-      model: space.model || '',
-      modelDisplayName: space.modelDisplayName || ''
+      model: Project.model || '',
+      modelDisplayName: Project.modelDisplayName || ''
     });
     return;
   }
-  elements.chatModelIndicator.textContent = `Model: ${getSpaceModelLabel(space)}`;
+  elements.chatModelIndicator.textContent = `Model: ${getProjectModelLabel(Project)}`;
 }
 
 async function loadProviderSetting() {
@@ -146,8 +152,8 @@ async function loadProviderSetting() {
 
 const MAX_STORAGE_BYTES = 10485760; // 10MB
 
-// Common emojis for space icons
-const SPACE_EMOJIS = [
+// Common emojis for Project icons
+const Project_EMOJIS = [
   '📁', '📂', '📋', '📝', '📚', '📖', '📓', '📒',
   '💼', '🗂️', '🗃️', '📊', '📈', '📉', '🧮', '💡',
   '🎯', '🚀', '⭐', '🌟', '💫', '✨', '🔥', '💪',
@@ -234,7 +240,7 @@ function appendArchivedMessages(currentArchive, newMessages) {
   return [...safeCurrent, ...safeNew];
 }
 
-function buildSpacesContextData(thread) {
+function buildProjectsContextData(thread) {
   const summary = typeof thread?.summary === 'string' ? thread.summary : '';
   const liveMessages = Array.isArray(thread?.messages) ? thread.messages : [];
   const archivedMessages = Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : [];
@@ -248,24 +254,24 @@ function buildContextBadgeLabel(contextSize) {
   return `${Math.floor(contextSize / 2)} Q&A`;
 }
 
-function getContextUsageCount(thread, space) {
-  const data = buildSpacesContextData(thread);
+function getContextUsageCount(thread, Project) {
+  const data = buildProjectsContextData(thread);
   let count = data.liveMessages.length;
   if (data.summary) {
     count += 1;
   }
-  if (space?.customInstructions && space.customInstructions.trim().length) {
+  if (Project?.customInstructions && Project.customInstructions.trim().length) {
     count += 1;
   }
   return count;
 }
 
-function updateSpacesContextButton(thread, space) {
-  if (!elements.spacesContextBtn) return;
-  const badgeEl = elements.spacesContextBadge;
+function updateProjectsContextButton(thread, Project) {
+  if (!elements.ProjectsContextBtn) return;
+  const badgeEl = elements.ProjectsContextBadge;
   if (!thread) {
-    elements.spacesContextBtn.classList.add('inactive');
-    elements.spacesContextBtn.setAttribute('aria-disabled', 'true');
+    elements.ProjectsContextBtn.classList.add('inactive');
+    elements.ProjectsContextBtn.setAttribute('aria-disabled', 'true');
     if (badgeEl) {
       badgeEl.style.display = 'none';
       badgeEl.textContent = '';
@@ -273,11 +279,11 @@ function updateSpacesContextButton(thread, space) {
     return;
   }
 
-  const data = buildSpacesContextData(thread);
+  const data = buildProjectsContextData(thread);
   const label = buildContextBadgeLabel(data.liveMessages.length);
   const isActive = Boolean(label);
-  elements.spacesContextBtn.classList.toggle('inactive', !isActive);
-  elements.spacesContextBtn.setAttribute('aria-disabled', isActive ? 'false' : 'true');
+  elements.ProjectsContextBtn.classList.toggle('inactive', !isActive);
+  elements.ProjectsContextBtn.setAttribute('aria-disabled', isActive ? 'false' : 'true');
 
   if (badgeEl) {
     if (isActive) {
@@ -289,9 +295,9 @@ function updateSpacesContextButton(thread, space) {
     }
   }
 
-  const usedCount = getContextUsageCount(thread, space);
+  const usedCount = getContextUsageCount(thread, Project);
   const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
-  elements.spacesContextBtn.title = isActive
+  elements.ProjectsContextBtn.title = isActive
     ? `${usedCount} messages in context · ${remaining} remaining`
     : 'No conversation context yet';
 }
@@ -302,82 +308,82 @@ function buildContextMessageHtml(messages) {
     const roleClass = msg.role === 'assistant' ? 'assistant' : '';
     const preview = truncateText(msg.content || '', 160);
     return `
-      <div class="spaces-context-item">
-        <div class="spaces-context-role ${roleClass}">${escapeHtml(role)}</div>
-        <div class="spaces-context-text">${escapeHtml(preview)}</div>
+      <div class="projects-context-item">
+        <div class="projects-context-role ${roleClass}">${escapeHtml(role)}</div>
+        <div class="projects-context-text">${escapeHtml(preview)}</div>
       </div>
     `;
   }).join('');
 }
 
-function openSpacesContextModal(thread, space) {
+function openProjectsContextModal(thread, Project) {
   if (!thread) return;
-  const data = buildSpacesContextData(thread);
-  const usedCount = getContextUsageCount(thread, space);
+  const data = buildProjectsContextData(thread);
+  const usedCount = getContextUsageCount(thread, Project);
   const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
   const fillPercentage = Math.min((usedCount / MAX_CONTEXT_MESSAGES) * 100, 100);
   const isNearLimit = fillPercentage > 75;
 
   const overlay = document.createElement('div');
-  overlay.className = 'spaces-context-overlay';
+  overlay.className = 'projects-context-overlay';
 
   const modal = document.createElement('div');
-  modal.className = 'spaces-context-modal';
+  modal.className = 'projects-context-modal';
 
   modal.innerHTML = `
-    <div class="spaces-context-header">
+    <div class="projects-context-header">
       <h3><span>🧠</span><span>Conversation Context</span></h3>
-      <button class="spaces-context-close" type="button" aria-label="Close">×</button>
+      <button class="projects-context-close" type="button" aria-label="Close">×</button>
     </div>
-    <div class="spaces-context-body">
+    <div class="projects-context-body">
       ${data.summary ? `
-        <div class="spaces-context-section">
+        <div class="projects-context-section">
           <h4>Summary</h4>
-          <div class="spaces-context-text">${escapeHtml(data.summary)}</div>
+          <div class="projects-context-text">${escapeHtml(data.summary)}</div>
         </div>
       ` : ''}
-      <div class="spaces-context-section">
+      <div class="projects-context-section">
         <h4>Live Messages (${data.liveMessages.length})</h4>
-        ${data.liveMessages.length ? buildContextMessageHtml(data.liveMessages) : '<div class="spaces-context-text">No live messages yet.</div>'}
+        ${data.liveMessages.length ? buildContextMessageHtml(data.liveMessages) : '<div class="projects-context-text">No live messages yet.</div>'}
       </div>
       ${data.archivedMessages.length ? `
-        <div class="spaces-context-section">
-          <button class="spaces-context-archive-toggle" type="button">
+        <div class="projects-context-section">
+          <button class="projects-context-archive-toggle" type="button">
             <span>Archived messages (${data.archivedMessages.length})</span>
             <span>+</span>
           </button>
-          <div class="spaces-context-archive-content">
+          <div class="projects-context-archive-content">
             ${buildContextMessageHtml(data.archivedMessages)}
           </div>
         </div>
       ` : ''}
-      ${space?.customInstructions && space.customInstructions.trim().length ? `
-        <div class="spaces-context-section">
+      ${Project?.customInstructions && Project.customInstructions.trim().length ? `
+        <div class="projects-context-section">
           <h4>Custom Instructions</h4>
-          <div class="spaces-context-text">${escapeHtml(truncateText(space.customInstructions, 220))}</div>
+          <div class="projects-context-text">${escapeHtml(truncateText(Project.customInstructions, 220))}</div>
         </div>
       ` : ''}
     </div>
-    <div class="spaces-context-footer">
-      <div class="spaces-context-text">${usedCount}/${MAX_CONTEXT_MESSAGES} messages in context · ${remaining} remaining</div>
-      <div class="spaces-context-bar">
-        <div class="spaces-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};"></div>
+    <div class="projects-context-footer">
+      <div class="projects-context-text">${usedCount}/${MAX_CONTEXT_MESSAGES} messages in context · ${remaining} remaining</div>
+      <div class="projects-context-bar">
+        <div class="projects-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};"></div>
       </div>
-      ${isNearLimit ? '<div class="spaces-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
+      ${isNearLimit ? '<div class="projects-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
     </div>
   `;
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
-  const closeBtn = modal.querySelector('.spaces-context-close');
+  const closeBtn = modal.querySelector('.projects-context-close');
   closeBtn?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
 
-  const archiveToggle = modal.querySelector('.spaces-context-archive-toggle');
-  const archiveContent = modal.querySelector('.spaces-context-archive-content');
+  const archiveToggle = modal.querySelector('.projects-context-archive-toggle');
+  const archiveContent = modal.querySelector('.projects-context-archive-content');
   if (archiveToggle && archiveContent) {
     archiveToggle.addEventListener('click', () => {
       const isOpen = archiveContent.classList.toggle('open');
@@ -392,26 +398,67 @@ function openSpacesContextModal(thread, space) {
 
 // ============ STORAGE FUNCTIONS ============
 
-async function loadSpaces() {
+async function loadProjects() {
   try {
-    const result = await getLocalStorage([STORAGE_KEYS.SPACES]);
-    return result[STORAGE_KEYS.SPACES] || [];
+    const result = await getLocalStorage([STORAGE_KEYS.PROJECTS]);
+    return result[STORAGE_KEYS.PROJECTS] || [];
   } catch (e) {
-    console.error('Error loading spaces:', e);
+    console.error('Error loading Projects:', e);
     return [];
   }
 }
 
-async function saveSpaces(spaces) {
-  await setLocalStorage({ [STORAGE_KEYS.SPACES]: spaces });
+async function saveProjects(Projects) {
+  await setLocalStorage({ [STORAGE_KEYS.PROJECTS]: Projects });
 }
 
-async function loadThreads(spaceId = null) {
+async function loadThreads(projectId = null) {
   try {
-    const result = await getLocalStorage([STORAGE_KEYS.THREADS]);
-    const threads = result[STORAGE_KEYS.THREADS] || [];
-    if (spaceId) {
-      return threads.filter(t => t.spaceId === spaceId);
+    const result = await getLocalStorage([STORAGE_KEYS.PROJECT_THREADS]);
+    const rawThreads = result[STORAGE_KEYS.PROJECT_THREADS];
+    let threads = [];
+    let normalized = false;
+
+    if (Array.isArray(rawThreads)) {
+      threads = rawThreads;
+    } else if (rawThreads && typeof rawThreads === 'object') {
+      Object.entries(rawThreads).forEach(([key, value]) => {
+        if (!Array.isArray(value)) return;
+        value.forEach((thread) => {
+          if (!thread || typeof thread !== 'object') return;
+          const normalizedThread = { ...thread };
+          if (normalizedThread.projectId === undefined) {
+            normalizedThread.projectId = normalizedThread.ProjectId || key;
+          }
+          delete normalizedThread.ProjectId;
+          threads.push(normalizedThread);
+          normalized = true;
+        });
+      });
+    } else {
+      threads = [];
+    }
+
+    threads.forEach((thread) => {
+      if (!thread) return;
+      if (thread.projectId === undefined && thread.ProjectId !== undefined) {
+        thread.projectId = thread.ProjectId;
+        delete thread.ProjectId;
+        normalized = true;
+        return;
+      }
+      if (thread.ProjectId !== undefined) {
+        delete thread.ProjectId;
+        normalized = true;
+      }
+    });
+
+    if (normalized) {
+      await saveThreads(threads);
+    }
+
+    if (projectId) {
+      return threads.filter(t => t.projectId === projectId);
     }
     return threads;
   } catch (e) {
@@ -421,11 +468,11 @@ async function loadThreads(spaceId = null) {
 }
 
 async function saveThreads(threads) {
-  await setLocalStorage({ [STORAGE_KEYS.THREADS]: threads });
+  await setLocalStorage({ [STORAGE_KEYS.PROJECT_THREADS]: threads });
 }
 
-async function getThreadCount(spaceId) {
-  const threads = await loadThreads(spaceId);
+async function getThreadCount(projectId) {
+  const threads = await loadThreads(projectId);
   return threads.length;
 }
 
@@ -498,12 +545,12 @@ async function estimateItemSize(item) {
   return new Blob([json]).size;
 }
 
-// ============ SPACE CRUD ============
+// ============ Project CRUD ============
 
-async function createSpace(data) {
-  const spaces = await loadSpaces();
-  const space = {
-    id: generateId('space'),
+async function createProject(data) {
+  const Projects = await loadProjects();
+  const Project = {
+    id: generateId('project'),
     name: data.name,
     description: data.description || '',
     icon: data.icon || '📁',
@@ -516,48 +563,48 @@ async function createSpace(data) {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
-  spaces.push(space);
-  await saveSpaces(spaces);
-  return space;
+  Projects.push(Project);
+  await saveProjects(Projects);
+  return Project;
 }
 
-async function updateSpace(id, data) {
-  const spaces = await loadSpaces();
-  const index = spaces.findIndex(s => s.id === id);
-  if (index === -1) throw new Error('Space not found');
+async function updateProject(id, data) {
+  const Projects = await loadProjects();
+  const index = Projects.findIndex(s => s.id === id);
+  if (index === -1) throw new Error('Project not found');
 
-  spaces[index] = {
-    ...spaces[index],
+  Projects[index] = {
+    ...Projects[index],
     ...data,
     updatedAt: Date.now()
   };
-  await saveSpaces(spaces);
-  return spaces[index];
+  await saveProjects(Projects);
+  return Projects[index];
 }
 
-async function deleteSpace(id) {
-  const spaces = await loadSpaces();
-  const filtered = spaces.filter(s => s.id !== id);
-  await saveSpaces(filtered);
+async function deleteProject(id) {
+  const Projects = await loadProjects();
+  const filtered = Projects.filter(s => s.id !== id);
+  await saveProjects(filtered);
 
-  // Also delete all threads in this space
+  // Also delete all threads in this Project
   const threads = await loadThreads();
-  const filteredThreads = threads.filter(t => t.spaceId !== id);
+  const filteredThreads = threads.filter(t => t.projectId !== id);
   await saveThreads(filteredThreads);
 }
 
-async function getSpace(id) {
-  const spaces = await loadSpaces();
-  return spaces.find(s => s.id === id);
+async function getProject(id) {
+  const Projects = await loadProjects();
+  return Projects.find(s => s.id === id);
 }
 
 // ============ THREAD CRUD ============
 
-async function createThread(spaceId, title = 'New Thread') {
+async function createThread(projectId, title = 'New Thread') {
   const threads = await loadThreads();
   const thread = {
     id: generateId('thread'),
-    spaceId,
+    projectId,
     title,
     messages: [],
     summary: '',
@@ -619,22 +666,22 @@ async function addMessageToThread(threadId, message) {
 
 // ============ UI STATE ============
 
-let currentSpaceId = null;
+let currentProjectId = null;
 let currentThreadId = null;
-let currentSpaceData = null;
+let currentProjectData = null;
 let isStreaming = false;
 let imageModeEnabled = false;
 let streamPort = null;
-let editingSpaceId = null;
+let editingProjectId = null;
 let renamingThreadId = null;
-let deletingItem = null; // { type: 'space'|'thread', id: string }
-let spaceModelDropdown = null;
-let spaceModelMap = new Map();
-let spaceFavoriteModelsByProvider = {
+let deletingItem = null; // { type: 'Project'|'thread', id: string }
+let ProjectModelDropdown = null;
+let ProjectModelMap = new Map();
+let ProjectFavoriteModelsByProvider = {
   openrouter: new Set(),
   naga: new Set()
 };
-let spaceRecentModelsByProvider = {
+let ProjectRecentModelsByProvider = {
   openrouter: [],
   naga: []
 };
@@ -645,14 +692,14 @@ const elements = {};
 
 function initElements() {
   // Views
-  elements.spacesListView = document.getElementById('spaces-list-view');
-  elements.spaceView = document.getElementById('space-view');
+  elements.ProjectsListView = document.getElementById('projects-list-view');
+  elements.ProjectView = document.getElementById('project-view');
 
-  // Spaces list
-  elements.spacesGrid = document.getElementById('spaces-grid');
+  // Projects list
+  elements.ProjectsGrid = document.getElementById('projects-grid');
   elements.emptyState = document.getElementById('empty-state');
-  elements.createSpaceBtn = document.getElementById('create-space-btn');
-  elements.spacesSettingsBtn = document.getElementById('spaces-settings-btn');
+  elements.createProjectBtn = document.getElementById('create-project-btn');
+  elements.ProjectsSettingsBtn = document.getElementById('projects-settings-btn');
   elements.emptyCreateBtn = document.getElementById('empty-create-btn');
   elements.storageFooter = document.getElementById('storage-footer');
   elements.storageFill = document.getElementById('storage-fill-local');
@@ -663,10 +710,10 @@ function initElements() {
   elements.warningMessage = document.getElementById('warning-message');
   elements.warningClose = document.getElementById('warning-close');
 
-  // Space view
+  // Project view
   elements.backBtn = document.getElementById('back-btn');
-  elements.spaceTitle = document.getElementById('space-title');
-  elements.spaceSettingsBtn = document.getElementById('space-settings-btn');
+  elements.ProjectTitle = document.getElementById('project-title');
+  elements.ProjectSettingsBtn = document.getElementById('project-settings-btn');
   elements.newThreadBtn = document.getElementById('new-thread-btn');
   elements.threadList = document.getElementById('thread-list');
   elements.chatEmptyState = document.getElementById('chat-empty-state');
@@ -676,28 +723,28 @@ function initElements() {
   elements.sendBtn = document.getElementById('send-btn');
   elements.stopBtn = document.getElementById('stop-btn');
   elements.chatModelIndicator = document.getElementById('chat-model-indicator');
-  elements.spacesContextBtn = document.getElementById('spaces-context-btn');
-  elements.spacesContextBadge = document.querySelector('.spaces-context-badge');
+  elements.ProjectsContextBtn = document.getElementById('projects-context-btn');
+  elements.ProjectsContextBadge = document.querySelector('.projects-context-badge');
   elements.chatWebSearch = document.getElementById('chat-web-search');
   elements.chatReasoning = document.getElementById('chat-reasoning');
   elements.chatImageMode = document.getElementById('chat-image-mode');
 
-  // Space modal
-  elements.spaceModal = document.getElementById('space-modal');
+  // Project modal
+  elements.ProjectModal = document.getElementById('project-modal');
   elements.modalTitle = document.getElementById('modal-title');
   elements.modalClose = document.getElementById('modal-close');
-  elements.spaceForm = document.getElementById('space-form');
-  elements.spaceName = document.getElementById('space-name');
-  elements.spaceDescription = document.getElementById('space-description');
-  elements.spaceModel = document.getElementById('space-model');
-  elements.spaceModelInput = document.getElementById('space-model-input');
-  elements.spaceInstructions = document.getElementById('space-instructions');
-  elements.spaceIcon = document.getElementById('space-icon');
+  elements.ProjectForm = document.getElementById('project-form');
+  elements.ProjectName = document.getElementById('project-name');
+  elements.ProjectDescription = document.getElementById('project-description');
+  elements.ProjectModel = document.getElementById('project-model');
+  elements.ProjectModelInput = document.getElementById('project-model-input');
+  elements.ProjectInstructions = document.getElementById('project-instructions');
+  elements.ProjectIcon = document.getElementById('project-icon');
   elements.iconPreview = document.getElementById('icon-preview');
   elements.emojiGrid = document.getElementById('emoji-grid');
   elements.emojiGridInner = document.getElementById('emoji-grid-inner');
-  elements.spaceWebSearch = document.getElementById('space-web-search');
-  elements.spaceReasoning = document.getElementById('space-reasoning');
+  elements.ProjectWebSearch = document.getElementById('project-web-search');
+  elements.ProjectReasoning = document.getElementById('project-reasoning');
   elements.modalCancel = document.getElementById('modal-cancel');
   elements.modalSave = document.getElementById('modal-save');
 
@@ -724,68 +771,68 @@ function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
 
   if (viewName === 'list') {
-    elements.spacesListView.classList.add('active');
-    currentSpaceId = null;
+    elements.ProjectsListView.classList.add('active');
+    currentProjectId = null;
     currentThreadId = null;
-    currentSpaceData = null;
-    updateSpacesContextButton(null, null);
-  } else if (viewName === 'space') {
-    elements.spaceView.classList.add('active');
+    currentProjectData = null;
+    updateProjectsContextButton(null, null);
+  } else if (viewName === 'Project') {
+    elements.ProjectView.classList.add('active');
   }
 }
 
 // ============ RENDERING ============
 
-async function renderSpacesList() {
-  const spaces = await loadSpaces();
+async function renderProjectsList() {
+  const Projects = await loadProjects();
 
-  if (spaces.length === 0) {
-    elements.spacesGrid.style.display = 'none';
+  if (Projects.length === 0) {
+    elements.ProjectsGrid.style.display = 'none';
     elements.emptyState.style.display = 'flex';
     return;
   }
 
-  elements.spacesGrid.style.display = 'grid';
+  elements.ProjectsGrid.style.display = 'grid';
   elements.emptyState.style.display = 'none';
 
   // Sort by updatedAt descending
-  spaces.sort((a, b) => b.updatedAt - a.updatedAt);
+  Projects.sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const cardsHtml = await Promise.all(spaces.map(async space => {
-    const modelName = getSpaceModelLabel(space);
-    const spaceIcon = space.icon || '📁';
-    const dateStr = formatDate(space.updatedAt);
+  const cardsHtml = await Promise.all(Projects.map(async Project => {
+    const modelName = getProjectModelLabel(Project);
+    const ProjectIcon = Project.icon || '📁';
+    const dateStr = formatDate(Project.updatedAt);
 
     return `
-      <div class="space-card" data-space-id="${space.id}">
-        <div class="space-card-icon">${spaceIcon}</div>
-        <div class="space-card-menu menu-dropdown">
+      <div class="project-card" data-project-id="${Project.id}">
+        <div class="project-card-icon">${ProjectIcon}</div>
+        <div class="project-card-menu menu-dropdown">
           <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
           <div class="menu-items" style="display: none;">
-            <button class="menu-item" data-action="edit" data-space-id="${space.id}">Edit</button>
-            <button class="menu-item danger" data-action="delete" data-space-id="${space.id}">Delete</button>
+            <button class="menu-item" data-action="edit" data-project-id="${Project.id}">Edit</button>
+            <button class="menu-item danger" data-action="delete" data-project-id="${Project.id}">Delete</button>
           </div>
         </div>
-        <div class="space-card-content">
-          <div class="space-card-info">
-            <h3 class="space-card-name">${escapeHtml(space.name)}</h3>
+        <div class="project-card-content">
+          <div class="project-card-info">
+            <h3 class="project-card-name">${escapeHtml(Project.name)}</h3>
           </div>
-          <div class="space-card-footer">
-            <span class="space-card-date">
+          <div class="project-card-footer">
+            <span class="project-card-date">
               <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
               ${dateStr}
             </span>
-            <span class="space-card-model">${escapeHtml(modelName)}</span>
+            <span class="project-card-model">${escapeHtml(modelName)}</span>
           </div>
         </div>
       </div>
     `;
   }));
 
-  elements.spacesGrid.innerHTML = cardsHtml.join('');
+  elements.ProjectsGrid.innerHTML = cardsHtml.join('');
 
   // Add click handlers using event delegation
-  document.querySelectorAll('.space-card').forEach(card => {
+  document.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
       const target = e.target;
 
@@ -799,16 +846,16 @@ async function renderSpacesList() {
       // Handle edit click
       if (target.closest('[data-action="edit"]')) {
         e.stopPropagation();
-        const spaceId = target.closest('[data-action="edit"]').dataset.spaceId;
-        openEditSpaceModal(spaceId);
+        const projectId = target.closest('[data-action="edit"]').dataset.projectId;
+        openEditProjectModal(projectId);
         return;
       }
 
       // Handle delete click
       if (target.closest('[data-action="delete"]')) {
         e.stopPropagation();
-        const spaceId = target.closest('[data-action="delete"]').dataset.spaceId;
-        openDeleteModal('space', spaceId);
+        const projectId = target.closest('[data-action="delete"]').dataset.projectId;
+        openDeleteModal('Project', projectId);
         return;
       }
 
@@ -817,17 +864,17 @@ async function renderSpacesList() {
         return;
       }
 
-      // Navigate to space
-      const spaceId = card.dataset.spaceId;
-      openSpace(spaceId);
+      // Navigate to Project
+      const projectId = card.dataset.projectId;
+      openProject(projectId);
     });
   });
 }
 
 async function renderThreadList() {
-  if (!currentSpaceId) return;
+  if (!currentProjectId) return;
 
-  const threads = await loadThreads(currentSpaceId);
+  const threads = await loadThreads(currentProjectId);
 
   // Sort by updatedAt descending
   threads.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -1077,7 +1124,7 @@ function renderChatMessages(messages, thread = null) {
 
   if (!messages || messages.length === 0) {
     chatMessagesEl.innerHTML = '';
-    updateSpacesContextButton(thread, currentSpaceData);
+    updateProjectsContextButton(thread, currentProjectData);
     return;
   }
 
@@ -1107,7 +1154,7 @@ function renderChatMessages(messages, thread = null) {
   postProcessMessages(chatMessagesEl);
   hydrateImageCards(chatMessagesEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  updateSpacesContextButton(thread, currentSpaceData);
+  updateProjectsContextButton(thread, currentProjectData);
 }
 
 function toggleArchiveSection() {
@@ -1215,7 +1262,7 @@ if (typeof window !== 'undefined' && window.__TEST__) {
   window.formatBytes = formatBytes;
   window.buildStorageLabel = buildStorageLabel;
   window.appendArchivedMessages = appendArchivedMessages;
-  window.buildSpacesContextData = buildSpacesContextData;
+  window.buildProjectsContextData = buildProjectsContextData;
   window.buildContextBadgeLabel = buildContextBadgeLabel;
   window.sanitizeFilename = sanitizeFilename;
   window.getFullThreadMessages = getFullThreadMessages;
@@ -1238,9 +1285,9 @@ async function renderStorageUsage() {
 
   // Show warning banner if needed
   if (usage.percentUsed >= 95) {
-    showStorageWarning('critical', 'Storage full. Delete threads to free space.');
+    showStorageWarning('critical', 'Storage full. Delete threads to free Project.');
   } else if (usage.percentUsed >= 85) {
-    showStorageWarning('high', 'Storage almost full. Delete threads to continue using Spaces.');
+    showStorageWarning('high', 'Storage almost full. Delete threads to continue using Projects.');
   } else if (usage.percentUsed >= 70) {
     showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads.');
   } else {
@@ -1368,7 +1415,7 @@ async function hydrateImageCards(root) {
       card = buildImageCard({
         state: 'ready',
         imageUrl: dataUrl,
-        mode: 'spaces',
+        mode: 'Projects',
         onView: () => openImageLightbox(dataUrl, imageId, mimeType),
         onDownload: () => downloadImage(dataUrl, imageId, mimeType)
       });
@@ -1387,22 +1434,22 @@ async function hydrateImageCards(root) {
 
 // ============ ACTIONS ============
 
-async function openSpace(spaceId) {
-  const space = await getSpace(spaceId);
-  if (!space) {
-    showToast('Space not found', 'error');
+async function openProject(projectId) {
+  const Project = await getProject(projectId);
+  if (!Project) {
+    showToast('Project not found', 'error');
     return;
   }
 
-  currentSpaceId = spaceId;
+  currentProjectId = projectId;
   currentThreadId = null;
 
-  elements.spaceTitle.textContent = space.name;
+  elements.ProjectTitle.textContent = Project.name;
   elements.chatEmptyState.style.display = 'flex';
   elements.chatContainer.style.display = 'none';
   updateChatModelIndicator(null);
 
-  showView('space');
+  showView('Project');
   await renderThreadList();
 }
 
@@ -1466,17 +1513,17 @@ async function openThread(threadId) {
 
   currentThreadId = threadId;
 
-  // Set chat toggles from space settings
-  const space = await getSpace(currentSpaceId);
-  if (space) {
-    currentSpaceData = space;
-    elements.chatWebSearch.checked = space.webSearch || false;
-    elements.chatReasoning.checked = space.reasoning || false;
+  // Set chat toggles from Project settings
+  const Project = await getProject(currentProjectId);
+  if (Project) {
+    currentProjectData = Project;
+    elements.chatWebSearch.checked = Project.webSearch || false;
+    elements.chatReasoning.checked = Project.reasoning || false;
     if (elements.chatImageMode) {
       elements.chatImageMode.checked = false;
       imageModeEnabled = false;
     }
-    updateChatModelIndicator(space);
+    updateChatModelIndicator(Project);
   }
 
   elements.chatEmptyState.style.display = 'none';
@@ -1487,21 +1534,21 @@ async function openThread(threadId) {
 }
 
 async function createNewThread() {
-  if (!currentSpaceId) return;
+  if (!currentProjectId) return;
 
-  // Set chat toggles from space settings
-  const space = await getSpace(currentSpaceId);
-  if (space) {
-    currentSpaceData = space;
-    elements.chatWebSearch.checked = space.webSearch || false;
-    elements.chatReasoning.checked = space.reasoning || false;
+  // Set chat toggles from Project settings
+  const Project = await getProject(currentProjectId);
+  if (Project) {
+    currentProjectData = Project;
+    elements.chatWebSearch.checked = Project.webSearch || false;
+    elements.chatReasoning.checked = Project.reasoning || false;
     if (elements.chatImageMode) {
       elements.chatImageMode.checked = false;
       imageModeEnabled = false;
     }
   }
 
-  const thread = await createThread(currentSpaceId);
+  const thread = await createThread(currentProjectId);
   await renderThreadList();
   openThread(thread.id);
   showToast('New thread created', 'success');
@@ -1534,77 +1581,77 @@ document.addEventListener('click', (e) => {
 
 // ============ MODAL HANDLERS ============
 
-function openCreateSpaceModal() {
-  editingSpaceId = null;
-  elements.modalTitle.textContent = 'Create Space';
-  elements.modalSave.textContent = 'Create Space';
-  elements.spaceForm.reset();
+function openCreateProjectModal() {
+  editingProjectId = null;
+  elements.modalTitle.textContent = 'Create Project';
+  elements.modalSave.textContent = 'Create Project';
+  elements.ProjectForm.reset();
   // Reset icon to default
-  elements.spaceIcon.value = '📁';
+  elements.ProjectIcon.value = '📁';
   elements.iconPreview.textContent = '📁';
   elements.emojiGrid.classList.remove('show');
   // Reset toggles
-  elements.spaceWebSearch.checked = false;
-  elements.spaceReasoning.checked = false;
-  elements.spaceModal.style.display = 'flex';
-  elements.spaceName.focus();
+  elements.ProjectWebSearch.checked = false;
+  elements.ProjectReasoning.checked = false;
+  elements.ProjectModal.style.display = 'flex';
+  elements.ProjectName.focus();
 }
 
-async function openEditSpaceModal(spaceId) {
-  const space = await getSpace(spaceId);
-  if (!space) return;
+async function openEditProjectModal(projectId) {
+  const Project = await getProject(projectId);
+  if (!Project) return;
 
-  editingSpaceId = spaceId;
-  elements.modalTitle.textContent = 'Edit Space';
+  editingProjectId = projectId;
+  elements.modalTitle.textContent = 'Edit Project';
   elements.modalSave.textContent = 'Save Changes';
 
-  elements.spaceName.value = space.name;
-  elements.spaceDescription.value = space.description;
-  elements.spaceIcon.value = space.icon || '📁';
-  elements.iconPreview.textContent = space.icon || '📁';
-    const modelProvider = normalizeProviderSafe(space.modelProvider || currentProvider);
-    const combinedId = space.model ? buildCombinedModelIdSafe(modelProvider, space.model) : '';
-    elements.spaceModel.value = combinedId;
-    if (elements.spaceModelInput) {
-      elements.spaceModelInput.value = space.model ? getSpaceModelLabel(space) : '';
+  elements.ProjectName.value = Project.name;
+  elements.ProjectDescription.value = Project.description;
+  elements.ProjectIcon.value = Project.icon || '📁';
+  elements.iconPreview.textContent = Project.icon || '📁';
+    const modelProvider = normalizeProviderSafe(Project.modelProvider || currentProvider);
+    const combinedId = Project.model ? buildCombinedModelIdSafe(modelProvider, Project.model) : '';
+    elements.ProjectModel.value = combinedId;
+    if (elements.ProjectModelInput) {
+      elements.ProjectModelInput.value = Project.model ? getProjectModelLabel(Project) : '';
     }
-  elements.spaceInstructions.value = space.customInstructions;
-  elements.spaceWebSearch.checked = space.webSearch || false;
-  elements.spaceReasoning.checked = space.reasoning || false;
+  elements.ProjectInstructions.value = Project.customInstructions;
+  elements.ProjectWebSearch.checked = Project.webSearch || false;
+  elements.ProjectReasoning.checked = Project.reasoning || false;
   elements.emojiGrid.classList.remove('show');
 
-  elements.spaceModal.style.display = 'flex';
-  elements.spaceName.focus();
+  elements.ProjectModal.style.display = 'flex';
+  elements.ProjectName.focus();
 }
 
-function closeSpaceModal() {
-  elements.spaceModal.style.display = 'none';
-  editingSpaceId = null;
+function closeProjectModal() {
+  elements.ProjectModal.style.display = 'none';
+  editingProjectId = null;
 }
 
-async function handleSpaceFormSubmit(e) {
+async function handleProjectFormSubmit(e) {
   e.preventDefault();
 
-    const combinedModelId = elements.spaceModel.value;
+    const combinedModelId = elements.ProjectModel.value;
     const parsedModel = parseCombinedModelIdSafe(combinedModelId);
     const modelProvider = combinedModelId ? normalizeProviderSafe(parsedModel.provider) : null;
     const modelId = combinedModelId ? parsedModel.modelId : '';
     const modelDisplayName = combinedModelId
-      ? (elements.spaceModelInput?.value || (typeof buildModelDisplayName === 'function'
+      ? (elements.ProjectModelInput?.value || (typeof buildModelDisplayName === 'function'
         ? buildModelDisplayName(modelProvider, modelId)
         : modelId))
       : '';
 
     const data = {
-      name: elements.spaceName.value.trim(),
-      description: elements.spaceDescription.value.trim(),
-      icon: elements.spaceIcon.value || '📁',
+      name: elements.ProjectName.value.trim(),
+      description: elements.ProjectDescription.value.trim(),
+      icon: elements.ProjectIcon.value || '📁',
       model: modelId,
       modelProvider,
       modelDisplayName,
-      customInstructions: elements.spaceInstructions.value.trim(),
-      webSearch: elements.spaceWebSearch.checked,
-      reasoning: elements.spaceReasoning.checked
+      customInstructions: elements.ProjectInstructions.value.trim(),
+      webSearch: elements.ProjectWebSearch.checked,
+      reasoning: elements.ProjectReasoning.checked
     };
 
   if (!data.name) {
@@ -1613,22 +1660,22 @@ async function handleSpaceFormSubmit(e) {
   }
 
   try {
-    if (editingSpaceId) {
-      await updateSpace(editingSpaceId, data);
-      showToast('Space updated', 'success');
+    if (editingProjectId) {
+      await updateProject(editingProjectId, data);
+      showToast('Project updated', 'success');
 
-      // Update title if viewing this space
-      if (currentSpaceId === editingSpaceId) {
-        elements.spaceTitle.textContent = data.name;
+      // Update title if viewing this Project
+      if (currentProjectId === editingProjectId) {
+        elements.ProjectTitle.textContent = data.name;
         updateChatModelIndicator(data);
       }
     } else {
-      await createSpace(data);
-      showToast('Space created', 'success');
+      await createProject(data);
+      showToast('Project created', 'success');
     }
 
-    closeSpaceModal();
-    await renderSpacesList();
+    closeProjectModal();
+    await renderProjectsList();
     await renderStorageUsage();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1673,11 +1720,11 @@ async function handleRenameFormSubmit(e) {
 async function openDeleteModal(type, id) {
   deletingItem = { type, id };
 
-  if (type === 'space') {
-    const space = await getSpace(id);
+  if (type === 'Project') {
+    const Project = await getProject(id);
     const threadCount = await getThreadCount(id);
-    elements.deleteTitle.textContent = 'Delete Space';
-    elements.deleteMessage.textContent = `Are you sure you want to delete "${space.name}" and all its threads?`;
+    elements.deleteTitle.textContent = 'Delete Project';
+    elements.deleteMessage.textContent = `Are you sure you want to delete "${Project.name}" and all its threads?`;
     elements.deleteSize.textContent = `This will delete ${threadCount} thread${threadCount !== 1 ? 's' : ''}.`;
   } else {
     const thread = await getThread(id);
@@ -1699,14 +1746,14 @@ async function handleDeleteConfirm() {
   if (!deletingItem) return;
 
   try {
-    if (deletingItem.type === 'space') {
-      await deleteSpace(deletingItem.id);
-      showToast('Space deleted', 'success');
+    if (deletingItem.type === 'Project') {
+      await deleteProject(deletingItem.id);
+      showToast('Project deleted', 'success');
 
-      if (currentSpaceId === deletingItem.id) {
+      if (currentProjectId === deletingItem.id) {
         showView('list');
       }
-      await renderSpacesList();
+      await renderProjectsList();
     } else {
       await deleteThread(deletingItem.id);
       showToast('Thread deleted', 'success');
@@ -1732,34 +1779,34 @@ async function loadModels() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'get_models' });
     if (response.ok && response.models) {
-      spaceModelMap = new Map(response.models.map((model) => [model.id, model]));
+      ProjectModelMap = new Map(response.models.map((model) => [model.id, model]));
 
       const [localItems, syncItems] = await Promise.all([
         getLocalStorage(['or_recent_models', 'or_recent_models_naga']),
         chrome.storage.sync.get(['or_favorites', 'or_favorites_naga'])
       ]);
 
-      spaceFavoriteModelsByProvider = {
+      ProjectFavoriteModelsByProvider = {
         openrouter: new Set(syncItems.or_favorites || []),
         naga: new Set(syncItems.or_favorites_naga || [])
       };
-      spaceRecentModelsByProvider = {
+      ProjectRecentModelsByProvider = {
         openrouter: localItems.or_recent_models || [],
         naga: localItems.or_recent_models_naga || []
       };
 
-      if (!spaceModelDropdown && elements.spaceModelInput) {
-        spaceModelDropdown = new ModelDropdownManager({
-          inputElement: elements.spaceModelInput,
+      if (!ProjectModelDropdown && elements.ProjectModelInput) {
+        ProjectModelDropdown = new ModelDropdownManager({
+          inputElement: elements.ProjectModelInput,
           containerType: 'modal',
           onModelSelect: async (modelId) => {
-            const selectedModel = spaceModelMap.get(modelId);
+            const selectedModel = ProjectModelMap.get(modelId);
             const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
-            if (elements.spaceModelInput) {
-              elements.spaceModelInput.value = displayName;
+            if (elements.ProjectModelInput) {
+              elements.ProjectModelInput.value = displayName;
             }
-            if (elements.spaceModel) {
-              elements.spaceModel.value = modelId;
+            if (elements.ProjectModel) {
+              elements.ProjectModel.value = modelId;
             }
             return true;
           },
@@ -1768,18 +1815,18 @@ async function loadModels() {
             const provider = normalizeProviderSafe(parsed.provider);
             const rawId = parsed.modelId;
 
-            if (!spaceFavoriteModelsByProvider[provider]) {
-              spaceFavoriteModelsByProvider[provider] = new Set();
+            if (!ProjectFavoriteModelsByProvider[provider]) {
+              ProjectFavoriteModelsByProvider[provider] = new Set();
             }
 
             if (isFavorite) {
-              spaceFavoriteModelsByProvider[provider].add(rawId);
+              ProjectFavoriteModelsByProvider[provider].add(rawId);
             } else {
-              spaceFavoriteModelsByProvider[provider].delete(rawId);
+              ProjectFavoriteModelsByProvider[provider].delete(rawId);
             }
 
             await chrome.storage.sync.set({
-              [getProviderStorageKeySafe('or_favorites', provider)]: Array.from(spaceFavoriteModelsByProvider[provider])
+              [getProviderStorageKeySafe('or_favorites', provider)]: Array.from(ProjectFavoriteModelsByProvider[provider])
             });
           },
           onAddRecent: async (modelId) => {
@@ -1787,37 +1834,37 @@ async function loadModels() {
             const provider = normalizeProviderSafe(parsed.provider);
             const rawId = parsed.modelId;
 
-            const current = spaceRecentModelsByProvider[provider] || [];
+            const current = ProjectRecentModelsByProvider[provider] || [];
             const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
-            spaceRecentModelsByProvider[provider] = next;
+            ProjectRecentModelsByProvider[provider] = next;
 
             await setLocalStorage({
               [getProviderStorageKeySafe('or_recent_models', provider)]: next
             });
 
-            spaceModelDropdown.setRecentlyUsed(buildCombinedRecentList(spaceRecentModelsByProvider));
+            ProjectModelDropdown.setRecentlyUsed(buildCombinedRecentList(ProjectRecentModelsByProvider));
           }
         });
       }
 
-      if (spaceModelDropdown) {
-        spaceModelDropdown.setModels(response.models);
-        spaceModelDropdown.setFavorites(buildCombinedFavoritesList(spaceFavoriteModelsByProvider));
-        spaceModelDropdown.setRecentlyUsed(buildCombinedRecentList(spaceRecentModelsByProvider));
+      if (ProjectModelDropdown) {
+        ProjectModelDropdown.setModels(response.models);
+        ProjectModelDropdown.setFavorites(buildCombinedFavoritesList(ProjectFavoriteModelsByProvider));
+        ProjectModelDropdown.setRecentlyUsed(buildCombinedRecentList(ProjectRecentModelsByProvider));
       }
 
-      if (elements.spaceModel) {
-        const currentCombinedId = elements.spaceModel.value || '';
-        elements.spaceModel.innerHTML = '<option value="">Use default model</option>' +
+      if (elements.ProjectModel) {
+        const currentCombinedId = elements.ProjectModel.value || '';
+        elements.ProjectModel.innerHTML = '<option value="">Use default model</option>' +
           response.models.map(m =>
             `<option value="${m.id}" ${m.id === currentCombinedId ? 'selected' : ''}>${getModelDisplayName(m)}</option>`
           ).join('');
       }
 
-      if (elements.spaceModelInput && elements.spaceModel?.value) {
-        const selected = spaceModelMap.get(elements.spaceModel.value);
+      if (elements.ProjectModelInput && elements.ProjectModel?.value) {
+        const selected = ProjectModelMap.get(elements.ProjectModel.value);
         if (selected) {
-          elements.spaceModelInput.value = getModelDisplayName(selected);
+          elements.ProjectModelInput.value = getModelDisplayName(selected);
         }
       }
     }
@@ -1830,7 +1877,7 @@ async function loadModels() {
 
 function setupEmojiPicker() {
   // Populate emoji grid
-  elements.emojiGridInner.innerHTML = SPACE_EMOJIS.map(emoji =>
+  elements.emojiGridInner.innerHTML = Project_EMOJIS.map(emoji =>
     `<button type="button" class="emoji-btn" data-emoji="${emoji}">${emoji}</button>`
   ).join('');
 
@@ -1845,7 +1892,7 @@ function setupEmojiPicker() {
     const btn = e.target.closest('.emoji-btn');
     if (btn) {
       const emoji = btn.dataset.emoji;
-      elements.spaceIcon.value = emoji;
+      elements.ProjectIcon.value = emoji;
       elements.iconPreview.textContent = emoji;
       elements.emojiGrid.classList.remove('show');
     }
@@ -1862,14 +1909,14 @@ function setupEmojiPicker() {
 // ============ EVENT BINDINGS ============
 
 function bindEvents() {
-  // Create space buttons
-  elements.createSpaceBtn.addEventListener('click', openCreateSpaceModal);
-  elements.emptyCreateBtn.addEventListener('click', openCreateSpaceModal);
-  if (elements.spacesSettingsBtn) {
-    elements.spacesSettingsBtn.addEventListener('click', () => {
+  // Create Project buttons
+  elements.createProjectBtn.addEventListener('click', openCreateProjectModal);
+  elements.emptyCreateBtn.addEventListener('click', openCreateProjectModal);
+  if (elements.ProjectsSettingsBtn) {
+    elements.ProjectsSettingsBtn.addEventListener('click', () => {
       chrome.runtime.openOptionsPage();
     });
-    elements.spacesSettingsBtn.addEventListener('keydown', (e) => {
+    elements.ProjectsSettingsBtn.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         chrome.runtime.openOptionsPage();
@@ -1877,10 +1924,10 @@ function bindEvents() {
     });
   }
 
-  // Space modal
-  elements.modalClose.addEventListener('click', closeSpaceModal);
-  elements.modalCancel.addEventListener('click', closeSpaceModal);
-  elements.spaceForm.addEventListener('submit', handleSpaceFormSubmit);
+  // Project modal
+  elements.modalClose.addEventListener('click', closeProjectModal);
+  elements.modalCancel.addEventListener('click', closeProjectModal);
+  elements.ProjectForm.addEventListener('submit', handleProjectFormSubmit);
 
   // Rename modal
   elements.renameModalClose.addEventListener('click', closeRenameModal);
@@ -1895,15 +1942,15 @@ function bindEvents() {
   // Storage warning
   elements.warningClose.addEventListener('click', hideStorageWarning);
 
-  // Space view
+  // Project view
   elements.backBtn.addEventListener('click', async () => {
     showView('list');
-    await renderSpacesList();
+    await renderProjectsList();
   });
 
-  elements.spaceSettingsBtn.addEventListener('click', () => {
-    if (currentSpaceId) {
-      openEditSpaceModal(currentSpaceId);
+  elements.ProjectSettingsBtn.addEventListener('click', () => {
+    if (currentProjectId) {
+      openEditProjectModal(currentProjectId);
     }
   });
 
@@ -1915,14 +1962,14 @@ function bindEvents() {
     });
   }
 
-  if (elements.spacesContextBtn) {
-    elements.spacesContextBtn.addEventListener('click', async () => {
-      if (elements.spacesContextBtn.classList.contains('inactive')) return;
-      if (!currentThreadId || !currentSpaceId) return;
+  if (elements.ProjectsContextBtn) {
+    elements.ProjectsContextBtn.addEventListener('click', async () => {
+      if (elements.ProjectsContextBtn.classList.contains('inactive')) return;
+      if (!currentThreadId || !currentProjectId) return;
       const thread = await getThread(currentThreadId);
-      const space = currentSpaceData || await getSpace(currentSpaceId);
-      currentSpaceData = space || currentSpaceData;
-      openSpacesContextModal(thread, currentSpaceData);
+      const Project = currentProjectData || await getProject(currentProjectId);
+      currentProjectData = Project || currentProjectData;
+      openProjectsContextModal(thread, currentProjectData);
     });
   }
 
@@ -1962,7 +2009,7 @@ function bindEvents() {
   });
 
   // Close modals on backdrop click
-  [elements.spaceModal, elements.renameModal, elements.deleteModal].forEach(modal => {
+  [elements.ProjectModal, elements.renameModal, elements.deleteModal].forEach(modal => {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
         modal.style.display = 'none';
@@ -1973,7 +2020,7 @@ function bindEvents() {
   // Close modals on Escape
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      closeSpaceModal();
+      closeProjectModal();
       closeRenameModal();
       closeDeleteModal();
     }
@@ -2134,8 +2181,8 @@ function updateAssistantFooter(ui, meta) {
   }
 }
 
-async function sendImageMessage(content, space) {
-  if (!currentThreadId || !currentSpaceId) return;
+async function sendImageMessage(content, Project) {
+  if (!currentThreadId || !currentProjectId) return;
 
   isStreaming = true;
   if (elements.sendBtn) {
@@ -2179,8 +2226,8 @@ async function sendImageMessage(content, space) {
   elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 
   try {
-    const provider = space?.modelProvider || currentProvider;
-    const model = space?.model || null;
+    const provider = Project?.modelProvider || currentProvider;
+    const model = Project?.model || null;
 
     const res = await chrome.runtime.sendMessage({
       type: 'image_query',
@@ -2211,10 +2258,10 @@ async function sendImageMessage(content, space) {
     }
 
     let metaModel = 'default model';
-    if (space?.modelDisplayName) {
-      metaModel = space.modelDisplayName;
-    } else if (space?.model && typeof buildModelDisplayName === 'function') {
-      metaModel = buildModelDisplayName(provider, space.model);
+    if (Project?.modelDisplayName) {
+      metaModel = Project.modelDisplayName;
+    } else if (Project?.model && typeof buildModelDisplayName === 'function') {
+      metaModel = buildModelDisplayName(provider, Project.model);
     }
 
     await addMessageToThread(currentThreadId, {
@@ -2231,7 +2278,7 @@ async function sendImageMessage(content, space) {
     const updatedThread = await getThread(currentThreadId);
     if (updatedThread) {
       renderChatMessages(updatedThread.messages, updatedThread);
-      updateSpacesContextButton(updatedThread, currentSpaceData);
+      updateProjectsContextButton(updatedThread, currentProjectData);
     }
   } catch (err) {
     console.error('Image generation failed:', err);
@@ -2248,13 +2295,13 @@ async function sendImageMessage(content, space) {
 
 async function sendMessage() {
   const content = elements.chatInput.value.trim();
-  if (!content || !currentThreadId || !currentSpaceId || isStreaming) return;
+  if (!content || !currentThreadId || !currentProjectId || isStreaming) return;
 
-  const space = await getSpace(currentSpaceId);
-  if (!space) return;
+  const Project = await getProject(currentProjectId);
+  if (!Project) return;
 
   if (imageModeEnabled) {
-    await sendImageMessage(content, space);
+    await sendImageMessage(content, Project);
     return;
   }
 
@@ -2286,8 +2333,8 @@ async function sendMessage() {
       const summaryRes = await chrome.runtime.sendMessage({
         type: 'summarize_thread',
         messages: summaryMessages,
-        model: space.model || null,
-        provider: space.modelProvider || currentProvider
+        model: Project.model || null,
+        provider: Project.modelProvider || currentProvider
       });
       const minSummaryLength = getSummaryMinLength(historyToSummarize.length);
       if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= minSummaryLength) {
@@ -2329,7 +2376,7 @@ async function sendMessage() {
 
   // Start streaming
   try {
-    await streamMessage(content, space, thread, streamingUi, startTime);
+    await streamMessage(content, Project, thread, streamingUi, startTime);
   } catch (err) {
     console.error('Stream error:', err);
     showToast(err.message || 'Failed to send message', 'error');
@@ -2343,7 +2390,7 @@ async function sendMessage() {
   }
 }
 
-async function streamMessage(content, space, thread, streamingUi, startTime) {
+async function streamMessage(content, Project, thread, streamingUi, startTime) {
   return new Promise((resolve, reject) => {
     // Create port for streaming
     streamPort = chrome.runtime.connect({ name: 'streaming' });
@@ -2413,10 +2460,10 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
       } else if (msg.type === 'complete') {
         const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : null;
         let metaModel = msg.model || 'default model';
-        if (space.modelDisplayName) {
-          metaModel = space.modelDisplayName;
-        } else if (space.model && typeof buildModelDisplayName === 'function') {
-          metaModel = buildModelDisplayName(space.modelProvider || currentProvider, space.model);
+        if (Project.modelDisplayName) {
+          metaModel = Project.modelDisplayName;
+        } else if (Project.model && typeof buildModelDisplayName === 'function') {
+          metaModel = buildModelDisplayName(Project.modelProvider || currentProvider, Project.model);
         }
         const meta = {
           model: metaModel,
@@ -2430,7 +2477,7 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
         await addMessageToThread(currentThreadId, buildAssistantMessage(fullContent, meta));
         const updatedThread = await getThread(currentThreadId);
         if (updatedThread) {
-          updateSpacesContextButton(updatedThread, currentSpaceData);
+          updateProjectsContextButton(updatedThread, currentProjectData);
         }
 
         updateAssistantFooter(streamingUi, meta);
@@ -2490,9 +2537,9 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
     });
 
     // Build messages array with custom instructions
-    const messages = buildStreamMessages(thread.messages, content, space.customInstructions, thread.summary);
+    const messages = buildStreamMessages(thread.messages, content, Project.customInstructions, thread.summary);
 
-    // Use chat toggles (temporary override) instead of space settings
+    // Use chat toggles (temporary override) instead of Project settings
     const webSearch = elements.chatWebSearch.checked;
     const reasoning = elements.chatReasoning.checked;
 
@@ -2501,11 +2548,11 @@ async function streamMessage(content, space, thread, streamingUi, startTime) {
       type: 'start_stream',
       prompt: content,
       messages: messages,
-      model: space.model || null,
-      provider: space.modelProvider || currentProvider,
+      model: Project.model || null,
+      provider: Project.modelProvider || currentProvider,
       webSearch: webSearch,
       reasoning: reasoning,
-      tabId: `space_${space.id}`
+      tabId: `Project_${Project.id}`
     });
   });
 }
@@ -2548,6 +2595,7 @@ function setupChatInput() {
 // ============ INITIALIZATION ============
 
 async function init() {
+  await migrationPromise;
   initElements();
   bindEvents();
   setupChatInput();
@@ -2567,7 +2615,7 @@ async function init() {
   // Load data
   await loadProviderSetting();
   await loadModels();
-  await renderSpacesList();
+  await renderProjectsList();
   await renderStorageUsage();
 
   showView('list');
@@ -2584,8 +2632,10 @@ chrome.runtime.onMessage.addListener((msg) => {
       await loadModels();
       if (typeof showToast === 'function') {
         const providerLabel = getProviderLabelSafe(msg.provider);
-        showToast(`Provider updated. Update Space models to use ${providerLabel}.`, 'info');
+        showToast(`Provider updated. Update Project models to use ${providerLabel}.`, 'info');
       }
     })();
   }
 });
+
+

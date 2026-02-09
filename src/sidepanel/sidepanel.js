@@ -27,6 +27,12 @@ const setLocalStorage = (values) => (
 );
 // encrypted-storage
 
+const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
+  ? window.migrateLegacySpaceKeys().catch((err) => {
+    console.warn("Projects migration failed:", err);
+  })
+  : Promise.resolve();
+
 const promptEl = document.getElementById("prompt");
 const answerEl = document.getElementById("answer");
 const answerSection = document.getElementById("answer-section");
@@ -1654,14 +1660,14 @@ if (setupOpenOptionsBtn) {
   });
 }
 
-// ---- Spaces button - open Spaces page ----
-const spacesBtn = document.getElementById('spaces-btn');
-if (spacesBtn) {
-  const openSpacesPage = async () => {
-    const stored = await getLocalStorage(["or_collapse_on_spaces"]);
-    const collapseOnSpaces = stored.or_collapse_on_spaces !== false;
-    const spacesUrl = chrome.runtime.getURL('src/projects/projects.html');
-    const tabs = await chrome.tabs.query({ url: spacesUrl });
+// ---- Projects button - open Projects page ----
+const projectsBtn = document.getElementById('projects-btn');
+if (projectsBtn) {
+  const openProjectsPage = async () => {
+    const stored = await getLocalStorage(["or_collapse_on_projects"]);
+    const collapseOnProjects = stored.or_collapse_on_projects !== false;
+    const projectsUrl = chrome.runtime.getURL('src/projects/projects.html');
+    const tabs = await chrome.tabs.query({ url: projectsUrl });
 
     if (tabs.length > 0) {
       // Focus existing tab
@@ -1669,10 +1675,10 @@ if (spacesBtn) {
       await chrome.windows.update(tabs[0].windowId, { focused: true });
     } else {
       // Open new tab
-      await chrome.tabs.create({ url: spacesUrl });
+      await chrome.tabs.create({ url: projectsUrl });
     }
 
-    if (collapseOnSpaces) {
+    if (collapseOnProjects) {
       try {
         await chrome.runtime.sendMessage({ type: "close_sidepanel" });
       } catch (e) {
@@ -1686,11 +1692,11 @@ if (spacesBtn) {
     }
   };
 
-  spacesBtn.addEventListener('click', openSpacesPage);
-  spacesBtn.addEventListener('keydown', (e) => {
+  projectsBtn.addEventListener('click', openProjectsPage);
+  projectsBtn.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      openSpacesPage();
+      openProjectsPage();
     }
   });
 }
@@ -1775,6 +1781,7 @@ function hideTypingIndicator() {
 
 // ---- Initial load ----
 document.addEventListener("DOMContentLoaded", async () => {
+  await migrationPromise;
   // Hide answer box initially if empty
   updateAnswerVisibility();
   await restorePersistedAnswers();

@@ -12,6 +12,7 @@ import {
 } from '/src/shared/constants.js';
 import '/src/shared/crypto-store.js';
 import '/src/shared/encrypted-storage.js';
+import '/src/shared/projects-migration.js';
 import '/src/shared/debug-log.js';
 import {
   buildCombinedModelId,
@@ -35,6 +36,12 @@ const setLocalStorage = (values) => (
     ? globalThis.setEncrypted(values)
     : chrome.storage.local.set(values)
 );
+
+if (typeof globalThis.migrateLegacySpaceKeys === "function") {
+  globalThis.migrateLegacySpaceKeys().catch((err) => {
+    console.warn("Projects migration failed:", err);
+  });
+}
 
 // Cache management
 const lastBalanceByProvider = {};
@@ -1250,9 +1257,9 @@ chrome.runtime.onConnect.addListener((port) => {
           msg.tabId,
           port,
           () => isDisconnected,
-          msg.messages,  // Custom messages array (for Spaces)
-          msg.model,     // Custom model (for Spaces)
-          msg.provider   // Custom provider (for Spaces)
+          msg.messages,  // Custom messages array (for Projects)
+          msg.model,     // Custom model (for Projects)
+          msg.provider   // Custom provider (for Projects)
         );
       } catch (e) {
         // Only send error if port is still connected
@@ -1293,12 +1300,12 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     }
   };
 
-  // Use custom messages if provided (for Spaces), otherwise use conversation context
+  // Use custom messages if provided (for Projects), otherwise use conversation context
   let context;
-  const isSpacesMode = customMessages !== null;
+  const isProjectsMode = customMessages !== null;
 
-  if (isSpacesMode) {
-    // Spaces mode: use provided messages array
+  if (isProjectsMode) {
+    // Projects mode: use provided messages array
     context = [...customMessages];
     // Add the new user message
     context.push({ role: "user", content: prompt });
@@ -1351,7 +1358,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
       provider: providerConfig.id,
       model: modelName,
       tabId: tabId || null,
-      spacesMode: isSpacesMode,
+      projectsMode: isProjectsMode,
       promptChars: typeof prompt === "string" ? prompt.length : 0,
       messageCount: Array.isArray(context) ? context.length : 0,
       webSearch: Boolean(webSearch),
@@ -1557,8 +1564,8 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     return;
   }
 
-  // Only save to sidebar context if not using Spaces mode
-  if (!isSpacesMode) {
+  // Only save to sidebar context if not using Projects mode
+  if (!isProjectsMode) {
     // Add assistant response to context
     context.push({ role: "assistant", content: fullContent });
 

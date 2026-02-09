@@ -12,6 +12,8 @@ const DEFAULT_ENCRYPTED_STORAGE_KEYS = [
   "or_recent_models_naga",
   "or_history_limit",
   "or_history",
+  "or_projects",
+  "or_project_threads",
   "or_spaces",
   "or_threads",
   "or_web_search",

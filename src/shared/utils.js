@@ -466,16 +466,16 @@ function removeReasoningBubbles(container) {
 }
 
 /**
- * Formats the active model label for a thread/space.
- * @param {{model?: string, modelDisplayName?: string}} space
+ * Formats the active model label for a thread/project.
+ * @param {{model?: string, modelDisplayName?: string}} project
  * @returns {string}
  */
-function formatThreadModelLabel(space = {}) {
-  if (space && typeof space.modelDisplayName === "string" && space.modelDisplayName.trim()) {
-    return `Model: ${space.modelDisplayName.trim()}`;
+function formatThreadModelLabel(project = {}) {
+  if (project && typeof project.modelDisplayName === "string" && project.modelDisplayName.trim()) {
+    return `Model: ${project.modelDisplayName.trim()}`;
   }
-  if (space && typeof space.model === "string" && space.model.trim()) {
-    return `Model: ${space.model.trim()}`;
+  if (project && typeof project.model === "string" && project.model.trim()) {
+    return `Model: ${project.model.trim()}`;
   }
   return "Model: Default";
 }

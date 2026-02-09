@@ -1,9 +1,9 @@
 export {};
-let spacesLoaded = false;
+let projectsLoaded = false;
 
 const win = window as unknown as {
   __TEST__?: boolean;
-  __SPACES_LOADED__?: boolean;
+  __PROJECTS_LOADED__?: boolean;
   getLiveWindowSize?: (summary: string | null) => number;
   splitMessagesForSummary?: (messages: any[], liveWindowSize: number) => {
     historyToSummarize: any[];
@@ -19,16 +19,16 @@ const win = window as unknown as {
   getSummaryMinLength?: (historyCount: number) => number;
 };
 
-function loadSpaces() {
-  if (spacesLoaded) return;
+function loadProjects() {
+  if (projectsLoaded) return;
   win.__TEST__ = true;
   require("../src/projects/projects.js");
-  spacesLoaded = true;
+  projectsLoaded = true;
 }
 
-describe("spaces summarization helpers", () => {
+describe("projects summarization helpers", () => {
   beforeEach(() => {
-    loadSpaces();
+    loadProjects();
   });
 
   test("getLiveWindowSize returns 12 when no summary", () => {

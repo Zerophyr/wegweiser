@@ -18,7 +18,7 @@ const modelsStatusEl = document.getElementById("models-status");
 const saveBtn = document.getElementById("save");
 const statusEl = document.getElementById("status");
 const historyLimitInput = document.getElementById("history-limit");
-const collapseOnSpacesToggle = document.getElementById("collapse-on-spaces");
+const collapseOnProjectsToggle = document.getElementById("collapse-on-projects");
 const promptHistoryEl = document.getElementById("prompt-history");
 const debugStreamToggle = document.getElementById("debug-stream-toggle");
 const downloadDebugLogBtn = document.getElementById("download-debug-log-btn");
@@ -38,6 +38,12 @@ const setLocalStorage = (values) => (
     : chrome.storage.local.set(values)
 );
 // encrypted-storage
+
+const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
+  ? window.migrateLegacySpaceKeys().catch((err) => {
+    console.warn("Projects migration failed:", err);
+  })
+  : Promise.resolve();
 
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
@@ -332,7 +338,7 @@ Promise.all([
     "or_history_limit",
     "or_debug_stream",
     "or_image_cache_limit_mb",
-    "or_collapse_on_spaces",
+    "or_collapse_on_projects",
     "or_provider_enabled_openrouter",
     "or_provider_enabled_naga"
   ]),
@@ -356,8 +362,8 @@ Promise.all([
   if (clearDebugLogBtn) {
     clearDebugLogBtn.disabled = !debugEnabled;
   }
-  if (collapseOnSpacesToggle) {
-    collapseOnSpacesToggle.checked = localItems.or_collapse_on_spaces !== false;
+  if (collapseOnProjectsToggle) {
+    collapseOnProjectsToggle.checked = localItems.or_collapse_on_projects !== false;
   }
 });
 
@@ -543,7 +549,8 @@ function showHistoryDetail(item) {
 }
 
 // Close detail panel
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await migrationPromise;
   const closeBtn = document.getElementById("history-close-detail");
   const previewColumn = document.getElementById("history-preview-column");
 
@@ -650,7 +657,7 @@ Promise.all([
 saveBtn.addEventListener("click", async () => {
   const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
-  const collapseOnSpaces = collapseOnSpacesToggle ? Boolean(collapseOnSpacesToggle.checked) : true;
+  const collapseOnProjects = collapseOnProjectsToggle ? Boolean(collapseOnProjectsToggle.checked) : true;
   const imageCacheLimitMb = imageCacheLimitInput
     ? normalizeImageCacheLimitMb(parseInt(imageCacheLimitInput.value, 10))
     : IMAGE_CACHE_LIMIT_DEFAULT;
@@ -658,7 +665,7 @@ saveBtn.addEventListener("click", async () => {
   // Model is optional - if not set, will use default from constants
   const dataToSave = {
     or_history_limit: historyLimit,
-    or_collapse_on_spaces: collapseOnSpaces,
+    or_collapse_on_projects: collapseOnProjects,
     [IMAGE_CACHE_LIMIT_KEY]: imageCacheLimitMb
   };
 
@@ -985,7 +992,8 @@ if (themeSelect) {
 }
 
 // ---- Load history on page load ----
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await migrationPromise;
   loadPromptHistory();
   setupKeyVisibilityToggles();
 });
