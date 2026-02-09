@@ -100,6 +100,45 @@ function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || '';
 }
 
+function modelSupportsReasoningSafe(model) {
+  if (typeof modelSupportsReasoning === 'function') {
+    return modelSupportsReasoning(model);
+  }
+  return true;
+}
+
+function applyReasoningToggleState(toggleEl, disabled) {
+  if (!toggleEl) return;
+  toggleEl.disabled = disabled;
+  if (disabled) {
+    toggleEl.checked = false;
+  }
+  const labelEl = toggleEl.closest('.chat-toggle') || toggleEl.closest('.toggle-label');
+  if (labelEl) {
+    labelEl.classList.toggle('disabled', disabled);
+  }
+}
+
+function applyChatReasoningAvailability(Project) {
+  const model = (() => {
+    if (!Project || !Project.model) return null;
+    const provider = normalizeProviderSafe(Project.modelProvider || currentProvider);
+    const combinedId = buildCombinedModelIdSafe(provider, Project.model);
+    return ProjectModelMap.get(combinedId) || null;
+  })();
+  const supports = modelSupportsReasoningSafe(model);
+  applyReasoningToggleState(elements.chatReasoning, supports === false);
+}
+
+function applyProjectReasoningAvailability(selectedModel = null) {
+  let model = selectedModel;
+  if (!model && elements.ProjectModel?.value) {
+    model = ProjectModelMap.get(elements.ProjectModel.value) || null;
+  }
+  const supports = modelSupportsReasoningSafe(model);
+  applyReasoningToggleState(elements.ProjectReasoning, supports === false);
+}
+
 function buildCombinedFavoritesList(favoritesByProvider) {
   const combined = [];
   ['openrouter', 'naga'].forEach((provider) => {
@@ -1688,6 +1727,7 @@ async function openThread(threadId) {
       imageModeEnabled = false;
     }
     updateChatModelIndicator(Project);
+    applyChatReasoningAvailability(Project);
   }
 
   elements.chatEmptyState.style.display = 'none';
@@ -1710,6 +1750,7 @@ async function createNewThread() {
       elements.chatImageMode.checked = false;
       imageModeEnabled = false;
     }
+    applyChatReasoningAvailability(Project);
   }
 
   const thread = await createThread(currentProjectId);
@@ -1757,6 +1798,7 @@ function openCreateProjectModal() {
   // Reset toggles
   elements.ProjectWebSearch.checked = false;
   elements.ProjectReasoning.checked = false;
+  applyProjectReasoningAvailability(null);
   elements.ProjectModal.style.display = 'flex';
   elements.ProjectName.focus();
 }
@@ -1782,6 +1824,7 @@ async function openEditProjectModal(projectId) {
   elements.ProjectInstructions.value = Project.customInstructions;
   elements.ProjectWebSearch.checked = Project.webSearch || false;
   elements.ProjectReasoning.checked = Project.reasoning || false;
+  applyProjectReasoningAvailability(ProjectModelMap.get(combinedId) || null);
   elements.emojiGrid.classList.remove('show');
 
   elements.ProjectModal.style.display = 'flex';
@@ -1975,6 +2018,7 @@ async function loadModels() {
             if (elements.ProjectModel) {
               elements.ProjectModel.value = modelId;
             }
+            applyProjectReasoningAvailability(selectedModel);
             return true;
           },
           onToggleFavorite: async (modelId, isFavorite) => {

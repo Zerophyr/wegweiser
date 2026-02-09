@@ -189,7 +189,13 @@ function parseModelsPayload(payload) {
   return list.map((model) => ({
     id: model.id,
     name: model.name || model.id,
-    ownedBy: model.owned_by || model.ownedBy || model.owner || ""
+    ownedBy: model.owned_by || model.ownedBy || model.owner || "",
+    capabilities: model.capabilities || model.capability || null,
+    architecture: model.architecture || model.arch || null,
+    metadata: model.metadata || null,
+    supportsReasoning: typeof model.supports_reasoning === "boolean"
+      ? model.supports_reasoning
+      : (typeof model.supportsReasoning === "boolean" ? model.supportsReasoning : undefined)
   }));
 }
 
@@ -361,6 +367,13 @@ function buildDataUrlFromBase64(base64, mimeType = "image/png") {
   return `data:${mimeType};base64,${base64}`;
 }
 
+function isNagaChatImageModel(modelId) {
+  if (!modelId || typeof modelId !== "string") return false;
+  const normalized = modelId.toLowerCase();
+  if (!normalized.startsWith("gemini-")) return false;
+  return normalized.includes("image");
+}
+
 function arrayBufferToBase64(buffer) {
   if (!buffer) return "";
   const bytes = new Uint8Array(buffer);
@@ -403,6 +416,38 @@ async function callImageGeneration(prompt, providerId, modelId) {
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
   try {
+    if (providerConfig.id === "naga" && isNagaChatImageModel(model)) {
+      const res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: buildAuthHeaders(apiKey, providerConfig),
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }]
+        }),
+        signal: controller.signal
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
+      }
+
+      const message = data?.choices?.[0]?.message || {};
+      const imageUrl = extractOpenRouterImageUrl(message);
+      if (!imageUrl) {
+        throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
+      }
+
+      const mimeMatch = imageUrl.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/png";
+
+      return {
+        imageId: crypto.randomUUID(),
+        mimeType,
+        dataUrl: imageUrl
+      };
+    }
+
     if (providerConfig.id === "naga") {
       const res = await fetch(`${providerConfig.baseUrl}/images/generations`, {
         method: "POST",

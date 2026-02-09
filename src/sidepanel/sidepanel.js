@@ -126,6 +126,27 @@ function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || "";
 }
 
+function modelSupportsReasoningSafe(model) {
+  if (typeof modelSupportsReasoning === "function") {
+    return modelSupportsReasoning(model);
+  }
+  return true;
+}
+
+function applyReasoningToggleAvailability(model) {
+  if (!reasoningToggle) return;
+  const supportsReasoning = modelSupportsReasoningSafe(model);
+  const disabled = supportsReasoning === false;
+  reasoningToggle.classList.toggle("disabled", disabled);
+  reasoningToggle.setAttribute("aria-disabled", disabled.toString());
+  if (disabled && reasoningEnabled) {
+    reasoningEnabled = false;
+    reasoningToggle.classList.remove("active");
+    reasoningToggle.setAttribute("aria-pressed", "false");
+    saveToggleSettings();
+  }
+}
+
 function buildCombinedFavoritesList() {
   const combined = [];
   ["openrouter", "naga"].forEach((provider) => {
@@ -1611,12 +1632,13 @@ async function loadModels() {
               console.log('[ModelSelect] response', res);
             }
 
-            if (res?.ok) {
-              selectedCombinedModelId = modelId;
-              currentProvider = provider;
-              modelStatusEl.textContent = `Using: ${displayName}`;
-              return true;
-            }
+          if (res?.ok) {
+            selectedCombinedModelId = modelId;
+            currentProvider = provider;
+            modelStatusEl.textContent = `Using: ${displayName}`;
+            applyReasoningToggleAvailability(selectedModel);
+            return true;
+          }
 
             modelStatusEl.textContent = "Failed to set model";
             return false;
@@ -1683,6 +1705,7 @@ async function loadModels() {
         modelInput.value = displayName;
       }
       modelStatusEl.textContent = `Using: ${displayName}`;
+      applyReasoningToggleAvailability(selected);
     } else {
       modelStatusEl.textContent = "Ready";
     }
@@ -1763,6 +1786,9 @@ webSearchToggle.addEventListener("click", async () => {
 });
 
 reasoningToggle.addEventListener("click", async () => {
+  if (reasoningToggle.getAttribute("aria-disabled") === "true") {
+    return;
+  }
   reasoningEnabled = !reasoningEnabled;
   reasoningToggle.classList.toggle("active");
   reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());

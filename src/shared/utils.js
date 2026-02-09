@@ -466,6 +466,32 @@ function removeReasoningBubbles(container) {
 }
 
 /**
+ * Determines if a model explicitly supports reasoning.
+ * Defaults to true when metadata is absent.
+ * @param {any} model
+ * @returns {boolean}
+ */
+function modelSupportsReasoning(model) {
+  if (!model || typeof model !== "object") return true;
+  const checks = [
+    model.supportsReasoning,
+    model.supports_reasoning,
+    model.reasoning,
+    model.capabilities?.reasoning,
+    model.capabilities?.supports_reasoning,
+    model.capabilities?.reasoning_support,
+    model.architecture?.supports_reasoning,
+    model.architecture?.reasoning,
+    model.metadata?.reasoning,
+    model.metadata?.supports_reasoning
+  ];
+  for (const value of checks) {
+    if (typeof value === "boolean") return value;
+  }
+  return true;
+}
+
+/**
  * Formats the active model label for a thread/project.
  * @param {{model?: string, modelDisplayName?: string}} project
  * @returns {string}
@@ -532,6 +558,7 @@ if (typeof module !== "undefined") {
     getTokenBarStyle,
     getStreamingFallbackMessage,
     removeReasoningBubbles,
+    modelSupportsReasoning,
     formatThreadModelLabel,
     buildSummarizerMessages
   };

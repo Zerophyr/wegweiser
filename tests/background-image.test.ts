@@ -30,5 +30,14 @@ describe("background image routing", () => {
     );
     expect(content).toMatch(/fetchImageAsDataUrl/);
   });
+
+  test("naga chat image models use chat completions", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/isNagaChatImageModel/);
+    expect(content).toMatch(/chat\/completions/);
+  });
 });
 

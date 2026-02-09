@@ -158,6 +158,17 @@ body {
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
 }
 
+.toggle-btn.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.toggle-btn.disabled:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
 .toggle-btn svg {
   width: 14px;
   height: 14px;
@@ -167,6 +178,14 @@ body {
 
 .toggle-btn.active svg {
   fill: var(--color-link);
+}
+
+.toggle-btn.disabled svg {
+  fill: var(--color-text-muted);
+}
+
+.toggle-btn.disabled + .toggle-label {
+  opacity: 0.6;
 }
 
 .toggle-label {

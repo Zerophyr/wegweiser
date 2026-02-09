@@ -1191,6 +1191,11 @@ body {
   font-size: 12px;
 }
 
+.chat-toggle.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .chat-toggle input {
   display: none;
 }
@@ -1223,6 +1228,14 @@ body {
 .chat-toggle input:checked + .chat-toggle-switch::after {
   left: 16px;
   background: #fff;
+}
+
+.chat-toggle input:disabled + .chat-toggle-switch {
+  background: var(--color-border);
+}
+
+.chat-toggle input:disabled + .chat-toggle-switch::after {
+  background: var(--color-text-muted);
 }
 
 .chat-toggle-text {
@@ -1594,6 +1607,11 @@ body {
   user-select: none;
 }
 
+.toggle-label.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .toggle-label input {
   display: none;
 }
@@ -1626,6 +1644,14 @@ body {
 .toggle-label input:checked + .toggle-switch::after {
   left: 21px;
   background: #fff;
+}
+
+.toggle-label input:disabled + .toggle-switch {
+  background: var(--color-border);
+}
+
+.toggle-label input:disabled + .toggle-switch::after {
+  background: var(--color-text-muted);
 }
 
 .toggle-text {
