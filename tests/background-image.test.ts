@@ -32,3 +32,21 @@ describe("background image routing", () => {
   });
 });
 
+describe("model cache refresh", () => {
+  test("models updated message type exists", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/shared/constants.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/MODELS_UPDATED/);
+  });
+
+  test("background broadcasts models_updated", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/models_updated/);
+  });
+});
+

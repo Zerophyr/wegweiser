@@ -96,6 +96,7 @@ export const MESSAGE_TYPES = {
   PROJECTS_QUERY: "projects_query",
   PROJECTS_STREAM: "projects_stream",
   IMAGE_QUERY: "image_query",
+  MODELS_UPDATED: "models_updated",
   DEBUG_GET_STREAM_LOG: "debug_get_stream_log",
   DEBUG_CLEAR_STREAM_LOG: "debug_clear_stream_log",
   DEBUG_SET_ENABLED: "debug_set_enabled",
@@ -106,7 +107,7 @@ export const MESSAGE_TYPES = {
 export const CACHE_TTL = {
   BALANCE: 60_000,        // 60 seconds
   CONFIG: 60_000,         // 60 seconds
-  MODELS: 3_600_000,      // 1 hour
+  MODELS: 21_600_000,     // 6 hours
   IMAGE: 10_800_000       // 3 hours
 };
 
@@ -140,7 +141,8 @@ export const ERROR_MESSAGES = {
   API_ERROR: "API error. Please try again later.",
   RATE_LIMIT: "Rate limit exceeded. Please wait a moment and try again.",
   INVALID_RESPONSE: "Invalid response from API. Please try again.",
-  TIMEOUT: "Request timed out. Please try again."
+  TIMEOUT: "Request timed out. Please try again.",
+  IMAGE_MODEL_REQUIRED: "Selected model is not image-capable. Pick an image-only model."
 };
 
 // API configuration
