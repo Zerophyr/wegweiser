@@ -21,4 +21,17 @@ describe("modelSupportsReasoning", () => {
     expect(modelSupportsReasoning(null)).toBe(true);
     expect(modelSupportsReasoning(undefined)).toBe(true);
   });
+
+  test("uses supported_parameters when provided", () => {
+    expect(modelSupportsReasoning({ supported_parameters: ["reasoning_effort"] })).toBe(true);
+    expect(modelSupportsReasoning({ supported_parameters: ["reasoning"] })).toBe(true);
+    expect(modelSupportsReasoning({ supported_parameters: ["temperature"] })).toBe(false);
+  });
+
+  test("does not disable reasoning for naga when supported_parameters lacks reasoning", () => {
+    expect(modelSupportsReasoning({
+      provider: "naga",
+      supported_parameters: ["temperature"]
+    })).toBe(true);
+  });
 });

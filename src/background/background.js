@@ -200,25 +200,27 @@ function parseModelsPayload(payload) {
     const supportedEndpoints = Array.isArray(model?.supported_endpoints)
       ? model.supported_endpoints
       : (Array.isArray(model?.supportedEndpoints) ? model.supportedEndpoints : []);
+    const supportedParametersRaw = Array.isArray(model?.supported_parameters)
+      ? model.supported_parameters
+      : (Array.isArray(model?.supportedParameters) ? model.supportedParameters : null);
+    const supportedParameters = supportedParametersRaw
+      ? supportedParametersRaw.map((value) => String(value).toLowerCase())
+      : null;
     const architecture = model?.architecture || model?.arch || null;
     const derived = deriveModelCapabilities({
       supported_endpoints: supportedEndpoints,
       architecture
     });
-    const rawCapabilities = model?.capabilities || model?.capability || null;
 
     return {
       id: model.id,
       name: model.name || model.id,
       ownedBy: model.owned_by || model.ownedBy || model.owner || "",
       supportedEndpoints,
-      architecture,
-      capabilities: rawCapabilities,
-      metadata: model.metadata || null,
+      supportedParameters,
       supportsReasoning: typeof model.supports_reasoning === "boolean"
         ? model.supports_reasoning
         : (typeof model.supportsReasoning === "boolean" ? model.supportsReasoning : undefined),
-      reasoning: typeof model.reasoning === "boolean" ? model.reasoning : undefined,
       supportsChat: Boolean(derived?.supportsChat),
       supportsImages: Boolean(derived?.supportsImages),
       outputsImage: Boolean(derived?.outputsImage),
@@ -876,7 +878,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 supportsImages: Boolean(model.supportsImages),
                 outputsImage: Boolean(model.outputsImage),
                 isImageOnly: Boolean(model.isImageOnly),
-                capabilities: model.capabilities || null
+                supportedParameters: model.supportedParameters || null
               });
             });
           } catch (e) {

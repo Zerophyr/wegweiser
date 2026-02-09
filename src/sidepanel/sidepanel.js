@@ -1735,11 +1735,13 @@ async function loadModels() {
       await applyImageModeForModel(selected);
     } else {
       modelStatusEl.textContent = "Ready";
+      applyReasoningToggleAvailability(null);
       await applyImageModeForModel(null);
     }
   } catch (e) {
     console.error("Error loading models:", e);
     modelStatusEl.textContent = "Error loading models";
+    applyReasoningToggleAvailability(null);
     await applyImageModeForModel(null);
   }
 }

@@ -1,8 +1,13 @@
 // model-capabilities.js - derive model capabilities from provider metadata
 
 function normalizeModalities(list) {
-  if (!Array.isArray(list)) return [];
-  return list.map((value) => String(value).toLowerCase());
+  if (Array.isArray(list)) {
+    return list.map((value) => String(value).toLowerCase());
+  }
+  if (typeof list === "string") {
+    return [list.toLowerCase()];
+  }
+  return [];
 }
 
 function deriveModelCapabilities(model) {

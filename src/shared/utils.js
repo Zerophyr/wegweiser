@@ -473,6 +473,30 @@ function removeReasoningBubbles(container) {
  */
 function modelSupportsReasoning(model) {
   if (!model || typeof model !== "object") return true;
+  const supportedParameters = Array.isArray(model.supportedParameters)
+    ? model.supportedParameters
+    : (Array.isArray(model.supported_parameters) ? model.supported_parameters : null);
+  const providerId = typeof model.provider === "string"
+    ? model.provider
+    : (typeof model.id === "string" && model.id.includes(":")
+      ? model.id.split(":")[0]
+      : null);
+  if (supportedParameters) {
+    if (providerId === "naga") {
+      return true;
+    }
+    const normalized = supportedParameters
+      .map((value) => {
+        if (typeof value === "string") return value.toLowerCase();
+        if (value && typeof value === "object") {
+          if (typeof value.name === "string") return value.name.toLowerCase();
+          if (typeof value.id === "string") return value.id.toLowerCase();
+        }
+        return "";
+      })
+      .filter(Boolean);
+    return normalized.includes("reasoning") || normalized.includes("reasoning_effort");
+  }
   const checks = [
     model.supportsReasoning,
     model.supports_reasoning,

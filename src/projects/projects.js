@@ -2087,6 +2087,15 @@ async function loadModels() {
         ProjectModelDropdown.setRecentlyUsed(buildCombinedRecentList(ProjectRecentModelsByProvider));
       }
 
+      if (elements.ProjectModel?.value) {
+        const selected = ProjectModelMap.get(elements.ProjectModel.value) || null;
+        applyProjectReasoningAvailability(selected);
+      }
+
+      if (currentProjectData) {
+        applyChatReasoningAvailability(currentProjectData);
+      }
+
       if (elements.ProjectModel) {
         const currentCombinedId = elements.ProjectModel.value || '';
         elements.ProjectModel.innerHTML = '<option value="">Use default model</option>' +

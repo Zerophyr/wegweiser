@@ -27,4 +27,13 @@ describe("model capabilities", () => {
     const caps = { supportsChat: true, outputsImage: true, supportsImages: true };
     expect(resolveImageRouteFromCapabilities(caps)).toBe("chat");
   });
+
+  test("handles output_modalities as string", () => {
+    const model = {
+      supported_endpoints: ["/chat/completions"],
+      architecture: { output_modalities: "image" }
+    };
+    const caps = deriveModelCapabilities(model);
+    expect(caps.outputsImage).toBe(true);
+  });
 });
