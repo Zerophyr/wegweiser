@@ -26,6 +26,8 @@ const setLocalStorage = (values) => (
     : chrome.storage.local.set(values)
 );
 // encrypted-storage
+const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
+const SIDEPANEL_PROJECT_ID = "__sidepanel__";
 
 const promptEl = document.getElementById("prompt");
 const answerEl = document.getElementById("answer");
@@ -296,6 +298,11 @@ async function getCurrentTabId() {
   }
 }
 
+async function getSidepanelThreadId() {
+  const tabId = await getCurrentTabId();
+  return `sidepanel_${tabId}`;
+}
+
 function scheduleAnswerPersist() {
   if (answerPersistTimeout) {
     clearTimeout(answerPersistTimeout);
@@ -309,12 +316,31 @@ function scheduleAnswerPersist() {
 }
 
 async function persistAnswers() {
-  const storage = getAnswerStorage();
-  if (!storage || !answerEl) return;
-  const tabId = await getCurrentTabId();
-  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
+  if (!answerEl) return;
   const html = answerEl.innerHTML || "";
   const metaText = metaEl?.textContent || "";
+  if (chatStore && typeof chatStore.putThread === "function") {
+    const threadId = await getSidepanelThreadId();
+    if (!html.trim()) {
+      if (typeof chatStore.deleteThread === "function") {
+        await chatStore.deleteThread(threadId);
+      }
+      return;
+    }
+    await chatStore.putThread({
+      id: threadId,
+      projectId: SIDEPANEL_PROJECT_ID,
+      title: "Sidepanel",
+      html,
+      metaText,
+      updatedAt: Date.now()
+    });
+    return;
+  }
+  const storage = getAnswerStorage();
+  if (!storage) return;
+  const tabId = await getCurrentTabId();
+  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
   if (!html.trim()) {
     if (typeof storage.remove === "function") {
       await storage.remove([key]);
@@ -327,8 +353,24 @@ async function persistAnswers() {
 }
 
 async function restorePersistedAnswers() {
+  if (!answerEl) return;
+  if (chatStore && typeof chatStore.getThread === "function") {
+    const threadId = await getSidepanelThreadId();
+    const payload = await chatStore.getThread(threadId);
+    if (payload?.html) {
+      answerEl.innerHTML = payload.html;
+      if (payload.metaText) {
+        metaEl.textContent = payload.metaText;
+      }
+      updateAnswerVisibility();
+    } else {
+      answerEl.innerHTML = "";
+      updateAnswerVisibility();
+    }
+    return;
+  }
   const storage = getAnswerStorage();
-  if (!storage || !answerEl) return;
+  if (!storage) return;
   const tabId = await getCurrentTabId();
   const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
   const stored = await storage.get([key]);
