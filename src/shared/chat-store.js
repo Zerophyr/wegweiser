@@ -4,16 +4,22 @@ const { encryptJson, decryptJson } = require("./crypto-store.js");
 
 const CHAT_STORE_DB = "wegweiser-chat-store";
 const STORE_NAMES = {
+  PROJECTS: "projects",
   THREADS: "threads",
-  MESSAGES: "messages"
+  MESSAGES: "messages",
+  SUMMARIES: "summaries",
+  ARCHIVES: "archives"
 };
 
 let cachedStore = null;
 
 function createMemoryChatStore() {
   return {
+    projects: new Map(),
     threads: new Map(),
-    messages: new Map()
+    messages: new Map(),
+    summaries: new Map(),
+    archives: new Map()
   };
 }
 
@@ -27,10 +33,21 @@ function openChatStoreDb(idb) {
         const store = db.createObjectStore(STORE_NAMES.THREADS, { keyPath: "id" });
         store.createIndex("projectId", "projectId", { unique: false });
       }
+      if (!db.objectStoreNames.contains(STORE_NAMES.PROJECTS)) {
+        db.createObjectStore(STORE_NAMES.PROJECTS, { keyPath: "id" });
+      }
       if (!db.objectStoreNames.contains(STORE_NAMES.MESSAGES)) {
         const store = db.createObjectStore(STORE_NAMES.MESSAGES, { keyPath: "id" });
         store.createIndex("threadId", "threadId", { unique: false });
         store.createIndex("createdAt", "createdAt", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STORE_NAMES.SUMMARIES)) {
+        const store = db.createObjectStore(STORE_NAMES.SUMMARIES, { keyPath: "id" });
+        store.createIndex("threadId", "threadId", { unique: true });
+      }
+      if (!db.objectStoreNames.contains(STORE_NAMES.ARCHIVES)) {
+        const store = db.createObjectStore(STORE_NAMES.ARCHIVES, { keyPath: "id" });
+        store.createIndex("threadId", "threadId", { unique: true });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -66,6 +83,24 @@ function createIndexedDbChatStore(idb) {
   };
 
   return {
+    async putProject(record) {
+      return run(STORE_NAMES.PROJECTS, "readwrite", (store) => store.put(record));
+    },
+    async getProject(projectId) {
+      if (!projectId) return null;
+      return run(STORE_NAMES.PROJECTS, "readonly", (store) => new Promise((resolve, reject) => {
+        const req = store.get(projectId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      }));
+    },
+    async getProjects() {
+      return run(STORE_NAMES.PROJECTS, "readonly", (store) => new Promise((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }));
+    },
     async putThread(record) {
       return run(STORE_NAMES.THREADS, "readwrite", (store) => store.put(record));
     },
@@ -86,6 +121,28 @@ function createIndexedDbChatStore(idb) {
         const index = store.index("threadId");
         const req = index.getAll(threadId);
         req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }));
+    },
+    async putSummary(record) {
+      return run(STORE_NAMES.SUMMARIES, "readwrite", (store) => store.put(record));
+    },
+    async getSummary(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.SUMMARIES, "readonly", (store) => new Promise((resolve, reject) => {
+        const req = store.get(threadId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      }));
+    },
+    async putArchive(record) {
+      return run(STORE_NAMES.ARCHIVES, "readwrite", (store) => store.put(record));
+    },
+    async getArchive(threadId) {
+      if (!threadId) return null;
+      return run(STORE_NAMES.ARCHIVES, "readonly", (store) => new Promise((resolve, reject) => {
+        const req = store.get(threadId);
+        req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => reject(req.error);
       }));
     }
@@ -136,12 +193,13 @@ async function getThread(threadId, store) {
 async function putMessage(message, store) {
   const adapter = store || getDefaultStore();
   if (!message || !message.id || !message.threadId) return null;
+  const createdAt = message.createdAt || message.meta?.createdAt || Date.now();
   const encrypted = await encryptJson(message);
   const record = {
     id: message.id,
     threadId: message.threadId,
     role: message.role || null,
-    createdAt: message.createdAt || null,
+    createdAt,
     data: encrypted.data,
     iv: encrypted.iv,
     alg: encrypted.alg,
@@ -168,6 +226,126 @@ async function getMessages(threadId, store) {
     const decrypted = await decryptJson(record);
     if (decrypted) result.push(decrypted);
   }
+  result.sort((a, b) => {
+    const aTime = typeof a?.createdAt === "number" ? a.createdAt : 0;
+    const bTime = typeof b?.createdAt === "number" ? b.createdAt : 0;
+    return aTime - bTime;
+  });
+  return result;
+}
+
+async function setSummary(threadId, summary, summaryUpdatedAt, store) {
+  const adapter = store || getDefaultStore();
+  if (!threadId) return null;
+  const payload = {
+    threadId,
+    summary: summary || "",
+    summaryUpdatedAt: summaryUpdatedAt || null
+  };
+  const encrypted = await encryptJson(payload);
+  const record = {
+    id: threadId,
+    threadId,
+    updatedAt: summaryUpdatedAt || null,
+    data: encrypted.data,
+    iv: encrypted.iv,
+    alg: encrypted.alg,
+    v: encrypted.v
+  };
+  if (typeof adapter.putSummary === "function") {
+    await adapter.putSummary(record);
+  } else {
+    adapter.summaries.set(threadId, record);
+  }
+  return payload;
+}
+
+async function getSummary(threadId, store) {
+  const adapter = store || getDefaultStore();
+  if (!threadId) return null;
+  const record = typeof adapter.getSummary === "function"
+    ? await adapter.getSummary(threadId)
+    : (adapter.summaries.get(threadId) || null);
+  if (!record) return null;
+  return decryptJson(record);
+}
+
+async function setArchivedMessages(threadId, archivedMessages, archivedUpdatedAt, store) {
+  const adapter = store || getDefaultStore();
+  if (!threadId) return null;
+  const payload = {
+    threadId,
+    archivedMessages: Array.isArray(archivedMessages) ? archivedMessages : [],
+    archivedUpdatedAt: archivedUpdatedAt || null
+  };
+  const encrypted = await encryptJson(payload);
+  const record = {
+    id: threadId,
+    threadId,
+    updatedAt: archivedUpdatedAt || null,
+    data: encrypted.data,
+    iv: encrypted.iv,
+    alg: encrypted.alg,
+    v: encrypted.v
+  };
+  if (typeof adapter.putArchive === "function") {
+    await adapter.putArchive(record);
+  } else {
+    adapter.archives.set(threadId, record);
+  }
+  return payload;
+}
+
+async function getArchivedMessages(threadId, store) {
+  const adapter = store || getDefaultStore();
+  if (!threadId) return null;
+  const record = typeof adapter.getArchive === "function"
+    ? await adapter.getArchive(threadId)
+    : (adapter.archives.get(threadId) || null);
+  if (!record) return null;
+  return decryptJson(record);
+}
+
+async function putProject(project, store) {
+  const adapter = store || getDefaultStore();
+  if (!project || !project.id) return null;
+  const encrypted = await encryptJson(project);
+  const record = {
+    id: project.id,
+    updatedAt: project.updatedAt || null,
+    data: encrypted.data,
+    iv: encrypted.iv,
+    alg: encrypted.alg,
+    v: encrypted.v
+  };
+  if (typeof adapter.putProject === "function") {
+    await adapter.putProject(record);
+  } else {
+    adapter.projects.set(project.id, record);
+  }
+  return project;
+}
+
+async function getProject(projectId, store) {
+  const adapter = store || getDefaultStore();
+  if (!projectId) return null;
+  const record = typeof adapter.getProject === "function"
+    ? await adapter.getProject(projectId)
+    : (adapter.projects.get(projectId) || null);
+  if (!record) return null;
+  return decryptJson(record);
+}
+
+async function getProjects(store) {
+  const adapter = store || getDefaultStore();
+  const list = typeof adapter.getProjects === "function"
+    ? await adapter.getProjects()
+    : Array.from(adapter.projects.values());
+  const result = [];
+  for (const record of list || []) {
+    const decrypted = await decryptJson(record);
+    if (decrypted) result.push(decrypted);
+  }
   return result;
 }
 
@@ -175,9 +353,16 @@ if (typeof module !== "undefined") {
   module.exports = {
     createMemoryChatStore,
     createIndexedDbChatStore,
+    putProject,
+    getProject,
+    getProjects,
     putThread,
     getThread,
     putMessage,
-    getMessages
+    getMessages,
+    setSummary,
+    getSummary,
+    setArchivedMessages,
+    getArchivedMessages
   };
 }

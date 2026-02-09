@@ -1,6 +1,14 @@
 export {};
+
+jest.mock("../src/shared/crypto-store.js", () => ({
+  encryptJson: async (value: any) => ({ alg: "AES-GCM", iv: "iv", data: JSON.stringify(value) }),
+  decryptJson: async (payload: any) => JSON.parse(payload.data)
+}));
+
 const {
   createMemoryChatStore,
+  putProject,
+  getProjects,
   putThread,
   getThread,
   putMessage,
@@ -17,4 +25,12 @@ test("chat store memory adapter stores and retrieves threads + messages", async 
   expect(thread?.title).toBe("Hello");
   expect(messages).toHaveLength(1);
   expect(messages[0].content).toBe("Hi");
+});
+
+test("chat store memory adapter stores and retrieves projects", async () => {
+  const store = createMemoryChatStore();
+  await putProject({ id: "p1", name: "Project" }, store);
+  const projects = await getProjects(store);
+  expect(projects).toHaveLength(1);
+  expect(projects[0].name).toBe("Project");
 });
