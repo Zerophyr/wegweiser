@@ -13,14 +13,61 @@ const STORE_NAMES = {
 
 let cachedStore = null;
 
-function createMemoryChatStore() {
+function estimateRecordSize(record) {
+  if (!record) return 0;
+  try {
+    const json = JSON.stringify(record);
+    if (typeof Blob !== "undefined") {
+      return new Blob([json]).size;
+    }
+    if (typeof TextEncoder !== "undefined") {
+      return new TextEncoder().encode(json).length;
+    }
+    return json.length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function createEmptyStats() {
   return {
+    bytesUsed: 0,
+    counts: {
+      projects: 0,
+      threads: 0,
+      messages: 0,
+      summaries: 0,
+      archives: 0
+    }
+  };
+}
+
+function createMemoryChatStore() {
+  const store = {
     projects: new Map(),
     threads: new Map(),
     messages: new Map(),
     summaries: new Map(),
     archives: new Map()
   };
+  store.stats = async () => {
+    const stats = createEmptyStats();
+    stats.counts.projects = store.projects.size;
+    stats.counts.threads = store.threads.size;
+    stats.counts.summaries = store.summaries.size;
+    stats.counts.archives = store.archives.size;
+    store.projects.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    store.threads.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    store.summaries.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    store.archives.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    store.messages.forEach((list) => {
+      const items = Array.isArray(list) ? list : [];
+      stats.counts.messages += items.length;
+      items.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    });
+    return stats;
+  };
+  return store;
 }
 
 function openChatStoreDb(idb) {
@@ -83,6 +130,35 @@ function createIndexedDbChatStore(idb) {
   };
 
   return {
+    async stats() {
+      const db = await getDb();
+      if (!db) return createEmptyStats();
+      return new Promise((resolve, reject) => {
+        const stats = createEmptyStats();
+        const storeNames = Object.values(STORE_NAMES);
+        const tx = db.transaction(storeNames, "readonly");
+
+        storeNames.forEach((storeName) => {
+          const store = tx.objectStore(storeName);
+          const req = store.openCursor();
+          req.onsuccess = () => {
+            const cursor = req.result;
+            if (!cursor) return;
+            stats.bytesUsed += estimateRecordSize(cursor.value);
+            if (storeName === STORE_NAMES.PROJECTS) stats.counts.projects += 1;
+            if (storeName === STORE_NAMES.THREADS) stats.counts.threads += 1;
+            if (storeName === STORE_NAMES.MESSAGES) stats.counts.messages += 1;
+            if (storeName === STORE_NAMES.SUMMARIES) stats.counts.summaries += 1;
+            if (storeName === STORE_NAMES.ARCHIVES) stats.counts.archives += 1;
+            cursor.continue();
+          };
+          req.onerror = () => {};
+        });
+
+        tx.oncomplete = () => resolve(stats);
+        tx.onerror = () => reject(tx.error);
+      });
+    },
     async putProject(record) {
       return run(STORE_NAMES.PROJECTS, "readwrite", (store) => store.put(record));
     },
@@ -460,6 +536,39 @@ async function deleteThread(threadId, store) {
   return true;
 }
 
+async function getChatStoreStats(store) {
+  const adapter = store || getDefaultStore();
+  if (typeof adapter?.stats === "function") {
+    return adapter.stats();
+  }
+  if (!adapter) return createEmptyStats();
+  const stats = createEmptyStats();
+  if (adapter.projects instanceof Map) {
+    stats.counts.projects = adapter.projects.size;
+    adapter.projects.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+  }
+  if (adapter.threads instanceof Map) {
+    stats.counts.threads = adapter.threads.size;
+    adapter.threads.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+  }
+  if (adapter.summaries instanceof Map) {
+    stats.counts.summaries = adapter.summaries.size;
+    adapter.summaries.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+  }
+  if (adapter.archives instanceof Map) {
+    stats.counts.archives = adapter.archives.size;
+    adapter.archives.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+  }
+  if (adapter.messages instanceof Map) {
+    adapter.messages.forEach((list) => {
+      const items = Array.isArray(list) ? list : [];
+      stats.counts.messages += items.length;
+      items.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    });
+  }
+  return stats;
+}
+
 if (typeof window !== "undefined") {
   window.chatStore = {
     createMemoryChatStore,
@@ -478,8 +587,10 @@ if (typeof window !== "undefined") {
     setSummary,
     getSummary,
     setArchivedMessages,
-    getArchivedMessages
+    getArchivedMessages,
+    getStats: getChatStoreStats
   };
+  window.getChatStoreStats = getChatStoreStats;
 }
 
 if (typeof module !== "undefined") {
@@ -500,6 +611,7 @@ if (typeof module !== "undefined") {
     setSummary,
     getSummary,
     setArchivedMessages,
-    getArchivedMessages
+    getArchivedMessages,
+    getChatStoreStats
   };
 }

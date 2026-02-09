@@ -40,6 +40,14 @@ function buildImageCard(options = {}) {
     hint.className = "image-card-hint";
     hint.textContent = "Expires in ~3 hours";
     body.appendChild(hint);
+
+    const disclaimer = document.createElement("div");
+    disclaimer.className = "image-card-disclaimer";
+    disclaimer.innerHTML = `
+      <span class="image-card-disclaimer-icon">!</span>
+      <span>AUTO-DELETE IN 3 HOURS — Download now to keep it.</span>
+    `;
+    body.appendChild(disclaimer);
   }
 
   const actions = document.createElement("div");

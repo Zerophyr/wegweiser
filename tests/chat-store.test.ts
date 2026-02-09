@@ -15,7 +15,8 @@ const {
   getThreadsByProject,
   deleteThread,
   putMessage,
-  getMessages
+  getMessages,
+  getChatStoreStats
 } = require("../src/shared/chat-store.js");
 
 test("chat store memory adapter stores and retrieves threads + messages", async () => {
@@ -61,4 +62,16 @@ test("chat store deletes threads", async () => {
   await deleteThread("t1", store);
   const thread = await getThread("t1", store);
   expect(thread).toBeNull();
+});
+
+test("chat store stats counts records", async () => {
+  const store = createMemoryChatStore();
+  await putProject({ id: "p1", name: "Project" }, store);
+  await putThread({ id: "t1", projectId: "p1", title: "Thread" }, store);
+  await putMessage({ id: "m1", threadId: "t1", role: "user", content: "Hi" }, store);
+  const stats = await getChatStoreStats(store);
+  expect(stats.bytesUsed).toBeGreaterThan(0);
+  expect(stats.counts.projects).toBe(1);
+  expect(stats.counts.threads).toBe(1);
+  expect(stats.counts.messages).toBe(1);
 });

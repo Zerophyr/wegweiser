@@ -13,7 +13,8 @@
 - 💰 **Token Insights** - Token estimate + usage bar before and after sending
 - 🧾 **Adaptive Summaries** - Automatic summaries keep long Spaces threads usable
 - 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
-- 🔐 **Encrypted Local Storage** - Sensitive data encrypted at rest with a device-local key
+- 🗃️ **Encrypted IndexedDB Chats** - Chat data stored in IndexedDB with AES-GCM encryption
+- 🔐 **Encrypted Local Settings** - Sensitive settings encrypted at rest with a device-local key
 - 🌐 **Web Search** - Enable web search for up-to-date information
 - 🧠 **Reasoning Mode** - Real-time streaming reasoning display for complex queries
 - 🖼️ **Image Generation** - Generate images and view/download in the sidebar or Spaces
@@ -103,7 +104,8 @@ Wegweiser-extension/
 ## 🔒 Privacy & Security
 
 - **Local API Key Storage** - API keys stored locally only (not synced)
-- **Encrypted at Rest** - Sensitive local data is encrypted with a device-local key (no passphrase)
+- **Encrypted at Rest** - Settings and chat data are encrypted with a device-local key (no passphrase)
+- **Encrypted Chat Storage** - Chats live in IndexedDB, encrypted per record
 - **Masked Keys** - API/provisioning keys are hidden by default with a visibility toggle
 - **Content Security Policy** - Strict CSP prevents injection attacks
 - **Input Validation** - All user input sanitized
@@ -118,6 +120,7 @@ Wegweiser-extension/
 - 🔐 **Encrypted Local Storage** - Sensitive local data encrypted at rest with a device-local key
 - 🧩 **Automatic Migration** - Plaintext settings are migrated to encrypted storage on first read
 - 🛡️ **No Passphrase Required** - Encryption is transparent with no extra steps for users
+- 🗃️ **Encrypted IndexedDB Chats** - Chat data migrated to IndexedDB and encrypted at rest
 
 ### v1.1.4
 - 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled

@@ -582,32 +582,40 @@ function buildStorageLabel(label, bytesUsed, maxBytes = null) {
   return `${label}: ${formatBytes(bytesUsed)}`;
 }
 
-async function getImageStorageUsage() {
-  if (typeof getImageStoreStats !== 'function') {
-    return { bytesUsed: 0, percentUsed: null, quotaBytes: null };
-  }
-  const stats = await getImageStoreStats();
+async function getIndexedDbStorageUsage() {
+  let imageBytes = 0;
+  let chatBytes = 0;
   let quotaBytes = null;
   let percentUsed = null;
 
-  try {
-    const localItems = await getLocalStorage([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
-    const limitMb = normalizeImageCacheLimitMb(localItems[STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
-    quotaBytes = limitMb * 1024 * 1024;
-    if (typeof stats?.bytesUsed === 'number' && quotaBytes > 0) {
-      percentUsed = (stats.bytesUsed / quotaBytes) * 100;
+  if (typeof getImageStoreStats === 'function') {
+    const imageStats = await getImageStoreStats();
+    if (typeof imageStats?.bytesUsed === 'number') {
+      imageBytes = imageStats.bytesUsed;
     }
-  } catch (e) {
-    console.warn('Failed to load image cache limit:', e);
   }
 
-  if (!quotaBytes && navigator?.storage?.estimate) {
+  if (typeof getChatStoreStats === 'function') {
+    const chatStats = await getChatStoreStats();
+    if (typeof chatStats?.bytesUsed === 'number') {
+      chatBytes = chatStats.bytesUsed;
+    }
+  } else if (window?.chatStore?.getStats) {
+    const chatStats = await window.chatStore.getStats();
+    if (typeof chatStats?.bytesUsed === 'number') {
+      chatBytes = chatStats.bytesUsed;
+    }
+  }
+
+  const bytesUsed = imageBytes + chatBytes;
+
+  if (navigator?.storage?.estimate) {
     try {
       const estimate = await navigator.storage.estimate();
       if (typeof estimate?.quota === 'number') {
         quotaBytes = estimate.quota;
-        if (typeof stats?.bytesUsed === 'number' && estimate.quota > 0) {
-          percentUsed = (stats.bytesUsed / estimate.quota) * 100;
+        if (quotaBytes > 0) {
+          percentUsed = (bytesUsed / quotaBytes) * 100;
         }
       }
     } catch (e) {
@@ -616,7 +624,7 @@ async function getImageStorageUsage() {
   }
 
   return {
-    bytesUsed: stats?.bytesUsed || 0,
+    bytesUsed,
     percentUsed,
     quotaBytes
   };
@@ -784,8 +792,6 @@ function initElements() {
   elements.spacesSettingsBtn = document.getElementById('spaces-settings-btn');
   elements.emptyCreateBtn = document.getElementById('empty-create-btn');
   elements.storageFooter = document.getElementById('storage-footer');
-  elements.storageFill = document.getElementById('storage-fill-local');
-  elements.storageText = document.getElementById('storage-text-local');
   elements.storageFillImages = document.getElementById('storage-fill-images');
   elements.storageTextImages = document.getElementById('storage-text-images');
   elements.storageWarning = document.getElementById('storage-warning');
@@ -1353,40 +1359,65 @@ if (typeof window !== 'undefined' && window.__TEST__) {
 }
 
 async function renderStorageUsage() {
-  const usage = await checkStorageUsage();
-
-  elements.storageFill.style.width = `${Math.min(usage.percentUsed, 100)}%`;
-  elements.storageText.textContent = buildStorageLabel('Local Storage (settings)', usage.bytesInUse, usage.maxBytes);
-
-  // Update fill color based on usage
-  elements.storageFill.classList.remove('warning', 'danger');
-  if (usage.percentUsed >= 85) {
-    elements.storageFill.classList.add('danger');
-  } else if (usage.percentUsed >= 70) {
-    elements.storageFill.classList.add('warning');
+  if (!elements.storageFillImages || !elements.storageTextImages) {
+    return;
   }
 
-  // Show warning banner if needed
-  if (usage.percentUsed >= 95) {
-    showStorageWarning('critical', 'Storage full. Delete threads to free space.');
-  } else if (usage.percentUsed >= 85) {
-    showStorageWarning('high', 'Storage almost full. Delete threads to continue using Spaces.');
-  } else if (usage.percentUsed >= 70) {
-    showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads.');
+  if (!renderStorageUsage._lastUpdate) {
+    renderStorageUsage._lastUpdate = 0;
+    renderStorageUsage._cachedUsage = null;
+    renderStorageUsage._inflight = null;
+  }
+
+  const now = Date.now();
+  const maxAgeMs = 30_000;
+  const hasFreshCache = renderStorageUsage._cachedUsage && (now - renderStorageUsage._lastUpdate) < maxAgeMs;
+
+  if (!hasFreshCache) {
+    if (!renderStorageUsage._inflight) {
+      renderStorageUsage._inflight = getIndexedDbStorageUsage()
+        .then((usage) => {
+          renderStorageUsage._cachedUsage = usage;
+          renderStorageUsage._lastUpdate = Date.now();
+          return usage;
+        })
+        .finally(() => {
+          renderStorageUsage._inflight = null;
+        });
+    }
+    renderStorageUsage._cachedUsage = await renderStorageUsage._inflight;
+  }
+
+  const storageUsage = renderStorageUsage._cachedUsage || { bytesUsed: 0, percentUsed: 0, quotaBytes: null };
+  const percentUsed = typeof storageUsage.percentUsed === 'number' ? storageUsage.percentUsed : 0;
+
+  elements.storageTextImages.textContent = buildStorageLabel('IndexedDB Storage', storageUsage.bytesUsed, storageUsage.quotaBytes);
+  elements.storageFillImages.style.width = `${Math.min(percentUsed, 100)}%`;
+
+  elements.storageFillImages.classList.remove('warning', 'danger');
+  if (percentUsed >= 85) {
+    elements.storageFillImages.classList.add('danger');
+  } else if (percentUsed >= 70) {
+    elements.storageFillImages.classList.add('warning');
+  }
+
+  if (percentUsed >= 95) {
+    showStorageWarning('critical', 'Storage full. Delete images or threads to free space.');
+  } else if (percentUsed >= 85) {
+    showStorageWarning('high', 'Storage almost full. Delete images or threads to continue using Spaces.');
+  } else if (percentUsed >= 70) {
+    showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads or images.');
   } else {
     hideStorageWarning();
   }
+}
+renderStorageUsage._cachedUsage = null;
+renderStorageUsage._lastUpdate = 0;
+renderStorageUsage._inflight = null;
 
-  if (elements.storageFillImages && elements.storageTextImages) {
-    elements.storageTextImages.textContent = 'Loading image storage...';
-    const imageUsage = await getImageStorageUsage();
-    elements.storageTextImages.textContent = buildStorageLabel('Image Storage (IndexedDB)', imageUsage.bytesUsed, imageUsage.quotaBytes);
-    if (typeof imageUsage.percentUsed === 'number') {
-      elements.storageFillImages.style.width = `${Math.min(imageUsage.percentUsed, 100)}%`;
-    } else {
-      elements.storageFillImages.style.width = '30%';
-    }
-  }
+function invalidateStorageUsageCache() {
+  renderStorageUsage._cachedUsage = null;
+  renderStorageUsage._lastUpdate = 0;
 }
 
 function showStorageWarning(level, message) {
@@ -1758,6 +1789,7 @@ async function handleSpaceFormSubmit(e) {
     }
 
     closeSpaceModal();
+    invalidateStorageUsageCache();
     await renderSpacesList();
     await renderStorageUsage();
   } catch (err) {
@@ -1836,6 +1868,7 @@ async function handleDeleteConfirm() {
       if (currentSpaceId === deletingItem.id) {
         showView('list');
       }
+      invalidateStorageUsageCache();
       await renderSpacesList();
     } else {
       await deleteThread(deletingItem.id);
@@ -1846,6 +1879,7 @@ async function handleDeleteConfirm() {
         elements.chatEmptyState.style.display = 'flex';
         elements.chatContainer.style.display = 'none';
       }
+      invalidateStorageUsageCache();
       await renderThreadList();
     }
 
