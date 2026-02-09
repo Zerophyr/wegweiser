@@ -79,6 +79,106 @@ describe("ModelDropdownManager storage keys", () => {
     delete globalAny.getEncrypted;
   });
 
+  test("loadRecentlyUsedModels normalizes invalid stored value", async () => {
+    const globalAny = global as any;
+    globalAny.getEncrypted = jest.fn().mockResolvedValue({ recent_key: { bad: true } });
+    globalAny.setEncrypted = jest.fn().mockResolvedValue(undefined);
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      favoritesKey: "fav_key",
+      recentModelsKey: "recent_key",
+      onModelSelect: jest.fn()
+    });
+
+    await dropdown.loadRecentlyUsedModels();
+
+    expect(dropdown.state.recentlyUsedModels).toEqual([]);
+    expect(globalAny.setEncrypted).toHaveBeenCalledWith({ recent_key: [] });
+
+    delete globalAny.getEncrypted;
+    delete globalAny.setEncrypted;
+  });
+
+  test("bindInput reattaches listeners to a new input", () => {
+    const firstInput = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: firstInput,
+      onModelSelect: jest.fn()
+    });
+
+    const nextInput = document.createElement("input");
+    nextInput.id = "model-input-next";
+    document.body.appendChild(nextInput);
+
+    dropdown.show = jest.fn();
+    dropdown.bindInput(nextInput);
+    nextInput.dispatchEvent(new Event("click", { bubbles: true }));
+
+    expect(dropdown.show).toHaveBeenCalled();
+  });
+
+  test("pointerdown opens dropdown", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    if (!input) {
+      throw new Error("model input not found");
+    }
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.show = jest.fn();
+    input.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+
+    expect(dropdown.show).toHaveBeenCalled();
+  });
+
+  test("blur does not close immediately after open", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.state.visible = true;
+    dropdown.state.justOpened = true;
+    dropdown.hide = jest.fn();
+
+    const originalRaf = (global as any).requestAnimationFrame;
+    (global as any).requestAnimationFrame = (cb: () => void) => cb();
+    Object.defineProperty(document, "activeElement", {
+      value: document.body,
+      configurable: true
+    });
+
+    dropdown.handlers.onInputBlur();
+
+    expect(dropdown.hide).not.toHaveBeenCalled();
+
+    (global as any).requestAnimationFrame = originalRaf;
+  });
+
+  test("doc mousedown does not close while opening", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.state.visible = true;
+    dropdown.state.isOpening = true;
+    dropdown.hide = jest.fn();
+
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+
+    dropdown.handlers.onDocMouseDown({ target: outside });
+
+    expect(dropdown.hide).not.toHaveBeenCalled();
+  });
+
   test("renders displayName when provided", () => {
     const globalAny = global as any;
     globalAny.groupModelsByProvider = jest.fn(() => ({
@@ -210,6 +310,40 @@ describe("ModelDropdownManager storage keys", () => {
     expect(badges).toContain("NG");
   });
 
+  test("does not render image badges in model list", () => {
+    const globalAny = global as any;
+    globalAny.groupModelsByProvider = jest.fn(() => ({
+      Test: [
+        {
+          id: "openrouter:openai/gpt-image-1",
+          provider: "openrouter",
+          rawId: "openai/gpt-image-1",
+          displayName: "openai/gpt-image-1",
+          outputsImage: true
+        }
+      ]
+    }));
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      {
+        id: "openrouter:openai/gpt-image-1",
+        provider: "openrouter",
+        rawId: "openai/gpt-image-1",
+        displayName: "openai/gpt-image-1",
+        outputsImage: true
+      }
+    ]);
+    dropdown.show("");
+
+    expect(document.querySelector(".model-image-badge")).toBeNull();
+  });
+
   test("destroy removes input and document listeners", () => {
     const input = document.getElementById("model-input") as HTMLInputElement;
     if (!input) {
@@ -252,6 +386,26 @@ describe("ModelDropdownManager storage keys", () => {
     );
     expect(sidepanel).toMatch(/models_updated/);
     expect(projects).toMatch(/models_updated/);
+  });
+
+  test("render tolerates non-array recentlyUsedModels", () => {
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      {
+        id: "openrouter:openai/gpt-4o",
+        provider: "openrouter",
+        rawId: "openai/gpt-4o",
+        displayName: "openai/gpt-4o"
+      }
+    ]);
+    dropdown.state.recentlyUsedModels = { invalid: true } as any;
+
+    expect(() => dropdown.show("")).not.toThrow();
   });
 });
 

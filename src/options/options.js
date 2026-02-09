@@ -39,12 +39,6 @@ const setLocalStorage = (values) => (
 );
 // encrypted-storage
 
-const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
-  ? window.migrateLegacySpaceKeys().catch((err) => {
-    console.warn("Projects migration failed:", err);
-  })
-  : Promise.resolve();
-
 // In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
 let modelMap = new Map(); // combinedId -> model
@@ -550,7 +544,6 @@ function showHistoryDetail(item) {
 
 // Close detail panel
 document.addEventListener("DOMContentLoaded", async () => {
-  await migrationPromise;
   const closeBtn = document.getElementById("history-close-detail");
   const previewColumn = document.getElementById("history-preview-column");
 
@@ -993,7 +986,6 @@ if (themeSelect) {
 
 // ---- Load history on page load ----
 document.addEventListener("DOMContentLoaded", async () => {
-  await migrationPromise;
   loadPromptHistory();
   setupKeyVisibilityToggles();
 });

@@ -466,56 +466,6 @@ function removeReasoningBubbles(container) {
 }
 
 /**
- * Determines if a model explicitly supports reasoning.
- * Defaults to true when metadata is absent.
- * @param {any} model
- * @returns {boolean}
- */
-function modelSupportsReasoning(model) {
-  if (!model || typeof model !== "object") return true;
-  const supportedParameters = Array.isArray(model.supportedParameters)
-    ? model.supportedParameters
-    : (Array.isArray(model.supported_parameters) ? model.supported_parameters : null);
-  const providerId = typeof model.provider === "string"
-    ? model.provider
-    : (typeof model.id === "string" && model.id.includes(":")
-      ? model.id.split(":")[0]
-      : null);
-  if (supportedParameters) {
-    if (providerId === "naga") {
-      return true;
-    }
-    const normalized = supportedParameters
-      .map((value) => {
-        if (typeof value === "string") return value.toLowerCase();
-        if (value && typeof value === "object") {
-          if (typeof value.name === "string") return value.name.toLowerCase();
-          if (typeof value.id === "string") return value.id.toLowerCase();
-        }
-        return "";
-      })
-      .filter(Boolean);
-    return normalized.includes("reasoning") || normalized.includes("reasoning_effort");
-  }
-  const checks = [
-    model.supportsReasoning,
-    model.supports_reasoning,
-    model.reasoning,
-    model.capabilities?.reasoning,
-    model.capabilities?.supports_reasoning,
-    model.capabilities?.reasoning_support,
-    model.architecture?.supports_reasoning,
-    model.architecture?.reasoning,
-    model.metadata?.reasoning,
-    model.metadata?.supports_reasoning
-  ];
-  for (const value of checks) {
-    if (typeof value === "boolean") return value;
-  }
-  return true;
-}
-
-/**
  * Formats the active model label for a thread/project.
  * @param {{model?: string, modelDisplayName?: string}} project
  * @returns {string}
@@ -582,7 +532,6 @@ if (typeof module !== "undefined") {
     getTokenBarStyle,
     getStreamingFallbackMessage,
     removeReasoningBubbles,
-    modelSupportsReasoning,
     formatThreadModelLabel,
     buildSummarizerMessages
   };

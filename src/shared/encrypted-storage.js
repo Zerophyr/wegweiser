@@ -14,8 +14,6 @@ const DEFAULT_ENCRYPTED_STORAGE_KEYS = [
   "or_history",
   "or_projects",
   "or_project_threads",
-  "or_spaces",
-  "or_threads",
   "or_web_search",
   "or_reasoning",
   "or_provider_enabled_openrouter",

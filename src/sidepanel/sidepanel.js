@@ -29,12 +29,6 @@ const setLocalStorage = (values) => (
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
 const SIDEPANEL_PROJECT_ID = "__sidepanel__";
 
-const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
-  ? window.migrateLegacySpaceKeys().catch((err) => {
-    console.warn("Projects migration failed:", err);
-  })
-  : Promise.resolve();
-
 const promptEl = document.getElementById("prompt");
 const answerEl = document.getElementById("answer");
 const answerSection = document.getElementById("answer-section");
@@ -42,7 +36,6 @@ const askBtn = document.getElementById("askBtn");
 const metaEl = document.getElementById("meta");
 const balanceEl = document.getElementById("balance");
 const balanceRefreshBtn = document.getElementById("balance-refresh");
-const modelSelect = document.getElementById("model-select");
 const modelInput = document.getElementById("model-input");
 const modelStatusEl = document.getElementById("model-status");
 const webSearchToggle = document.getElementById("web-search-toggle");
@@ -126,32 +119,7 @@ function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || "";
 }
 
-function modelSupportsReasoningSafe(model) {
-  if (typeof modelSupportsReasoning === "function") {
-    return modelSupportsReasoning(model);
-  }
-  return true;
-}
-
-function applyReasoningToggleAvailability(model) {
-  if (!reasoningToggle) return;
-  const supportsReasoning = modelSupportsReasoningSafe(model);
-  const disabled = supportsReasoning === false;
-  reasoningToggle.classList.toggle("disabled", disabled);
-  reasoningToggle.setAttribute("aria-disabled", disabled.toString());
-  if (disabled && reasoningEnabled) {
-    reasoningEnabled = false;
-    reasoningToggle.classList.remove("active");
-    reasoningToggle.setAttribute("aria-pressed", "false");
-    saveToggleSettings();
-  }
-}
-
-function isImageOnlyModel(model) {
-  return Boolean(model?.isImageOnly);
-}
-
-function setImageToggleUi(enabled, disabled = true) {
+function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
   imageToggle.classList.toggle("active", enabled);
   imageToggle.setAttribute("aria-pressed", enabled.toString());
@@ -159,17 +127,14 @@ function setImageToggleUi(enabled, disabled = true) {
   imageToggle.classList.toggle("disabled", disabled);
 }
 
-function isImageToggleDisabled() {
-  if (!imageToggle) return true;
-  return imageToggle.classList.contains("disabled") ||
-    imageToggle.getAttribute("aria-disabled") === "true";
+function setImageToggleTitle(title) {
+  if (!imageToggle) return;
+  imageToggle.title = title;
 }
 
-async function applyImageModeForModel(model) {
-  const enableImage = isImageOnlyModel(model);
-  imageModeEnabled = enableImage;
-  setImageToggleUi(enableImage, true);
-  await saveToggleSettings();
+async function applyImageModeForModel() {
+  setImageToggleUi(imageModeEnabled, false);
+  setImageToggleTitle("Enable Image Mode");
 }
 
 function buildCombinedFavoritesList() {
@@ -1621,9 +1586,15 @@ async function loadModels() {
     ]);
     loadFavoritesAndRecents(localItems, syncItems);
 
+    const resolvedModelInput = modelInput || document.getElementById("model-input");
+    if (!resolvedModelInput) {
+      modelStatusEl.textContent = "Model input unavailable.";
+      return;
+    }
+
     if (!modelDropdown) {
       modelDropdown = new ModelDropdownManager({
-        inputElement: modelInput,
+        inputElement: resolvedModelInput,
         containerType: 'sidebar',
         onModelSelect: async (modelId) => {
           const debugDropdown = Boolean(window.DEBUG_MODEL_DROPDOWN);
@@ -1661,8 +1632,7 @@ async function loadModels() {
             selectedCombinedModelId = modelId;
             currentProvider = provider;
             modelStatusEl.textContent = `Using: ${displayName}`;
-            applyReasoningToggleAvailability(selectedModel);
-            await applyImageModeForModel(selectedModel);
+            await applyImageModeForModel();
             return true;
           }
 
@@ -1712,6 +1682,8 @@ async function loadModels() {
           modelDropdown.setRecentlyUsed(buildCombinedRecentList());
         }
       });
+    } else {
+      modelDropdown.bindInput(resolvedModelInput);
     }
 
     modelDropdown.setModels(combinedModels);
@@ -1731,18 +1703,15 @@ async function loadModels() {
         modelInput.value = displayName;
       }
       modelStatusEl.textContent = `Using: ${displayName}`;
-      applyReasoningToggleAvailability(selected);
-      await applyImageModeForModel(selected);
+      await applyImageModeForModel();
     } else {
       modelStatusEl.textContent = "Ready";
-      applyReasoningToggleAvailability(null);
-      await applyImageModeForModel(null);
+      await applyImageModeForModel();
     }
   } catch (e) {
     console.error("Error loading models:", e);
     modelStatusEl.textContent = "Error loading models";
-    applyReasoningToggleAvailability(null);
-    await applyImageModeForModel(null);
+    await applyImageModeForModel();
   }
 }
 
@@ -1787,12 +1756,8 @@ async function loadToggleSettings() {
     reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
 
     if (imageToggle) {
-      if (imageModeEnabled) {
-        imageToggle.classList.add("active");
-      }
-      imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
-      imageToggle.setAttribute('aria-disabled', 'true');
-      imageToggle.classList.add('disabled');
+      setImageToggleUi(imageModeEnabled, false);
+      setImageToggleTitle("Enable Image Mode");
     }
   } catch (e) {
     console.error("Error loading toggle settings:", e);
@@ -1819,9 +1784,6 @@ webSearchToggle.addEventListener("click", async () => {
 });
 
 reasoningToggle.addEventListener("click", async () => {
-  if (reasoningToggle.getAttribute("aria-disabled") === "true") {
-    return;
-  }
   reasoningEnabled = !reasoningEnabled;
   reasoningToggle.classList.toggle("active");
   reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
@@ -1830,9 +1792,6 @@ reasoningToggle.addEventListener("click", async () => {
 
 if (imageToggle) {
   imageToggle.addEventListener("click", async () => {
-    if (isImageToggleDisabled()) {
-      return;
-    }
     imageModeEnabled = !imageModeEnabled;
     imageToggle.classList.toggle("active");
     imageToggle.setAttribute('aria-pressed', imageModeEnabled.toString());
@@ -1972,7 +1931,6 @@ function hideTypingIndicator() {
 
 // ---- Initial load ----
 document.addEventListener("DOMContentLoaded", async () => {
-  await migrationPromise;
   // Hide answer box initially if empty
   updateAnswerVisibility();
   await restorePersistedAnswers();

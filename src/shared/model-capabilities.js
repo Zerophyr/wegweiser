@@ -10,15 +10,43 @@ function normalizeModalities(list) {
   return [];
 }
 
+function parseModalityString(modality) {
+  if (typeof modality !== "string") {
+    return { inputs: [], outputs: [] };
+  }
+  const [inputRaw, outputRaw] = modality.toLowerCase().split("->");
+  const splitTokens = (part) =>
+    part
+      .split(/[+,]/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const inputs = splitTokens(inputRaw || "");
+  const outputs = splitTokens(outputRaw || inputRaw || "");
+  return { inputs, outputs };
+}
+
 function deriveModelCapabilities(model) {
   const endpoints = Array.isArray(model?.supported_endpoints)
     ? model.supported_endpoints
     : [];
-  const outputModalities = normalizeModalities(model?.architecture?.output_modalities);
-  const supportsChat = endpoints.includes("/chat/completions") || endpoints.includes("chat.completions");
-  const supportsImages = endpoints.includes("/images/generations") || endpoints.includes("images.generations");
-  const outputsImage = outputModalities.includes("image");
-  const isImageOnly = supportsImages && !supportsChat;
+  const outputModalities = normalizeModalities(
+    model?.architecture?.output_modalities ||
+      model?.architecture?.output_modality ||
+      model?.output_modalities ||
+      model?.output_modality
+  );
+  const modalityValue = model?.architecture?.modality || model?.architecture?.modalities || model?.modality;
+  const modalityOutputs = parseModalityString(modalityValue).outputs;
+  const outputsCombined = outputModalities.length ? outputModalities : modalityOutputs;
+  const outputsImage = outputsCombined.includes("image");
+  const outputsText = outputsCombined.includes("text");
+  const supportsChat = endpoints.includes("/chat/completions") ||
+    endpoints.includes("chat.completions") ||
+    outputsText;
+  const supportsImages = endpoints.includes("/images/generations") ||
+    endpoints.includes("images.generations") ||
+    outputsImage;
+  const isImageOnly = supportsImages && !outputsText;
   return {
     supportsChat,
     supportsImages,
@@ -33,19 +61,33 @@ function resolveImageRouteFromCapabilities(caps) {
   return null;
 }
 
+function hasModelCapabilityFields(model) {
+  if (!model || typeof model !== "object") return false;
+  const hasBooleans =
+    typeof model.supportsChat === "boolean" &&
+    typeof model.supportsImages === "boolean" &&
+    typeof model.outputsImage === "boolean" &&
+    typeof model.isImageOnly === "boolean";
+  if (!hasBooleans) return false;
+  return "supportedParameters" in model || "supported_parameters" in model;
+}
+
 if (typeof window !== "undefined") {
   window.deriveModelCapabilities = deriveModelCapabilities;
   window.resolveImageRouteFromCapabilities = resolveImageRouteFromCapabilities;
+  window.hasModelCapabilityFields = hasModelCapabilityFields;
 }
 
 if (typeof globalThis !== "undefined") {
   globalThis.deriveModelCapabilities = deriveModelCapabilities;
   globalThis.resolveImageRouteFromCapabilities = resolveImageRouteFromCapabilities;
+  globalThis.hasModelCapabilityFields = hasModelCapabilityFields;
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
     deriveModelCapabilities,
-    resolveImageRouteFromCapabilities
+    resolveImageRouteFromCapabilities,
+    hasModelCapabilityFields
   };
 }

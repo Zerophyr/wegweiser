@@ -21,8 +21,10 @@ export const STORAGE_KEYS = {
   REASONING: "or_reasoning",
   MODELS_CACHE: "or_models_cache",
   MODELS_CACHE_TIME: "or_models_cache_time",
+  MODELS_CACHE_VERSION: "or_models_cache_version",
   MODELS_CACHE_NAGA: "or_models_cache_naga",
   MODELS_CACHE_TIME_NAGA: "or_models_cache_time_naga",
+  MODELS_CACHE_VERSION_NAGA: "or_models_cache_version_naga",
   NAGA_STARTUPS_CACHE: "naga_startups_cache",
   NAGA_STARTUPS_CACHE_TIME: "naga_startups_cache_time",
   THEME: "or_theme",
@@ -33,12 +35,6 @@ export const STORAGE_KEYS = {
   PROVIDER_ENABLED_OPENROUTER: "or_provider_enabled_openrouter",
   PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga",
   CONTEXT_SESSION_PREFIX: "or_context_session_"
-};
-
-export const LEGACY_STORAGE_KEYS = {
-  SPACES: "or_spaces",
-  THREADS: "or_threads",
-  COLLAPSE_ON_SPACES: "or_collapse_on_spaces"
 };
 
 // Encryption settings (local storage only)
@@ -57,8 +53,6 @@ export const ENCRYPTED_STORAGE_KEYS = [
   STORAGE_KEYS.HISTORY,
   STORAGE_KEYS.PROJECTS,
   STORAGE_KEYS.PROJECT_THREADS,
-  LEGACY_STORAGE_KEYS.SPACES,
-  LEGACY_STORAGE_KEYS.THREADS,
   STORAGE_KEYS.WEB_SEARCH,
   STORAGE_KEYS.REASONING,
   STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER,
@@ -73,8 +67,10 @@ if (typeof globalThis !== "undefined") {
 export const NON_ENCRYPTED_KEYS = [
   STORAGE_KEYS.MODELS_CACHE,
   STORAGE_KEYS.MODELS_CACHE_TIME,
+  STORAGE_KEYS.MODELS_CACHE_VERSION,
   STORAGE_KEYS.MODELS_CACHE_NAGA,
   STORAGE_KEYS.MODELS_CACHE_TIME_NAGA,
+  STORAGE_KEYS.MODELS_CACHE_VERSION_NAGA,
   STORAGE_KEYS.NAGA_STARTUPS_CACHE,
   STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME,
   STORAGE_KEYS.IMAGE_CACHE,
@@ -111,6 +107,8 @@ export const CACHE_TTL = {
   IMAGE: 10_800_000       // 3 hours
 };
 
+export const MODELS_CACHE_SCHEMA_VERSION = 3;
+
 // Default values
 export const DEFAULTS = {
   HISTORY_LIMIT: 20,
@@ -142,7 +140,7 @@ export const ERROR_MESSAGES = {
   RATE_LIMIT: "Rate limit exceeded. Please wait a moment and try again.",
   INVALID_RESPONSE: "Invalid response from API. Please try again.",
   TIMEOUT: "Request timed out. Please try again.",
-  IMAGE_MODEL_REQUIRED: "Selected model is not image-capable. Pick an image-only model."
+  IMAGE_MODEL_REQUIRED: "Selected model does not support image generation. Choose another model or disable image mode."
 };
 
 // API configuration

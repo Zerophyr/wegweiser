@@ -16,8 +16,17 @@ describe("sidepanel image toggle", () => {
       path.join(__dirname, "../src/sidepanel/sidepanel.js"),
       "utf8"
     );
-    expect(content).toMatch(/isImageOnly/);
-    expect(content).toMatch(/aria-disabled/);
+    expect(content).not.toMatch(/setImageToggleUi\(true,\s*true\)/);
+    expect(content).not.toMatch(/image mode locked/i);
+  });
+
+  test("sidepanel does not force-disable image mode", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/sidepanel/sidepanel.js"),
+      "utf8"
+    );
+    expect(content).not.toMatch(/setImageToggleUi\(false,\s*true\)/);
+    expect(content).not.toMatch(/image mode not available/i);
   });
 });
 

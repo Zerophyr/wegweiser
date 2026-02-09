@@ -32,18 +32,7 @@ const setLocalStorage = (values) => (
 );
 // encrypted-storage
 
-const migrationPromise = (typeof window.migrateLegacySpaceKeys === "function")
-  ? window.migrateLegacySpaceKeys().catch((err) => {
-    console.warn("Projects migration failed:", err);
-  })
-  : Promise.resolve();
-
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
-const chatMigrationPromise = (typeof window !== "undefined" && typeof window.migrateLegacyChatToIdb === "function")
-  ? window.migrateLegacyChatToIdb().catch((err) => {
-    console.warn("Chat migration failed:", err);
-  })
-  : Promise.resolve();
 
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
@@ -100,45 +89,6 @@ function getModelDisplayName(model) {
   return model?.displayName || model?.name || model?.id || '';
 }
 
-function modelSupportsReasoningSafe(model) {
-  if (typeof modelSupportsReasoning === 'function') {
-    return modelSupportsReasoning(model);
-  }
-  return true;
-}
-
-function applyReasoningToggleState(toggleEl, disabled) {
-  if (!toggleEl) return;
-  toggleEl.disabled = disabled;
-  if (disabled) {
-    toggleEl.checked = false;
-  }
-  const labelEl = toggleEl.closest('.chat-toggle') || toggleEl.closest('.toggle-label');
-  if (labelEl) {
-    labelEl.classList.toggle('disabled', disabled);
-  }
-}
-
-function applyChatReasoningAvailability(Project) {
-  const model = (() => {
-    if (!Project || !Project.model) return null;
-    const provider = normalizeProviderSafe(Project.modelProvider || currentProvider);
-    const combinedId = buildCombinedModelIdSafe(provider, Project.model);
-    return ProjectModelMap.get(combinedId) || null;
-  })();
-  const supports = modelSupportsReasoningSafe(model);
-  applyReasoningToggleState(elements.chatReasoning, supports === false);
-}
-
-function applyProjectReasoningAvailability(selectedModel = null) {
-  let model = selectedModel;
-  if (!model && elements.ProjectModel?.value) {
-    model = ProjectModelMap.get(elements.ProjectModel.value) || null;
-  }
-  const supports = modelSupportsReasoningSafe(model);
-  applyReasoningToggleState(elements.ProjectReasoning, supports === false);
-}
-
 function buildCombinedFavoritesList(favoritesByProvider) {
   const combined = [];
   ['openrouter', 'naga'].forEach((provider) => {
@@ -189,18 +139,7 @@ function updateChatModelIndicator(Project) {
   elements.chatModelIndicator.textContent = `Model: ${getProjectModelLabel(Project)}`;
 }
 
-function getProjectModelRecord(Project) {
-  if (!Project?.model) return null;
-  const provider = normalizeProviderSafe(Project.modelProvider || currentProvider);
-  const combinedId = buildCombinedModelIdSafe(provider, Project.model);
-  return ProjectModelMap.get(combinedId) || null;
-}
-
-function isImageOnlyModel(model) {
-  return Boolean(model?.isImageOnly);
-}
-
-function setChatImageToggleState(enabled, disabled = true) {
+function setChatImageToggleState(enabled, disabled = false) {
   if (!elements.chatImageMode) return;
   elements.chatImageMode.checked = enabled;
   elements.chatImageMode.disabled = disabled;
@@ -212,10 +151,7 @@ function setChatImageToggleState(enabled, disabled = true) {
 }
 
 function applyProjectImageMode(Project) {
-  const model = getProjectModelRecord(Project);
-  const enableImage = isImageOnlyModel(model);
-  imageModeEnabled = enableImage;
-  setChatImageToggleState(enableImage, true);
+  setChatImageToggleState(Boolean(imageModeEnabled), false);
 }
 
 async function loadProviderSetting() {
@@ -1753,7 +1689,6 @@ async function openThread(threadId) {
     elements.chatReasoning.checked = Project.reasoning || false;
     applyProjectImageMode(Project);
     updateChatModelIndicator(Project);
-    applyChatReasoningAvailability(Project);
   }
 
   elements.chatEmptyState.style.display = 'none';
@@ -1773,7 +1708,6 @@ async function createNewThread() {
     elements.chatWebSearch.checked = Project.webSearch || false;
     elements.chatReasoning.checked = Project.reasoning || false;
     applyProjectImageMode(Project);
-    applyChatReasoningAvailability(Project);
   }
 
   const thread = await createThread(currentProjectId);
@@ -1821,7 +1755,6 @@ function openCreateProjectModal() {
   // Reset toggles
   elements.ProjectWebSearch.checked = false;
   elements.ProjectReasoning.checked = false;
-  applyProjectReasoningAvailability(null);
   elements.ProjectModal.style.display = 'flex';
   elements.ProjectName.focus();
 }
@@ -1847,7 +1780,6 @@ async function openEditProjectModal(projectId) {
   elements.ProjectInstructions.value = Project.customInstructions;
   elements.ProjectWebSearch.checked = Project.webSearch || false;
   elements.ProjectReasoning.checked = Project.reasoning || false;
-  applyProjectReasoningAvailability(ProjectModelMap.get(combinedId) || null);
   elements.emojiGrid.classList.remove('show');
 
   elements.ProjectModal.style.display = 'flex';
@@ -2028,9 +1960,10 @@ async function loadModels() {
         naga: localItems.or_recent_models_naga || []
       };
 
-      if (!ProjectModelDropdown && elements.ProjectModelInput) {
+      const resolvedModelInput = elements.ProjectModelInput || document.getElementById('project-model-input');
+      if (!ProjectModelDropdown && resolvedModelInput) {
         ProjectModelDropdown = new ModelDropdownManager({
-          inputElement: elements.ProjectModelInput,
+          inputElement: resolvedModelInput,
           containerType: 'modal',
           onModelSelect: async (modelId) => {
             const selectedModel = ProjectModelMap.get(modelId);
@@ -2041,7 +1974,6 @@ async function loadModels() {
             if (elements.ProjectModel) {
               elements.ProjectModel.value = modelId;
             }
-            applyProjectReasoningAvailability(selectedModel);
             return true;
           },
           onToggleFavorite: async (modelId, isFavorite) => {
@@ -2079,21 +2011,14 @@ async function loadModels() {
             ProjectModelDropdown.setRecentlyUsed(buildCombinedRecentList(ProjectRecentModelsByProvider));
           }
         });
+      } else if (ProjectModelDropdown && resolvedModelInput) {
+        ProjectModelDropdown.bindInput(resolvedModelInput);
       }
 
       if (ProjectModelDropdown) {
         ProjectModelDropdown.setModels(response.models);
         ProjectModelDropdown.setFavorites(buildCombinedFavoritesList(ProjectFavoriteModelsByProvider));
         ProjectModelDropdown.setRecentlyUsed(buildCombinedRecentList(ProjectRecentModelsByProvider));
-      }
-
-      if (elements.ProjectModel?.value) {
-        const selected = ProjectModelMap.get(elements.ProjectModel.value) || null;
-        applyProjectReasoningAvailability(selected);
-      }
-
-      if (currentProjectData) {
-        applyChatReasoningAvailability(currentProjectData);
       }
 
       if (elements.ProjectModel) {
@@ -3000,7 +2925,6 @@ function setupChatInput() {
 // ============ INITIALIZATION ============
 
 async function init() {
-  await Promise.all([migrationPromise, chatMigrationPromise]);
   initElements();
   bindEvents();
   setupChatInput();

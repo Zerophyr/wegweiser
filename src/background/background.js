@@ -5,6 +5,7 @@ import {
   STORAGE_KEYS,
   MESSAGE_TYPES,
   CACHE_TTL,
+  MODELS_CACHE_SCHEMA_VERSION,
   DEFAULTS,
   ERROR_MESSAGES,
   API_CONFIG,
@@ -12,7 +13,6 @@ import {
 } from '/src/shared/constants.js';
 import '/src/shared/crypto-store.js';
 import '/src/shared/encrypted-storage.js';
-import '/src/shared/projects-migration.js';
 import '/src/shared/debug-log.js';
 import '/src/shared/model-capabilities.js';
 import {
@@ -29,6 +29,7 @@ const {
     isImageOnly: false
   }),
   resolveImageRouteFromCapabilities = () => null,
+  hasModelCapabilityFields = () => false,
   createDebugStreamLog = () => ({ entries: [], maxEntries: 0 }),
   pushDebugStreamEntry = () => null,
   buildDebugLogMeta = () => ({ count: 0, startAt: null, endAt: null })
@@ -46,12 +47,6 @@ const setLocalStorage = (values) => (
     ? globalThis.setEncrypted(values)
     : chrome.storage.local.set(values)
 );
-
-if (typeof globalThis.migrateLegacySpaceKeys === "function") {
-  globalThis.migrateLegacySpaceKeys().catch((err) => {
-    console.warn("Projects migration failed:", err);
-  });
-}
 
 // Cache management
 const lastBalanceByProvider = {};
@@ -155,12 +150,14 @@ function getModelsCacheKeys(providerId) {
   if (provider === "naga") {
     return {
       modelsKey: STORAGE_KEYS.MODELS_CACHE_NAGA,
-      timeKey: STORAGE_KEYS.MODELS_CACHE_TIME_NAGA
+      timeKey: STORAGE_KEYS.MODELS_CACHE_TIME_NAGA,
+      versionKey: STORAGE_KEYS.MODELS_CACHE_VERSION_NAGA
     };
   }
   return {
     modelsKey: STORAGE_KEYS.MODELS_CACHE,
-    timeKey: STORAGE_KEYS.MODELS_CACHE_TIME
+    timeKey: STORAGE_KEYS.MODELS_CACHE_TIME,
+    versionKey: STORAGE_KEYS.MODELS_CACHE_VERSION
   };
 }
 
@@ -209,7 +206,12 @@ function parseModelsPayload(payload) {
     const architecture = model?.architecture || model?.arch || null;
     const derived = deriveModelCapabilities({
       supported_endpoints: supportedEndpoints,
-      architecture
+      architecture,
+      output_modalities: model?.output_modalities,
+      output_modality: model?.output_modality,
+      input_modalities: model?.input_modalities,
+      modality: model?.modality,
+      modalities: model?.modalities
     });
 
     return {
@@ -309,44 +311,52 @@ async function refreshProviderModels(providerId, apiKey) {
     });
   }
 
-  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
+  const { modelsKey, timeKey, versionKey } = getModelsCacheKeys(provider);
   const now = Date.now();
   await chrome.storage.local.set({
     [modelsKey]: models,
-    [timeKey]: now
+    [timeKey]: now,
+    [versionKey]: MODELS_CACHE_SCHEMA_VERSION
   });
 
   broadcastModelsUpdated(provider);
   return models;
 }
 
-async function getProviderModels(providerId, apiKey) {
-  const provider = normalizeProviderId(providerId);
-  if (!apiKey) return [];
+  async function getProviderModels(providerId, apiKey) {
+    const provider = normalizeProviderId(providerId);
+    if (!apiKey) return [];
 
-  const { modelsKey, timeKey } = getModelsCacheKeys(provider);
-  const cacheData = await chrome.storage.local.get([
-    modelsKey,
-    timeKey
-  ]);
+    const { modelsKey, timeKey, versionKey } = getModelsCacheKeys(provider);
+    const cacheData = await chrome.storage.local.get([
+      modelsKey,
+      timeKey,
+      versionKey
+    ]);
 
-  const now = Date.now();
-  const cachedModels = Array.isArray(cacheData[modelsKey]) ? cacheData[modelsKey] : [];
-  const cacheTime = cacheData[timeKey] || 0;
-  const cacheFresh = cachedModels.length &&
-    cacheTime &&
-    (now - cacheTime) < CACHE_TTL.MODELS;
+    const now = Date.now();
+    const cachedModels = Array.isArray(cacheData[modelsKey]) ? cacheData[modelsKey] : [];
+    const cacheTime = cacheData[timeKey] || 0;
+    const cacheVersion = cacheData[versionKey] || 0;
+    const cacheHasCapabilities = cachedModels.length
+      ? cachedModels.every((model) => hasModelCapabilityFields(model))
+      : false;
+    const cacheFresh = cachedModels.length &&
+      cacheTime &&
+      cacheVersion === MODELS_CACHE_SCHEMA_VERSION &&
+      (now - cacheTime) < CACHE_TTL.MODELS &&
+      cacheHasCapabilities;
 
-  if (cacheFresh) {
-    return cachedModels;
-  }
+    if (cacheFresh) {
+      return cachedModels;
+    }
 
-  if (cachedModels.length) {
-    refreshProviderModels(provider, apiKey).catch((err) => {
-      console.warn(`Failed to refresh ${provider} models:`, err);
-    });
-    return cachedModels;
-  }
+    if (cachedModels.length) {
+      refreshProviderModels(provider, apiKey).catch((err) => {
+        console.warn(`Failed to refresh ${provider} models:`, err);
+      });
+      return cachedModels;
+    }
 
   return refreshProviderModels(provider, apiKey);
 }

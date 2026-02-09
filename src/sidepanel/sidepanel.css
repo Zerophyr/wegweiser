@@ -36,6 +36,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 #top-section {
@@ -158,17 +160,6 @@ body {
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
 }
 
-.toggle-btn.disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.toggle-btn.disabled:hover {
-  background: var(--color-bg-secondary);
-  border-color: var(--color-border);
-}
-
 .toggle-btn svg {
   width: 14px;
   height: 14px;
@@ -178,14 +169,6 @@ body {
 
 .toggle-btn.active svg {
   fill: var(--color-link);
-}
-
-.toggle-btn.disabled svg {
-  fill: var(--color-text-muted);
-}
-
-.toggle-btn.disabled + .toggle-label {
-  opacity: 0.6;
 }
 
 .toggle-label {
@@ -232,6 +215,8 @@ body {
   flex-shrink: 0;
   background: var(--color-bg);
   border-top: 1px solid var(--color-border);
+  position: relative;
+  z-index: 2;
 }
 
 .setup-panel {

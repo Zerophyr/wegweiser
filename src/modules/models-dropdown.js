@@ -100,6 +100,7 @@ class ModelDropdownManager {
 
     const handlers = {
       onInputClick: null,
+      onInputPointerDown: null,
       onInputFocus: null,
       onInputInput: null,
       onInputKeyDown: null,
@@ -131,6 +132,20 @@ class ModelDropdownManager {
       }
     };
     input.addEventListener('click', handlers.onInputClick);
+
+    // Pointerdown opens dropdown (some environments suppress click)
+    handlers.onInputPointerDown = (e) => {
+      if (this.state.visible) return;
+      this.state.isOpening = true;
+      this.state.justOpened = true;
+      this.show('');
+      input.select();
+      setTimeout(() => {
+        this.state.isOpening = false;
+        this.state.justOpened = false;
+      }, 200);
+    };
+    input.addEventListener('pointerdown', handlers.onInputPointerDown);
 
     // Focus opens and selects all text
     handlers.onInputFocus = () => {
@@ -191,6 +206,7 @@ class ModelDropdownManager {
     // Support closing when clicking outside input while dropdown is open
     handlers.onDocMouseDown = (e) => {
       if (!this.state.visible) return;
+      if (this.state.isOpening || this.state.justOpened) return;
       const insideDropdown = this.dropdownElement && this.dropdownElement.contains(e.target);
       this.state.pointerDownInDropdown = Boolean(insideDropdown);
       if (input.contains(e.target)) return;
@@ -207,6 +223,7 @@ class ModelDropdownManager {
     handlers.onInputBlur = () => {
       window.requestAnimationFrame(() => {
         if (!this.state.visible) return;
+        if (this.state.justOpened || this.state.isOpening) return;
         if (this.state.pointerDownInDropdown) return;
         if (this.dropdownElement.contains(document.activeElement)) return;
         this.hide();
@@ -215,6 +232,32 @@ class ModelDropdownManager {
     input.addEventListener('blur', handlers.onInputBlur);
 
     this.handlers = handlers;
+  }
+
+  detachInputListeners() {
+    if (!this.handlers || !this.config.inputElement) return;
+    const input = this.config.inputElement;
+    input.removeEventListener('click', this.handlers.onInputClick);
+    input.removeEventListener('pointerdown', this.handlers.onInputPointerDown);
+    input.removeEventListener('focus', this.handlers.onInputFocus);
+    input.removeEventListener('input', this.handlers.onInputInput);
+    input.removeEventListener('keydown', this.handlers.onInputKeyDown);
+    input.removeEventListener('blur', this.handlers.onInputBlur);
+    document.removeEventListener('click', this.handlers.onDocClick);
+    document.removeEventListener('mousedown', this.handlers.onDocMouseDown);
+    document.removeEventListener('mouseup', this.handlers.onDocMouseUp);
+    this.handlers = null;
+  }
+
+  bindInput(inputElement) {
+    if (!inputElement) return false;
+    if (this.config.inputElement === inputElement) return true;
+    this.detachInputListeners();
+    this.config.inputElement = inputElement;
+    this.inputParent = inputElement.parentElement || null;
+    this.inputPlaceholder = null;
+    this.attachEventListeners();
+    return true;
   }
 
   isDebugEnabled() {
@@ -547,8 +590,10 @@ class ModelDropdownManager {
 
   async loadRecentlyUsedModels() {
     let data = {};
+    let usedEncrypted = false;
     try {
       if (typeof globalThis !== 'undefined' && typeof globalThis.getEncrypted === 'function') {
+        usedEncrypted = true;
         data = await globalThis.getEncrypted([this.config.recentModelsKey]);
       } else {
         data = await chrome.storage.local.get([this.config.recentModelsKey]);
@@ -556,7 +601,22 @@ class ModelDropdownManager {
     } catch (e) {
       data = {};
     }
-    this.setRecentlyUsed(data[this.config.recentModelsKey]);
+    const recentValue = data[this.config.recentModelsKey];
+    if (!Array.isArray(recentValue) && recentValue !== undefined) {
+      this.setRecentlyUsed([]);
+      const payload = { [this.config.recentModelsKey]: [] };
+      try {
+        if (usedEncrypted && typeof globalThis !== 'undefined' && typeof globalThis.setEncrypted === 'function') {
+          await globalThis.setEncrypted(payload);
+        } else if (chrome?.storage?.local?.set) {
+          await chrome.storage.local.set(payload);
+        }
+      } catch (e) {
+        // ignore persistence errors
+      }
+      return;
+    }
+    this.setRecentlyUsed(recentValue);
   }
 
   setModels(models) {
@@ -608,12 +668,15 @@ class ModelDropdownManager {
 
     // Separate into categories
     const favModels = filteredModels.filter(m => this.state.favoriteModels.has(m.id));
-    const recentModels = this.state.recentlyUsedModels
+    const recentList = Array.isArray(this.state.recentlyUsedModels)
+      ? this.state.recentlyUsedModels
+      : [];
+    const recentModels = recentList
       .map(id => this.state.allModels.find(m => m.id === id))
       .filter(m => m && !this.state.favoriteModels.has(m.id) && filteredModels.includes(m));
     const nonFavModels = filteredModels.filter(m =>
       !this.state.favoriteModels.has(m.id) &&
-      !this.state.recentlyUsedModels.includes(m.id)
+      !recentList.includes(m.id)
     );
 
     // Sort
@@ -768,11 +831,6 @@ class ModelDropdownManager {
     badge.textContent = badgeInfo.label;
     badge.style.cssText = `display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 999px; background: ${badgeInfo.background}; color: ${badgeInfo.color}; text-transform: uppercase;`;
 
-    const imageBadge = document.createElement('span');
-    imageBadge.className = 'model-image-badge';
-    imageBadge.textContent = 'IMG';
-    imageBadge.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 6px; border-radius: 999px; background: #b45309; color: #fff; text-transform: uppercase;';
-
     const starIcon = document.createElement('span');
     starIcon.textContent = starType;
     starIcon.className = 'model-star-icon';
@@ -781,9 +839,6 @@ class ModelDropdownManager {
 
     const rightControls = document.createElement('span');
     rightControls.style.cssText = 'display: inline-flex; align-items: center; gap: 6px;';
-    if (model?.outputsImage) {
-      rightControls.appendChild(imageBadge);
-    }
     rightControls.appendChild(badge);
     rightControls.appendChild(starIcon);
 
@@ -800,18 +855,7 @@ class ModelDropdownManager {
   }
 
   destroy() {
-    if (this.handlers && this.config.inputElement) {
-      const input = this.config.inputElement;
-      input.removeEventListener('click', this.handlers.onInputClick);
-      input.removeEventListener('focus', this.handlers.onInputFocus);
-      input.removeEventListener('input', this.handlers.onInputInput);
-      input.removeEventListener('keydown', this.handlers.onInputKeyDown);
-      input.removeEventListener('blur', this.handlers.onInputBlur);
-      document.removeEventListener('click', this.handlers.onDocClick);
-      document.removeEventListener('mousedown', this.handlers.onDocMouseDown);
-      document.removeEventListener('mouseup', this.handlers.onDocMouseUp);
-      this.handlers = null;
-    }
+    this.detachInputListeners();
     if (this.dropdownElement) {
       this.dropdownElement.remove();
       this.dropdownElement = null;

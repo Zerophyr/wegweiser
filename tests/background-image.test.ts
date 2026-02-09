@@ -65,5 +65,13 @@ describe("model cache refresh", () => {
     );
     expect(content).toMatch(/models_updated/);
   });
+
+  test("background invalidates cache without capability fields", () => {
+    const content = fs.readFileSync(
+      path.join(__dirname, "../src/background/background.js"),
+      "utf8"
+    );
+    expect(content).toMatch(/hasModelCapabilityFields/);
+  });
 });
 
