@@ -1,6 +1,11 @@
 // chat-store.js - encrypted IndexedDB-backed chat storage
 
-const { encryptJson, decryptJson } = require("./crypto-store.js");
+(function () {
+  const cryptoStore = (typeof require !== "undefined")
+    ? require("./crypto-store.js")
+    : (typeof globalThis !== "undefined" ? globalThis : {});
+  const encryptJson = cryptoStore.encryptJson;
+  const decryptJson = cryptoStore.decryptJson;
 
 const CHAT_STORE_DB = "wegweiser-chat-store";
 const STORE_NAMES = {
@@ -615,3 +620,4 @@ if (typeof module !== "undefined") {
     getChatStoreStats
   };
 }
+})();

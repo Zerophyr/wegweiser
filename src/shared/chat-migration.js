@@ -1,20 +1,22 @@
 // chat-migration.js - migrate chat data from chrome.storage to encrypted IndexedDB
 
-const {
-  putProject,
-  putThread,
-  putMessage,
-  setSummary,
-  setArchivedMessages
-} = require("./chat-store.js");
+(function () {
+  const chatStoreModule = (typeof require !== "undefined")
+    ? require("./chat-store.js")
+    : (typeof globalThis !== "undefined" ? globalThis.chatStore : null);
+  const putProject = chatStoreModule?.putProject || null;
+  const putThread = chatStoreModule?.putThread || null;
+  const putMessage = chatStoreModule?.putMessage || null;
+  const setSummary = chatStoreModule?.setSummary || null;
+  const setArchivedMessages = chatStoreModule?.setArchivedMessages || null;
 
-const MIGRATION_FLAG = "or_chat_idb_migration_v1";
-const LEGACY_KEYS = [
-  "or_projects",
-  "or_project_threads",
-  "or_spaces",
-  "or_threads"
-];
+  const MIGRATION_FLAG = "or_chat_idb_migration_v1";
+  const LEGACY_KEYS = [
+    "or_projects",
+    "or_project_threads",
+    "or_spaces",
+    "or_threads"
+  ];
 
 function normalizeThreads(rawThreads) {
   const threads = [];
@@ -122,10 +124,11 @@ async function migrateLegacyChatToIdb() {
   return { migrated: true };
 }
 
-if (typeof globalThis !== "undefined") {
-  globalThis.migrateLegacyChatToIdb = migrateLegacyChatToIdb;
-}
+  if (typeof globalThis !== "undefined") {
+    globalThis.migrateLegacyChatToIdb = migrateLegacyChatToIdb;
+  }
 
-if (typeof module !== "undefined") {
-  module.exports = { migrateLegacyChatToIdb };
-}
+  if (typeof module !== "undefined") {
+    module.exports = { migrateLegacyChatToIdb };
+  }
+})();
