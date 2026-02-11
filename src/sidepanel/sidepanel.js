@@ -1242,9 +1242,10 @@ async function askQuestion() {
     metaEl.textContent = "❌ Failed to send request.";
     answerSection.scrollTop = answerSection.scrollHeight;
   } finally {
-    askBtn.disabled = false;
-    setPromptStreamingState(false);
-    activePort = null;
+    if (!activePort) {
+      askBtn.disabled = false;
+      setPromptStreamingState(false);
+    }
   }
 }
 

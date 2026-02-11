@@ -1177,9 +1177,17 @@ body {
 
 .chat-toggles {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 10px 24px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.chat-toggles-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .chat-toggle {
@@ -1470,6 +1478,9 @@ body {
 
 #chat-input {
   flex: 1;
+  width: 100%;
+  min-width: 0;
+  display: block;
   padding: 12px 40px 12px 12px;
   background: var(--color-bg);
   color: var(--color-text);

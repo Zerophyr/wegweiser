@@ -87,21 +87,27 @@
 
           <div class="chat-input-wrapper">
             <div class="chat-toggles">
-              <label class="chat-toggle">
-                <input type="checkbox" id="chat-web-search">
-                <span class="chat-toggle-switch"></span>
-                <span class="chat-toggle-text">Web Search</span>
-              </label>
-              <label class="chat-toggle">
-                <input type="checkbox" id="chat-reasoning">
-                <span class="chat-toggle-switch"></span>
-                <span class="chat-toggle-text">Reasoning</span>
-              </label>
-              <label class="chat-toggle">
-                <input type="checkbox" id="chat-image-mode">
-                <span class="chat-toggle-switch"></span>
-                <span class="chat-toggle-text">Image</span>
-              </label>
+              <div class="chat-toggles-left">
+                <label class="chat-toggle">
+                  <input type="checkbox" id="chat-web-search">
+                  <span class="chat-toggle-switch"></span>
+                  <span class="chat-toggle-text">Web Search</span>
+                </label>
+                <label class="chat-toggle">
+                  <input type="checkbox" id="chat-reasoning">
+                  <span class="chat-toggle-switch"></span>
+                  <span class="chat-toggle-text">Reasoning</span>
+                </label>
+                <label class="chat-toggle">
+                  <input type="checkbox" id="chat-image-mode">
+                  <span class="chat-toggle-switch"></span>
+                  <span class="chat-toggle-text">Image</span>
+                </label>
+              </div>
+              <button id="projects-context-btn" class="projects-context-btn" type="button" aria-label="View conversation context" aria-disabled="true">
+                <span class="projects-context-icon">🧠</span>
+                <span class="projects-context-badge" style="display: none;"></span>
+              </button>
             </div>
             <div class="chat-input-container" id="chat-input-container">
               <div class="chat-input-field">
@@ -116,10 +122,6 @@
             </div>
             <div class="chat-meta-row">
               <div id="chat-model-indicator" class="chat-model-indicator"></div>
-              <button id="projects-context-btn" class="projects-context-btn" type="button" aria-label="View conversation context" aria-disabled="true">
-                <span class="projects-context-icon">🧠</span>
-                <span class="projects-context-badge" style="display: none;"></span>
-              </button>
             </div>
           </div>
         </div>

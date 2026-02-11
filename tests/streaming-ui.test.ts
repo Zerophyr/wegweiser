@@ -18,11 +18,33 @@ describe("setStreamingUi", () => {
     expect(container?.classList.contains("is-streaming")).toBe(true);
     expect(input?.disabled).toBe(true);
     expect(stopButton?.style.display).toBe("inline-flex");
+    expect(stopButton?.getAttribute("aria-hidden")).toBe("false");
 
     setStreamingUi({ container, input, stopButton, isStreaming: false });
 
     expect(container?.classList.contains("is-streaming")).toBe(false);
     expect(input?.disabled).toBe(false);
     expect(stopButton?.style.display).toBe("none");
+    expect(stopButton?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("moves focus to input before hiding the stop button", () => {
+    document.body.innerHTML = `
+      <div id="container">
+        <textarea id="prompt"></textarea>
+        <button id="stop-btn"></button>
+      </div>
+    `;
+    const container = document.getElementById("container");
+    const input = document.getElementById("prompt") as HTMLTextAreaElement | null;
+    const stopButton = document.getElementById("stop-btn");
+
+    stopButton?.focus();
+    expect(document.activeElement).toBe(stopButton);
+
+    setStreamingUi({ container, input, stopButton, isStreaming: false });
+
+    expect(document.activeElement).toBe(input);
+    expect(stopButton?.getAttribute("aria-hidden")).toBe("true");
   });
 });
