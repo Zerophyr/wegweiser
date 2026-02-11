@@ -862,6 +862,7 @@ function initElements() {
   elements.chatContainer = document.getElementById('chat-container');
   elements.chatMessages = document.getElementById('chat-messages');
   elements.chatInput = document.getElementById('chat-input');
+  elements.chatInputContainer = document.getElementById('chat-input-container');
   elements.sendBtn = document.getElementById('send-btn');
   elements.stopBtn = document.getElementById('stop-btn');
   elements.chatModelIndicator = document.getElementById('chat-model-indicator');
@@ -1759,6 +1760,24 @@ function openCreateProjectModal() {
   elements.ProjectName.focus();
 }
 
+function setChatStreamingState(isStreaming) {
+  if (typeof setStreamingUi === 'function') {
+    setStreamingUi({
+      container: elements.chatInputContainer,
+      input: elements.chatInput,
+      stopButton: elements.stopBtn,
+      isStreaming
+    });
+    return;
+  }
+  if (elements.chatInput) {
+    elements.chatInput.disabled = Boolean(isStreaming);
+  }
+  if (elements.stopBtn) {
+    elements.stopBtn.style.display = isStreaming ? 'inline-flex' : 'none';
+  }
+}
+
 async function openEditProjectModal(projectId) {
   const Project = await getProject(projectId);
   if (!Project) return;
@@ -1965,6 +1984,7 @@ async function loadModels() {
         ProjectModelDropdown = new ModelDropdownManager({
           inputElement: resolvedModelInput,
           containerType: 'modal',
+          preferProvidedRecents: true,
           onModelSelect: async (modelId) => {
             const selectedModel = ProjectModelMap.get(modelId);
             const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
@@ -2458,7 +2478,7 @@ async function retryStreamFromContext(retryContext, ui) {
 
     resetStreamingUi(ui);
     elements.sendBtn.style.display = 'none';
-    elements.stopBtn.style.display = 'block';
+    setChatStreamingState(true);
     isStreaming = true;
     const startTime = Date.now();
     await streamMessage(
@@ -2481,7 +2501,7 @@ async function retryStreamFromContext(retryContext, ui) {
     }
   } finally {
     elements.sendBtn.style.display = 'block';
-    elements.stopBtn.style.display = 'none';
+    setChatStreamingState(false);
     isStreaming = false;
     retryInProgress = false;
     await renderThreadList();
@@ -2495,9 +2515,7 @@ async function sendImageMessage(content, Project) {
   if (elements.sendBtn) {
     elements.sendBtn.disabled = true;
   }
-  if (elements.stopBtn) {
-    elements.stopBtn.style.display = 'none';
-  }
+  setChatStreamingState(false);
 
   await addMessageToThread(currentThreadId, {
     role: 'user',
@@ -2694,7 +2712,7 @@ async function sendMessage() {
 
   // Show stop button, hide send
   elements.sendBtn.style.display = 'none';
-  elements.stopBtn.style.display = 'block';
+  setChatStreamingState(true);
   isStreaming = true;
 
   // Start streaming
@@ -2710,7 +2728,7 @@ async function sendMessage() {
   } finally {
     // Restore buttons
     elements.sendBtn.style.display = 'block';
-    elements.stopBtn.style.display = 'none';
+    setChatStreamingState(false);
     isStreaming = false;
 
     await renderThreadList();
@@ -2894,7 +2912,7 @@ function stopStreaming() {
   }
   isStreaming = false;
   elements.sendBtn.style.display = 'block';
-  elements.stopBtn.style.display = 'none';
+  setChatStreamingState(false);
   showToast('Generation stopped', 'info');
 }
 

@@ -155,6 +155,7 @@ function initModelDropdown() {
   modelDropdown = new ModelDropdownManager({
     inputElement: modelInput,
     containerType: 'modal',
+    preferProvidedRecents: true,
     onModelSelect: async (modelId) => {
       selectedCombinedModelId = modelId;
       const selectedModel = modelMap.get(modelId);

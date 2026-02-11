@@ -101,6 +101,66 @@ describe("ModelDropdownManager storage keys", () => {
     delete globalAny.setEncrypted;
   });
 
+  test("loadRecentlyUsedModels does not override provided recents when preferProvidedRecents is true", async () => {
+    const globalAny = global as any;
+    globalAny.getEncrypted = jest.fn().mockResolvedValue({ recent_key: ["openai/gpt-4o"] });
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      favoritesKey: "fav_key",
+      recentModelsKey: "recent_key",
+      preferProvidedRecents: true,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setRecentlyUsed(["openrouter:openai/gpt-4o"]);
+
+    await dropdown.loadRecentlyUsedModels();
+
+    expect(dropdown.state.recentlyUsedModels).toEqual(["openrouter:openai/gpt-4o"]);
+
+    delete globalAny.getEncrypted;
+  });
+
+  test("recent models render after async load when dropdown already open", async () => {
+    const globalAny = global as any;
+    globalAny.getEncrypted = jest.fn().mockResolvedValue({ recent_key: ["openai/gpt-4o"] });
+
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      favoritesKey: "fav_key",
+      recentModelsKey: "recent_key",
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.setModels([
+      { id: "openai/gpt-4o", displayName: "openai/gpt-4o" }
+    ]);
+
+    dropdown.show("");
+
+    await dropdown.loadRecentlyUsedModels();
+
+    expect(document.body.textContent).toContain("Recently Used");
+
+    delete globalAny.getEncrypted;
+  });
+
+  test("setRecentlyUsed trims to maxRecentModels", () => {
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn(),
+      maxRecentModels: 5
+    });
+
+    dropdown.setRecentlyUsed(["a", "b", "c", "d", "e", "f"]);
+
+    expect(dropdown.state.recentlyUsedModels).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
   test("bindInput reattaches listeners to a new input", () => {
     const firstInput = document.getElementById("model-input");
     const dropdown = new ModelDropdownManager({
@@ -386,6 +446,50 @@ describe("ModelDropdownManager storage keys", () => {
     );
     expect(sidepanel).toMatch(/models_updated/);
     expect(projects).toMatch(/models_updated/);
+  });
+
+  test("preserves selected model text until typing begins", async () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    input.value = "openai/gpt-4o";
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      clearInputOnType: true,
+      onModelSelect: jest.fn().mockResolvedValue(true)
+    });
+
+    await dropdown.selectModel("openrouter:openai/gpt-4o");
+
+    expect(input.value).toBe("openai/gpt-4o");
+
+    dropdown.state.visible = true;
+    dropdown.handleKeyDown({
+      key: "g",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      preventDefault: jest.fn()
+    });
+
+    expect(input.value).toBe("");
+  });
+
+  test("selectModel does not refocus the model input after selection", async () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    input.value = "openai/gpt-4o";
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn().mockResolvedValue(true)
+    });
+
+    const focusSpy = jest.spyOn(dropdown, "focusInput");
+    dropdown.show("");
+    focusSpy.mockClear();
+
+    await dropdown.selectModel("openrouter:openai/gpt-4o");
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   test("render tolerates non-array recentlyUsedModels", () => {

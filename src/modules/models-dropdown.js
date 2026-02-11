@@ -10,6 +10,8 @@ class ModelDropdownManager {
       favoritesKey: config.favoritesKey || 'or_favorites',
       recentModelsKey: config.recentModelsKey || 'or_recent_models',
       maxRecentModels: 5,
+      clearInputOnType: config.clearInputOnType !== false,
+      preferProvidedRecents: Boolean(config.preferProvidedRecents),
       ...config
     };
 
@@ -24,7 +26,10 @@ class ModelDropdownManager {
       justOpened: false,
       justClosed: false,
       ignoreNextInput: false,
-      pointerDownInDropdown: false
+      clearOnTypeArmed: false,
+      lastSelectedValue: '',
+      pointerDownInDropdown: false,
+      skipFocusOnDock: false
     };
 
     this.dropdownElement = null;
@@ -35,7 +40,9 @@ class ModelDropdownManager {
   init() {
     this.createDropdownElement();
     this.attachEventListeners();
-    this.loadRecentlyUsedModels();
+    if (!this.config.preferProvidedRecents) {
+      this.loadRecentlyUsedModels();
+    }
     this.inputParent = this.config.inputElement ? this.config.inputElement.parentElement : null;
     this.inputPlaceholder = null;
   }
@@ -294,7 +301,11 @@ class ModelDropdownManager {
     } else {
       this.inputParent.appendChild(input);
     }
-    this.focusInput();
+    const shouldFocus = !this.state.skipFocusOnDock;
+    this.state.skipFocusOnDock = false;
+    if (shouldFocus) {
+      this.focusInput();
+    }
   }
 
   focusInput() {
@@ -307,6 +318,16 @@ class ModelDropdownManager {
 
   handleKeyDown(e) {
     if (!this.state.visible) return;
+    const input = this.config.inputElement;
+    if (input && this.state.clearOnTypeArmed && this.config.clearInputOnType) {
+      const isPrintable = typeof e.key === 'string' && e.key.length === 1;
+      const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+      if (isPrintable && !hasModifier && input.value === this.state.lastSelectedValue) {
+        input.value = '';
+        this.state.filterTerm = '';
+        this.state.clearOnTypeArmed = false;
+      }
+    }
 
     const items = Array.from(this.dropdownElement.querySelectorAll('.model-dropdown-item'));
 
@@ -557,6 +578,9 @@ class ModelDropdownManager {
         // Add to recently used
         this.addToRecentlyUsed(modelId);
         if (this.config.inputElement) {
+          this.state.lastSelectedValue = this.config.inputElement.value || '';
+          this.state.clearOnTypeArmed = true;
+          this.state.skipFocusOnDock = true;
           this.config.inputElement.blur();
         }
         this.hide();
@@ -589,6 +613,9 @@ class ModelDropdownManager {
   }
 
   async loadRecentlyUsedModels() {
+    if (this.config.preferProvidedRecents && Array.isArray(this.state.recentlyUsedModels) && this.state.recentlyUsedModels.length > 0) {
+      return;
+    }
     let data = {};
     let usedEncrypted = false;
     try {
@@ -617,6 +644,9 @@ class ModelDropdownManager {
       return;
     }
     this.setRecentlyUsed(recentValue);
+    if (this.state.visible) {
+      this.render();
+    }
   }
 
   setModels(models) {
@@ -628,7 +658,12 @@ class ModelDropdownManager {
   }
 
   setRecentlyUsed(recentList) {
-    this.state.recentlyUsedModels = Array.isArray(recentList) ? [...recentList] : [];
+    if (!Array.isArray(recentList)) {
+      this.state.recentlyUsedModels = [];
+      return;
+    }
+    const max = Number.isFinite(this.config.maxRecentModels) ? this.config.maxRecentModels : 5;
+    this.state.recentlyUsedModels = recentList.slice(0, Math.max(0, max));
   }
 
   show(filterTerm = '') {

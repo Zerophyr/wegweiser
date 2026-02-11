@@ -50,6 +50,24 @@ const typingIndicator = document.getElementById("typing-indicator");
 const stopBtn = document.getElementById("stopBtn");
 const estimatedCostEl = document.getElementById("estimated-cost");
 
+function setPromptStreamingState(isStreaming) {
+  if (typeof setStreamingUi === "function") {
+    setStreamingUi({
+      container: promptContainer,
+      input: promptEl,
+      stopButton: stopBtn,
+      isStreaming
+    });
+    return;
+  }
+  if (promptEl) {
+    promptEl.disabled = Boolean(isStreaming);
+  }
+  if (stopBtn) {
+    stopBtn.style.display = isStreaming ? "inline-flex" : "none";
+  }
+}
+
 // ---- Toggle states ----
 let webSearchEnabled = false;
 let reasoningEnabled = false;
@@ -643,7 +661,7 @@ if (balanceRefreshBtn) {
 
 async function generateImage(prompt) {
   askBtn.disabled = true;
-  stopBtn.style.display = 'none';
+  setPromptStreamingState(false);
   metaEl.textContent = "🖼️ Generating image...";
 
   showAnswerBox();
@@ -789,7 +807,7 @@ async function askQuestion() {
   }
 
   askBtn.disabled = true;
-  stopBtn.style.display = 'block';
+  setPromptStreamingState(true);
 
   // Step 1: Show preparation
   metaEl.textContent = "🔄 Preparing request...";
@@ -1009,7 +1027,7 @@ async function askQuestion() {
       const port = chrome.runtime.connect({ name: 'streaming' });
       activePort = port;
       askBtn.disabled = true;
-      stopBtn.style.display = 'block';
+      setPromptStreamingState(true);
 
       port.postMessage({
         type: 'start_stream',
@@ -1023,7 +1041,7 @@ async function askQuestion() {
       // Handle port disconnection (e.g., when stopped)
       port.onDisconnect.addListener(() => {
         activePort = null;
-        stopBtn.style.display = 'none';
+        setPromptStreamingState(false);
         askBtn.disabled = false;
 
         if (!hasCompleted && !hasError) {
@@ -1186,14 +1204,14 @@ async function askQuestion() {
           metaEl.textContent = `✅ Answer received using ${currentModel}.`;
           port.disconnect();
           activePort = null;
-          stopBtn.style.display = 'none';
+          setPromptStreamingState(false);
         } else if (msg.type === 'error') {
           // Handle error
           hasError = true;
           renderStreamError(msg.error, `❌ Error from ${getProviderLabelSafe(currentProvider)}.`);
           port.disconnect();
           activePort = null;
-          stopBtn.style.display = 'none';
+          setPromptStreamingState(false);
         }
       });
     };
@@ -1225,7 +1243,7 @@ async function askQuestion() {
     answerSection.scrollTop = answerSection.scrollHeight;
   } finally {
     askBtn.disabled = false;
-    stopBtn.style.display = 'none';
+    setPromptStreamingState(false);
     activePort = null;
   }
 }
@@ -1238,7 +1256,7 @@ stopBtn.addEventListener("click", () => {
   if (activePort) {
     activePort.disconnect();
     activePort = null;
-    stopBtn.style.display = 'none';
+    setPromptStreamingState(false);
     askBtn.disabled = false;
     metaEl.textContent = "⚠️ Generation stopped by user.";
     hideTypingIndicator();
@@ -1596,6 +1614,7 @@ async function loadModels() {
       modelDropdown = new ModelDropdownManager({
         inputElement: resolvedModelInput,
         containerType: 'sidebar',
+        preferProvidedRecents: true,
         onModelSelect: async (modelId) => {
           const debugDropdown = Boolean(window.DEBUG_MODEL_DROPDOWN);
           const selectedModel = modelMap.get(modelId);

@@ -103,10 +103,16 @@
                 <span class="chat-toggle-text">Image</span>
               </label>
             </div>
-            <div class="chat-input-container">
-              <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+            <div class="chat-input-container" id="chat-input-container">
+              <div class="chat-input-field">
+                <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+                <button id="stop-btn" class="stop-inline-btn" style="display: none;" aria-label="Stop generation" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <rect x="6" y="6" width="12" height="12" rx="2" ry="2" fill="currentColor"></rect>
+                  </svg>
+                </button>
+              </div>
               <button id="send-btn" class="btn btn-primary">Send</button>
-              <button id="stop-btn" class="btn btn-danger" style="display: none;">Stop</button>
             </div>
             <div class="chat-meta-row">
               <div id="chat-model-indicator" class="chat-model-indicator"></div>
@@ -244,6 +250,7 @@
   <script src="../shared/image-store.js"></script>
   <script src="../shared/image-cache.js"></script>
   <script src="../modules/models-dropdown.js"></script>
+  <script src="../modules/streaming-ui.js"></script>
   <script src="projects.js"></script>
 </body>
 </html>
