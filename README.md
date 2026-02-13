@@ -87,18 +87,18 @@ _(Coming soon)_
 ```
 Wegweiser-extension/
 ├── .github/                # CI workflows
-├── docs/                   # Plans and technical docs
+├── docs/                   # Internal docs/plans (local workflow)
 ├── scripts/                # Build/release utilities
 ├── src/
-│   ├── background/         # Service worker + provider/API orchestration
-│   ├── sidepanel/          # Sidebar UI
-│   ├── projects/           # Projects UI
-│   ├── options/            # Options page
+│   ├── background/         # Service worker + provider/API orchestration + background-* helpers
+│   ├── sidepanel/          # Sidebar UI + sidepanel-* helpers
+│   ├── projects/           # Projects UI + projects-* helper modules
+│   ├── options/            # Options page + options-* history helpers
 │   ├── image-viewer/       # Image viewer tab for generated images
 │   ├── modules/            # Shared UI modules (markdown, models, streaming, provider utils)
 │   ├── shared/             # Shared storage/security utilities
 │   └── lib/                # Vendor libs (DOMPurify)
-├── tests/                  # Jest test suite
+├── tests/                  # Jest test suite (feature tests + utility module tests)
 ├── icons/                  # Extension icons
 ├── privacy-policy.html
 ├── manifest.json

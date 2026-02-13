@@ -33,6 +33,10 @@ const setLocalStorage = (values) => (
 // encrypted-storage
 
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
+const projectsModuleResolver = (typeof window !== "undefined" && window.projectsModuleResolver)
+  || (typeof require === "function" ? require("./projects-module-resolver.js") : null);
+const resolveProjectsModule = projectsModuleResolver?.resolveProjectsModule
+  || ((windowKey) => ((typeof window !== "undefined" && window && window[windowKey]) ? window[windowKey] : {}));
 
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
@@ -41,7 +45,7 @@ function normalizeImageCacheLimitMb(value) {
   return Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, snapped));
 }
 
-const providerUiUtils = (typeof window !== 'undefined' && window.providerUiUtils) || {};
+const providerUiUtils = resolveProjectsModule('providerUiUtils', '../modules/provider-ui-utils.js');
 const normalizeProviderSafe = providerUiUtils.normalizeProviderSafe
   || ((providerId) => (providerId === 'naga' ? 'naga' : 'openrouter'));
 const getProviderLabelSafe = providerUiUtils.getProviderLabelSafe
@@ -140,7 +144,6 @@ async function loadProviderSetting() {
   }
 }
 
-const MAX_STORAGE_BYTES = 10485760; // 10MB
 
 // Common emojis for Project icons
 const Project_EMOJIS = [
@@ -155,150 +158,825 @@ const Project_EMOJIS = [
 ];
 
 // ============ UTILITY FUNCTIONS ============
-
-function generateId(prefix) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function formatRelativeTime(timestamp) {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function formatDate(timestamp) {
-  const date = new Date(timestamp);
-  const day = date.getDate();
-  const month = date.toLocaleDateString('en-US', { month: 'short' });
-  const year = date.getFullYear();
-  return `${day}. ${month}. ${year}`;
-}
-
-function truncateText(text, maxLength) {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength).trim() + '...';
-}
-
-function generateThreadTitle(firstMessage) {
-  // Get first sentence or first 50 chars
-  const firstSentence = firstMessage.split(/[.!?]/)[0];
-  if (firstSentence.length <= 50) {
-    return firstSentence.trim();
-  }
-  return firstMessage.substring(0, 50).trim() + '...';
-}
-
-const projectsContextUtils = (typeof window !== 'undefined' && window.projectsContextUtils) || {};
-const getLiveWindowSize = projectsContextUtils.getLiveWindowSize || ((summary) => summary ? 8 : 12);
-const splitMessagesForSummary = projectsContextUtils.splitMessagesForSummary || ((messages, liveWindowSize) => {
-  const safeMessages = Array.isArray(messages) ? messages : [];
-  if (safeMessages.length <= liveWindowSize) {
-    return { historyToSummarize: [], liveMessages: safeMessages };
-  }
-  const cutoffIndex = safeMessages.length - liveWindowSize;
+const projectsBasicUtils = resolveProjectsModule('projectsBasicUtils', './projects-basic-utils.js');
+const {
+  generateId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  formatRelativeTime = (timestamp) => {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return new Date(timestamp).toLocaleDateString();
+  },
+  formatDate = (timestamp) => {
+    const date = new Date(timestamp);
+    const day = date.getDate();
+    const month = date.toLocaleDateString("en-US", { month: "short" });
+    const year = date.getFullYear();
+    return `${day}. ${month}. ${year}`;
+  },
+  truncateText = (text, maxLength) => text.length <= maxLength ? text : `${text.substring(0, maxLength).trim()}...`,
+  generateThreadTitle = (firstMessage) => {
+    const firstSentence = firstMessage.split(/[.!?]/)[0];
+    return firstSentence.length <= 50 ? firstSentence.trim() : `${firstMessage.substring(0, 50).trim()}...`;
+  },
+  formatBytes = (bytes) => `${((Number.isFinite(bytes) ? bytes : 0) / 1024 / 1024).toFixed(1)}MB`,
+  buildStorageLabel = (label, bytesUsed, maxBytes = null) => (
+    typeof maxBytes === "number" && maxBytes > 0
+      ? `${label}: ${formatBytes(bytesUsed)} of ${formatBytes(maxBytes)}`
+      : `${label}: ${formatBytes(bytesUsed)}`
+  ),
+  escapeHtml = (str) => String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;"),
+  getImageExtension = (mimeType) => (mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : mimeType === "image/gif" ? "gif" : "png"),
+  sanitizeFilename = (name) => (name || "thread").replace(/[^a-zA-Z0-9 _-]/g, "").trim().substring(0, 50) || "thread"
+} = projectsBasicUtils;
+const projectsImageUtils = resolveProjectsModule('projectsImageUtils', './projects-image-utils.js');
+const downloadImage = projectsImageUtils.downloadImage || (() => {});
+const openImageLightbox = projectsImageUtils.openImageLightbox || (() => {});
+const hydrateImageCards = projectsImageUtils.hydrateImageCards || (async () => {});
+const projectsThreadListUtils = resolveProjectsModule('projectsThreadListUtils', './projects-thread-list-utils.js');
+const buildEmptyThreadListHtml = projectsThreadListUtils.buildEmptyThreadListHtml
+  || (() => '<p class="text-muted" style="text-align: center; padding: 20px;">No threads yet</p>');
+const buildThreadListHtml = projectsThreadListUtils.buildThreadListHtml
+  || (() => '');
+const projectsCardsUtils = resolveProjectsModule('projectsCardsUtils', './projects-cards-utils.js');
+const buildProjectCardHtml = projectsCardsUtils.buildProjectCardHtml
+  || (() => '');
+const projectsExportUtils = resolveProjectsModule('projectsExportUtils', './projects-export-utils.js');
+const getFullThreadMessages = projectsExportUtils.getFullThreadMessages
+  || ((thread) => [...(Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : []), ...(Array.isArray(thread?.messages) ? thread.messages : [])]);
+const buildExportPdfHtml = projectsExportUtils.buildExportPdfHtml
+  || (() => '');
+const buildThreadExportHtml = projectsExportUtils.buildThreadExportHtml
+  || ((messages, options = {}) => {
+    const markdown = typeof options.applyMarkdownStyles === 'function' ? options.applyMarkdownStyles : null;
+    const escape = typeof options.escapeHtml === 'function' ? options.escapeHtml : (v) => String(v || '');
+    return (Array.isArray(messages) ? messages : []).map((msg) => {
+      const role = msg.role === 'assistant' ? 'Assistant' : 'User';
+      const content = markdown ? markdown(msg.content || '') : escape(msg.content || '');
+      return `<h2>${role}</h2><div>${content}</div>`;
+    }).join('');
+  });
+const projectsStorageUtils = resolveProjectsModule('projectsStorageUtils', './projects-storage-utils.js');
+const getIndexedDbStorageUsage = projectsStorageUtils.getIndexedDbStorageUsage || (async () => ({ bytesUsed: 0, percentUsed: 0, quotaBytes: null }));
+const estimateItemSize = projectsStorageUtils.estimateItemSize || (async (item) => {
+  const json = JSON.stringify(item);
+  return new Blob([json]).size;
+});
+const normalizeThreadProjectId = projectsStorageUtils.normalizeThreadProjectId || ((thread) => {
+  if (!thread || typeof thread !== 'object') return thread;
+  const projectId = thread.projectId || thread.ProjectId || thread.spaceId || null;
+  const normalized = { ...thread, projectId };
+  delete normalized.ProjectId;
+  delete normalized.spaceId;
+  return normalized;
+});
+const ensureThreadMessage = projectsStorageUtils.ensureThreadMessage || ((message, threadId, index, baseTime) => {
+  const createdAt = message.createdAt || message.meta?.createdAt || (baseTime + index);
+  const id = message.id || `${threadId}_msg_${index}`;
   return {
-    historyToSummarize: safeMessages.slice(0, cutoffIndex),
-    liveMessages: safeMessages.slice(cutoffIndex)
+    ...message,
+    id,
+    threadId,
+    createdAt
   };
 });
-const shouldSkipSummarization = projectsContextUtils.shouldSkipSummarization || ((prompt) => {
-  if (typeof prompt !== 'string') return false;
-  const estimatedTokens = Math.ceil(prompt.length / 4);
-  return estimatedTokens > 2000;
+const buildThreadRecordForStorage = projectsStorageUtils.buildThreadRecordForStorage || ((thread) => {
+  const record = { ...(thread || {}) };
+  delete record.messages;
+  delete record.summary;
+  delete record.summaryUpdatedAt;
+  delete record.archivedMessages;
+  delete record.archivedUpdatedAt;
+  return record;
 });
-const getSummaryMinLength = projectsContextUtils.getSummaryMinLength || ((historyCount) => {
-  const safeCount = Number.isFinite(historyCount) ? historyCount : Number(historyCount) || 0;
-  const scaled = safeCount * 20;
-  return Math.max(80, Math.min(200, scaled));
+const normalizeLegacyThreadsPayload = projectsStorageUtils.normalizeLegacyThreadsPayload || ((rawThreads) => {
+  let threads = [];
+  let normalized = false;
+  if (Array.isArray(rawThreads)) {
+    threads = rawThreads;
+  } else if (rawThreads && typeof rawThreads === 'object') {
+    Object.entries(rawThreads).forEach(([key, value]) => {
+      if (!Array.isArray(value)) return;
+      value.forEach((thread) => {
+        if (!thread || typeof thread !== 'object') return;
+        const normalizedThread = normalizeThreadProjectId({
+          ...thread,
+          projectId: thread.projectId === undefined ? (thread.ProjectId || thread.spaceId || key) : thread.projectId
+        });
+        threads.push(normalizedThread);
+        normalized = true;
+      });
+    });
+  }
+  threads = threads.map((thread) => {
+    const next = normalizeThreadProjectId(thread);
+    if (next !== thread || thread?.ProjectId !== undefined || thread?.spaceId !== undefined) {
+      normalized = true;
+    }
+    return next;
+  });
+  return { threads, normalized };
 });
-const appendArchivedMessages = projectsContextUtils.appendArchivedMessages || ((currentArchive, newMessages) => {
-  const safeCurrent = Array.isArray(currentArchive) ? currentArchive : [];
-  const safeNew = Array.isArray(newMessages) ? newMessages : [];
-  return [...safeCurrent, ...safeNew];
+const projectsDataUtils = resolveProjectsModule('projectsDataUtils', './projects-data-utils.js');
+const createProjectRecord = projectsDataUtils.createProjectRecord || (({ data = {}, id, now = Date.now() } = {}) => ({
+  id,
+  name: data.name,
+  description: data.description || '',
+  icon: data.icon || '📁',
+  model: data.model || '',
+  modelProvider: data.modelProvider || null,
+  modelDisplayName: data.modelDisplayName || '',
+  customInstructions: data.customInstructions || '',
+  webSearch: data.webSearch || false,
+  reasoning: data.reasoning || false,
+  createdAt: now,
+  updatedAt: now
+}));
+const applyProjectUpdate = projectsDataUtils.applyProjectUpdate
+  || ((project, data = {}, now = Date.now()) => ({ ...project, ...data, updatedAt: now }));
+const createThreadRecord = projectsDataUtils.createThreadRecord || (({ id, projectId, title = 'New Thread', now = Date.now() } = {}) => ({
+  id,
+  projectId,
+  title,
+  messages: [],
+  summary: '',
+  summaryUpdatedAt: null,
+  archivedMessages: [],
+  archivedUpdatedAt: null,
+  createdAt: now,
+  updatedAt: now
+}));
+const applyThreadUpdate = projectsDataUtils.applyThreadUpdate
+  || ((thread, data = {}, now = Date.now()) => ({ ...thread, ...data, updatedAt: now }));
+const appendMessageToThreadData = projectsDataUtils.appendMessageToThread || (({ thread, message, now = Date.now(), generateThreadTitle: generateTitle } = {}) => {
+  const nextMessages = [...(Array.isArray(thread?.messages) ? thread.messages : []), message];
+  const shouldRetitle = (
+    nextMessages.length === 1
+    && message?.role === 'user'
+    && thread?.title === 'New Thread'
+    && typeof generateTitle === 'function'
+  );
+  return {
+    ...thread,
+    messages: nextMessages,
+    title: shouldRetitle ? generateTitle(message.content || '') : thread?.title,
+    updatedAt: now
+  };
 });
-const buildProjectsContextData = projectsContextUtils.buildProjectsContextData || ((thread) => {
-  const summary = typeof thread?.summary === 'string' ? thread.summary : '';
-  const liveMessages = Array.isArray(thread?.messages) ? thread.messages : [];
-  const archivedMessages = Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : [];
-  return { summary, liveMessages, archivedMessages };
+const projectsViewUtils = resolveProjectsModule('projectsViewUtils', './projects-view-utils.js');
+const applyViewSelection = projectsViewUtils.applyViewSelection || ((viewName, options = {}) => {
+  const listView = options.listView || null;
+  const projectView = options.projectView || null;
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('.view').forEach((view) => view.classList.remove('active'));
+  }
+  if (viewName === 'list') {
+    if (listView) listView.classList.add('active');
+    return { shouldResetSelection: true };
+  }
+  if (viewName === 'Project') {
+    if (projectView) projectView.classList.add('active');
+  }
+  return { shouldResetSelection: false };
 });
+const getProjectsListVisibilityState = projectsViewUtils.getProjectsListVisibilityState
+  || ((Projects) => {
+    const safeProjects = Array.isArray(Projects) ? Projects : [];
+    const showEmpty = safeProjects.length === 0;
+    return {
+      showEmpty,
+      gridDisplay: showEmpty ? 'none' : 'grid',
+      emptyDisplay: showEmpty ? 'flex' : 'none'
+    };
+  });
+const sortProjectsByUpdatedAt = projectsViewUtils.sortProjectsByUpdatedAt
+  || ((Projects) => (Array.isArray(Projects) ? Projects.slice() : []).sort((a, b) => (b?.updatedAt || 0) - (a?.updatedAt || 0)));
+const projectsThreadViewUtils = resolveProjectsModule('projectsThreadViewUtils', './projects-thread-view-utils.js');
+const getThreadListViewState = projectsThreadViewUtils.getThreadListViewState
+  || ((threads) => {
+    const sorted = (Array.isArray(threads) ? threads.slice() : []).sort((a, b) => (b?.updatedAt || 0) - (a?.updatedAt || 0));
+    return { threads: sorted, isEmpty: sorted.length === 0 };
+  });
+const projectsClickActionsUtils = resolveProjectsModule('projectsClickActionsUtils', './projects-click-actions-utils.js');
+const resolveProjectCardClickAction = projectsClickActionsUtils.resolveProjectCardClickAction
+  || ((target, card) => {
+    const toggleBtn = target?.closest?.('[data-action="toggle-menu"]');
+    if (toggleBtn) return { type: 'toggle-menu', button: toggleBtn };
+    const editBtn = target?.closest?.('[data-action="edit"]');
+    if (editBtn) return { type: 'edit', projectId: editBtn.dataset.projectId };
+    const deleteBtn = target?.closest?.('[data-action="delete"]');
+    if (deleteBtn) return { type: 'delete', projectId: deleteBtn.dataset.projectId };
+    if (target?.closest?.('.menu-dropdown')) return { type: 'ignore' };
+    return { type: 'open', projectId: card?.dataset?.projectId || null };
+  });
+const resolveThreadItemClickAction = projectsClickActionsUtils.resolveThreadItemClickAction
+  || ((target, item) => {
+    const toggleBtn = target?.closest?.('[data-action="toggle-menu"]');
+    if (toggleBtn) return { type: 'toggle-menu', button: toggleBtn };
+    const renameBtn = target?.closest?.('[data-action="rename"]');
+    if (renameBtn) return { type: 'rename', threadId: renameBtn.dataset.threadId };
+    const exportBtn = target?.closest?.('[data-action="export"]');
+    if (exportBtn) return { type: 'export', threadId: exportBtn.dataset.threadId, format: exportBtn.dataset.format };
+    if (target?.closest?.('[data-action="export-parent"]')) return { type: 'ignore' };
+    const deleteBtn = target?.closest?.('[data-action="delete-thread"]');
+    if (deleteBtn) return { type: 'delete-thread', threadId: deleteBtn.dataset.threadId };
+    if (target?.closest?.('.menu-dropdown')) return { type: 'ignore' };
+    return { type: 'open', threadId: item?.dataset?.threadId || null };
+  });
+const projectsArchiveViewUtils = resolveProjectsModule('projectsArchiveViewUtils', './projects-archive-view-utils.js');
+const buildArchiveSectionHtml = projectsArchiveViewUtils.buildArchiveSectionHtml
+  || ((archivedMessages) => {
+    const list = Array.isArray(archivedMessages) ? archivedMessages : [];
+    if (list.length === 0) return '';
+    return `
+      <div class="chat-archive-block" data-archive-open="false">
+        <button class="chat-archive-toggle" type="button" aria-expanded="false">
+          Earlier messages (${list.length})
+        </button>
+        <div class="chat-archive-content"></div>
+      </div>
+    `;
+  });
+const toggleArchiveSectionInContainer = projectsArchiveViewUtils.toggleArchiveSectionInContainer
+  || (({
+    chatMessagesEl,
+    currentArchivedMessages: archivedMessages,
+    buildMessageHtml: buildMessageHtmlFn,
+    postProcessMessages: postProcessMessagesFn
+  } = {}) => {
+    if (!chatMessagesEl) return;
+    const archiveBlock = chatMessagesEl.querySelector('.chat-archive-block');
+    if (!archiveBlock) return;
+    const contentEl = archiveBlock.querySelector('.chat-archive-content');
+    if (!contentEl) return;
+    const isOpen = archiveBlock.getAttribute('data-archive-open') === 'true';
+    const toggleBtn = archiveBlock.querySelector('.chat-archive-toggle');
+
+    if (isOpen) {
+      contentEl.innerHTML = '';
+      archiveBlock.setAttribute('data-archive-open', 'false');
+      archiveBlock.classList.remove('open');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    const archivedHtml = (typeof buildMessageHtmlFn === 'function' ? buildMessageHtmlFn(archivedMessages) : '');
+    contentEl.innerHTML = archivedHtml || '<div class="chat-archive-empty">No archived messages.</div>';
+    archiveBlock.setAttribute('data-archive-open', 'true');
+    archiveBlock.classList.add('open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+    if (typeof postProcessMessagesFn === 'function') postProcessMessagesFn(contentEl);
+  });
+const projectsChatViewUtils = resolveProjectsModule('projectsChatViewUtils', './projects-chat-view-utils.js');
+const shouldShowSummaryBadge = projectsChatViewUtils.shouldShowSummaryBadge
+  || ((summaryUpdatedAt, now = Date.now(), freshnessMs = 30000) => Boolean(summaryUpdatedAt) && (now - summaryUpdatedAt) < freshnessMs);
+const buildChatMessagesContainerHtml = projectsChatViewUtils.buildChatMessagesContainerHtml
+  || (({ archiveHtml = '', showSummaryBadge = false, messagesHtml = '' } = {}) => {
+    const summaryBadgeHtml = showSummaryBadge
+      ? '<div class="chat-summary-badge">Summary updated</div>'
+      : '';
+    return `${archiveHtml}${summaryBadgeHtml}${messagesHtml}`;
+  });
+const projectsChatClickUtils = resolveProjectsModule('projectsChatClickUtils', './projects-chat-click-utils.js');
+const resolveChatMessageClickAction = projectsChatClickUtils.resolveChatMessageClickAction
+  || ((target) => {
+    if (target?.closest?.('.chat-archive-toggle')) {
+      return { type: 'archive-toggle' };
+    }
+    const exportBtn = target?.closest?.('.export-btn');
+    if (exportBtn) {
+      return { type: 'export-menu-toggle', menu: exportBtn.closest('.export-menu') };
+    }
+    const exportOption = target?.closest?.('.export-option');
+    if (exportOption) {
+      return { type: 'export-option', format: exportOption.getAttribute('data-format') };
+    }
+    return { type: 'none' };
+  });
+const projectsExportMenuUtils = resolveProjectsModule('projectsExportMenuUtils', './projects-export-menu-utils.js');
+const closeProjectsExportMenus = projectsExportMenuUtils.closeProjectsExportMenus
+  || ((rootDocument) => {
+    const doc = rootDocument || document;
+    doc.querySelectorAll('.export-menu').forEach((menu) => menu.classList.remove('open'));
+  });
+const toggleProjectsExportMenu = projectsExportMenuUtils.toggleProjectsExportMenu
+  || ((buttonEl, rootDocument) => {
+    const menu = buttonEl?.closest?.('.export-menu');
+    if (!menu) return false;
+    const isOpen = menu.classList.contains('open');
+    closeProjectsExportMenus(rootDocument);
+    if (!isOpen) {
+      menu.classList.add('open');
+      return true;
+    }
+    return false;
+  });
+const projectsModalUiUtils = resolveProjectsModule('projectsModalUiUtils', './projects-modal-ui-utils.js');
+const setModalVisibility = projectsModalUiUtils.setModalVisibility
+  || ((modalEl, isOpen) => {
+    if (!modalEl) return;
+    modalEl.style.display = isOpen ? 'flex' : 'none';
+  });
+const shouldCloseModalOnBackdropClick = projectsModalUiUtils.shouldCloseModalOnBackdropClick
+  || ((event, modalEl) => Boolean(event && modalEl && event.target === modalEl));
+const isEscapeCloseEvent = projectsModalUiUtils.isEscapeCloseEvent
+  || ((event) => event?.key === 'Escape');
+const projectsSourcesSummaryUtils = resolveProjectsModule('projectsSourcesSummaryUtils', './projects-sources-summary-utils.js');
+const renderProjectsSourcesSummary = projectsSourcesSummaryUtils.renderProjectsSourcesSummary
+  || ((messageDiv, sources, getUniqueDomainsFn) => {
+    const summary = messageDiv?.querySelector?.('.chat-sources-summary');
+    if (!summary) return;
+    summary.innerHTML = '';
+    if (!Array.isArray(sources) || sources.length === 0 || typeof getUniqueDomainsFn !== 'function') return;
+    const uniqueDomains = getUniqueDomainsFn(sources);
+    const stack = document.createElement('div');
+    stack.className = 'sources-favicon-stack';
+    uniqueDomains.slice(0, 5).forEach((domain, index) => {
+      const favicon = document.createElement('img');
+      favicon.src = domain.favicon;
+      favicon.alt = domain.domain;
+      favicon.style.zIndex = String(5 - index);
+      favicon.onerror = () => {
+        favicon.src = 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"%23888\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>';
+      };
+      stack.appendChild(favicon);
+    });
+    const count = document.createElement('span');
+    count.className = 'sources-count';
+    count.textContent = `${sources.length} source${sources.length !== 1 ? 's' : ''}`;
+    summary.appendChild(stack);
+    summary.appendChild(count);
+  });
+const projectsMessageRenderUtils = resolveProjectsModule('projectsMessageRenderUtils', './projects-message-render-utils.js');
+const buildProjectsMessageHtml = projectsMessageRenderUtils.buildProjectsMessageHtml
+  || ((messages, deps = {}) => {
+    const list = Array.isArray(messages) ? messages : [];
+    const escape = typeof deps.escapeHtml === 'function' ? deps.escapeHtml : (v) => String(v || '');
+    return list.map((msg) => `
+      <div class="chat-message ${msg.role === 'assistant' ? 'chat-message-assistant' : 'chat-message-user'}">
+        <div class="chat-bubble">${escape(msg.content || '')}</div>
+      </div>
+    `).join('');
+  });
+const projectsMessagePostprocessUtils = resolveProjectsModule('projectsMessagePostprocessUtils', './projects-message-postprocess-utils.js');
+const processProjectsAssistantSources = projectsMessagePostprocessUtils.processProjectsAssistantSources
+  || ((root, deps = {}) => {
+    const scope = root || document;
+    scope.querySelectorAll('.chat-message-assistant .chat-content').forEach((contentEl) => {
+      try {
+        const sources = JSON.parse(contentEl.dataset.sources || '[]');
+        if (sources.length > 0 && typeof deps.makeSourceReferencesClickable === 'function') {
+          deps.makeSourceReferencesClickable(contentEl, sources);
+          if (typeof deps.createSourcesIndicator === 'function') {
+            const indicator = deps.createSourcesIndicator(sources, contentEl);
+            if (indicator) contentEl.appendChild(indicator);
+          }
+        }
+        const messageDiv = contentEl.closest('.chat-message-assistant');
+        if (messageDiv && typeof deps.renderChatSourcesSummary === 'function') {
+          deps.renderChatSourcesSummary(messageDiv, sources);
+        }
+      } catch (e) {
+        (deps.logger || console).error('Error processing sources:', e);
+      }
+    });
+  });
+const bindProjectsCopyButtons = projectsMessagePostprocessUtils.bindProjectsCopyButtons
+  || ((root, deps = {}) => {
+    const scope = root || document;
+    const writeText = deps.writeText || ((text) => navigator.clipboard.writeText(text));
+    const showToastFn = deps.showToast || (() => {});
+    const setTimeoutFn = deps.setTimeoutFn || setTimeout;
+    scope.querySelectorAll('.chat-copy-btn').forEach((btn) => {
+      if (btn.dataset.bound === 'true') return;
+      btn.dataset.bound = 'true';
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const message = btn.closest('.chat-message-assistant');
+        const contentEl = message?.querySelector('.chat-content');
+        const content = contentEl?.innerText || contentEl?.textContent || '';
+        try {
+          await writeText(content);
+          btn.classList.add('copied');
+          setTimeoutFn(() => btn.classList.remove('copied'), 2000);
+        } catch (_) {
+          showToastFn('Failed to copy', 'error');
+        }
+      });
+    });
+  });
+const projectsElementsUtils = resolveProjectsModule('projectsElementsUtils', './projects-elements-utils.js');
+const collectProjectsElements = projectsElementsUtils.collectProjectsElements
+  || ((doc) => ({
+    ProjectsListView: doc?.getElementById?.('projects-list-view') || null
+  }));
+const projectsMenuUtils = resolveProjectsModule('projectsMenuUtils', './projects-menu-utils.js');
+const closeProjectsDropdownMenus = projectsMenuUtils.closeProjectsDropdownMenus
+  || ((rootDocument) => {
+    const doc = rootDocument || document;
+    doc.querySelectorAll('.menu-items').forEach((menu) => {
+      menu.style.display = 'none';
+    });
+  });
+const toggleProjectsDropdownMenu = projectsMenuUtils.toggleProjectsDropdownMenu
+  || ((buttonEl, rootDocument) => {
+    if (!buttonEl) return false;
+    const doc = rootDocument || document;
+    const targetMenu = buttonEl.nextElementSibling;
+    doc.querySelectorAll('.menu-items').forEach((menu) => {
+      if (menu !== targetMenu) {
+        menu.style.display = 'none';
+      }
+    });
+    if (!targetMenu) return false;
+    targetMenu.style.display = targetMenu.style.display === 'none' ? 'block' : 'none';
+    return targetMenu.style.display === 'block';
+  });
+const projectsFormUtils = resolveProjectsModule('projectsFormUtils', './projects-form-utils.js');
+const buildProjectFormData = projectsFormUtils.buildProjectFormData
+  || (({
+    elements: el,
+    parseCombinedModelId,
+    normalizeProvider,
+    buildModelDisplayName: buildName
+  } = {}) => {
+    const combinedModelId = el?.ProjectModel?.value || '';
+    const parsedModel = typeof parseCombinedModelId === 'function'
+      ? parseCombinedModelId(combinedModelId)
+      : { provider: 'openrouter', modelId: combinedModelId };
+    const modelProvider = combinedModelId
+      ? (typeof normalizeProvider === 'function' ? normalizeProvider(parsedModel.provider) : parsedModel.provider)
+      : null;
+    const modelId = combinedModelId ? (parsedModel.modelId || '') : '';
+    const modelDisplayName = combinedModelId
+      ? (el?.ProjectModelInput?.value || (typeof buildName === 'function' ? buildName(modelProvider, modelId) : modelId))
+      : '';
+    return {
+      name: (el?.ProjectName?.value || '').trim(),
+      description: (el?.ProjectDescription?.value || '').trim(),
+      icon: el?.ProjectIcon?.value || '📁',
+      model: modelId,
+      modelProvider,
+      modelDisplayName,
+      customInstructions: (el?.ProjectInstructions?.value || '').trim(),
+      webSearch: Boolean(el?.ProjectWebSearch?.checked),
+      reasoning: Boolean(el?.ProjectReasoning?.checked)
+    };
+  });
+const projectsEmojiUtils = resolveProjectsModule('projectsEmojiUtils', './projects-emoji-utils.js');
+const buildEmojiButtonsHtml = projectsEmojiUtils.buildEmojiButtonsHtml
+  || ((emojis) => (Array.isArray(emojis) ? emojis : []).map((emoji) => (
+    `<button type="button" class="emoji-btn" data-emoji="${emoji}">${emoji}</button>`
+  )).join(''));
+const shouldCloseEmojiGridOnDocumentClick = projectsEmojiUtils.shouldCloseEmojiGridOnDocumentClick
+  || ((target) => !target?.closest?.('.icon-picker-wrapper'));
+const projectsDeleteModalUtils = resolveProjectsModule('projectsDeleteModalUtils', './projects-delete-modal-utils.js');
+const buildProjectDeleteModalContent = projectsDeleteModalUtils.buildProjectDeleteModalContent
+  || ((projectName, threadCount) => ({
+    title: 'Delete Project',
+    message: `Are you sure you want to delete "${projectName}" and all its threads?`,
+    sizeText: `This will delete ${threadCount} thread${threadCount !== 1 ? 's' : ''}.`
+  }));
+const buildThreadDeleteModalContent = projectsDeleteModalUtils.buildThreadDeleteModalContent
+  || ((threadTitle, sizeBytes) => ({
+    title: 'Delete Thread',
+    message: `Are you sure you want to delete "${threadTitle}"?`,
+    sizeText: `This will free ~${(sizeBytes / 1024).toFixed(1)}KB.`
+  }));
+const projectsProjectModalUtils = resolveProjectsModule('projectsProjectModalUtils', './projects-project-modal-utils.js');
+const buildCreateProjectModalViewState = projectsProjectModalUtils.buildCreateProjectModalViewState
+  || (() => ({
+    title: 'Create Project',
+    saveLabel: 'Create Project',
+    icon: '📁',
+    webSearch: false,
+    reasoning: false
+  }));
+const buildEditProjectModalViewState = projectsProjectModalUtils.buildEditProjectModalViewState
+  || (({
+    project,
+    currentProvider: currentProviderValue,
+    normalizeProvider,
+    buildCombinedModelId,
+    getProjectModelLabel: getLabel
+  } = {}) => {
+    const modelProvider = typeof normalizeProvider === 'function'
+      ? normalizeProvider(project?.modelProvider || currentProviderValue)
+      : (project?.modelProvider || currentProviderValue || 'openrouter');
+    const modelCombinedId = project?.model
+      ? (typeof buildCombinedModelId === 'function' ? buildCombinedModelId(modelProvider, project.model) : `${modelProvider}:${project.model}`)
+      : '';
+    return {
+      title: 'Edit Project',
+      saveLabel: 'Save Changes',
+      name: project?.name || '',
+      description: project?.description || '',
+      icon: project?.icon || '📁',
+      modelCombinedId,
+      modelDisplayName: project?.model ? (typeof getLabel === 'function' ? getLabel(project) : project.model) : '',
+      customInstructions: project?.customInstructions || '',
+      webSearch: Boolean(project?.webSearch),
+      reasoning: Boolean(project?.reasoning)
+    };
+  });
+const projectsChatSettingsUtils = resolveProjectsModule('projectsChatSettingsUtils', './projects-chat-settings-utils.js');
+const applyProjectChatSettingsToElements = projectsChatSettingsUtils.applyProjectChatSettingsToElements
+  || ((project, el, applyProjectImageModeFn) => {
+    if (!project || !el) return;
+    if (el.chatWebSearch) el.chatWebSearch.checked = Boolean(project.webSearch);
+    if (el.chatReasoning) el.chatReasoning.checked = Boolean(project.reasoning);
+    if (typeof applyProjectImageModeFn === 'function') applyProjectImageModeFn(project);
+  });
+const projectsChatPanelUtils = resolveProjectsModule('projectsChatPanelUtils', './projects-chat-panel-utils.js');
+const buildEmptyChatPanelState = projectsChatPanelUtils.buildEmptyChatPanelState
+  || (() => ({ chatEmptyDisplay: 'flex', chatContainerDisplay: 'none', hasActiveThread: false }));
+const buildActiveChatPanelState = projectsChatPanelUtils.buildActiveChatPanelState
+  || (() => ({ chatEmptyDisplay: 'none', chatContainerDisplay: 'flex', hasActiveThread: true }));
+const applyChatPanelStateToElements = projectsChatPanelUtils.applyChatPanelStateToElements
+  || ((el, state) => {
+    if (!el || !state) return;
+    if (el.chatEmptyState?.style) el.chatEmptyState.style.display = state.chatEmptyDisplay;
+    if (el.chatContainer?.style) el.chatContainer.style.display = state.chatContainerDisplay;
+  });
+const projectsStorageWarningUtils = resolveProjectsModule('projectsStorageWarningUtils', './projects-storage-warning-utils.js');
+const showProjectsStorageWarning = projectsStorageWarningUtils.showProjectsStorageWarning
+  || ((warningEl, messageEl, level, message) => {
+    if (!warningEl) return;
+    warningEl.className = `storage-warning ${level}`;
+    warningEl.style.display = 'flex';
+    if (messageEl) messageEl.textContent = message;
+  });
+const hideProjectsStorageWarning = projectsStorageWarningUtils.hideProjectsStorageWarning
+  || ((warningEl) => {
+    if (!warningEl) return;
+    warningEl.style.display = 'none';
+  });
+const projectsStorageViewUtils = resolveProjectsModule('projectsStorageViewUtils', './projects-storage-view-utils.js');
+const shouldUseCachedStorageUsage = projectsStorageViewUtils.shouldUseCachedStorageUsage
+  || (({ now, lastUpdate, maxAgeMs, cachedUsage } = {}) => Boolean(cachedUsage) && Number.isFinite(now) && Number.isFinite(lastUpdate) && Number.isFinite(maxAgeMs) && (now - lastUpdate) < maxAgeMs);
+const buildStorageMeterViewState = projectsStorageViewUtils.buildStorageMeterViewState
+  || (({ usage, buildStorageLabel: buildStorageLabelFn } = {}) => {
+    const safeUsage = usage || { bytesUsed: 0, percentUsed: 0, quotaBytes: null };
+    const percentUsed = typeof safeUsage.percentUsed === 'number' ? safeUsage.percentUsed : 0;
+    let warning = null;
+    if (percentUsed >= 95) {
+      warning = { level: 'critical', message: 'Storage full. Delete images or threads to free space.' };
+    } else if (percentUsed >= 85) {
+      warning = { level: 'high', message: 'Storage almost full. Delete images or threads to continue using Projects.' };
+    } else if (percentUsed >= 70) {
+      warning = { level: 'medium', message: 'Storage is filling up. Consider deleting old threads or images.' };
+    }
+    return {
+      text: typeof buildStorageLabelFn === 'function' ? buildStorageLabelFn('IndexedDB Storage', safeUsage.bytesUsed, safeUsage.quotaBytes) : '',
+      width: `${Math.min(percentUsed, 100)}%`,
+      fillClass: percentUsed >= 85 ? 'danger' : (percentUsed >= 70 ? 'warning' : ''),
+      warning
+    };
+  });
+
+const projectsContextUtils = resolveProjectsModule('projectsContextUtils', './projects-context.js');
+const getLiveWindowSize = projectsContextUtils.getLiveWindowSize || ((summary) => summary ? 8 : 12);
+const splitMessagesForSummary = projectsContextUtils.splitMessagesForSummary || ((messages, liveWindowSize) => ({ historyToSummarize: [], liveMessages: Array.isArray(messages) ? messages.slice(-liveWindowSize) : [] }));
+const shouldSkipSummarization = projectsContextUtils.shouldSkipSummarization || (() => false);
+const getSummaryMinLength = projectsContextUtils.getSummaryMinLength || (() => 80);
+const appendArchivedMessages = projectsContextUtils.appendArchivedMessages || ((currentArchive, newMessages) => ([...(Array.isArray(currentArchive) ? currentArchive : []), ...(Array.isArray(newMessages) ? newMessages : [])]));
+const buildProjectsContextData = projectsContextUtils.buildProjectsContextData || ((thread) => ({ summary: thread?.summary || '', liveMessages: Array.isArray(thread?.messages) ? thread.messages : [], archivedMessages: Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : [] }));
 const buildContextBadgeLabel = projectsContextUtils.buildContextBadgeLabel || ((contextSize) => {
   if (!contextSize || contextSize <= 2) {
     return '';
   }
   return `${Math.floor(contextSize / 2)} Q&A`;
 });
-const getContextUsageCount = projectsContextUtils.getContextUsageCount || ((thread, Project) => {
-  const data = buildProjectsContextData(thread);
-  let count = data.liveMessages.length;
-  if (data.summary) {
-    count += 1;
-  }
-  if (Project?.customInstructions && Project.customInstructions.trim().length) {
-    count += 1;
-  }
-  return count;
-});
-const projectsStreamUtils = (typeof window !== 'undefined' && window.projectsStreamUtils) || {};
+const getContextUsageCount = projectsContextUtils.getContextUsageCount || ((thread, Project) => buildProjectsContextData(thread).liveMessages.length + (buildProjectsContextData(thread).summary ? 1 : 0) + (Project?.customInstructions?.trim?.().length ? 1 : 0));
+const buildContextMessageHtml = projectsContextUtils.buildContextMessageHtml
+  || ((messages, truncateTextFn, escapeHtmlFn) => (messages || []).map((msg) => {
+    const role = msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User';
+    const roleClass = msg.role === 'assistant' ? 'assistant' : '';
+    const preview = (truncateTextFn || truncateText)(msg.content || '', 160);
+    return `
+      <div class="projects-context-item">
+        <div class="projects-context-role ${roleClass}">${(escapeHtmlFn || escapeHtml)(role)}</div>
+        <div class="projects-context-text">${(escapeHtmlFn || escapeHtml)(preview)}</div>
+      </div>
+    `;
+  }).join(''));
+const getProjectsContextButtonState = projectsContextUtils.getProjectsContextButtonState
+  || ((thread, Project, maxContextMessages = MAX_CONTEXT_MESSAGES) => {
+    const data = buildProjectsContextData(thread);
+    const label = buildContextBadgeLabel(data.liveMessages.length);
+    const isActive = Boolean(label);
+    const usedCount = getContextUsageCount(thread, Project);
+    const remaining = Math.max(maxContextMessages - usedCount, 0);
+    return {
+      label,
+      isActive,
+      usedCount,
+      remaining,
+      title: isActive
+        ? `${usedCount} messages in context · ${remaining} remaining`
+        : 'No conversation context yet'
+    };
+  });
+const getProjectsContextModalState = projectsContextUtils.getProjectsContextModalState
+  || ((thread, Project, maxContextMessages = MAX_CONTEXT_MESSAGES) => {
+    const data = buildProjectsContextData(thread);
+    const usedCount = getContextUsageCount(thread, Project);
+    const remaining = Math.max(maxContextMessages - usedCount, 0);
+    const fillPercentage = Math.min((usedCount / maxContextMessages) * 100, 100);
+    const isNearLimit = fillPercentage > 75;
+    return { data, usedCount, remaining, fillPercentage, isNearLimit };
+  });
+const buildProjectsContextModalHtml = projectsContextUtils.buildProjectsContextModalHtml
+  || (({
+    thread,
+    project,
+    maxContextMessages = MAX_CONTEXT_MESSAGES,
+    truncateText: truncateTextFn,
+    escapeHtml: escapeHtmlFn
+  } = {}) => {
+    const modalState = getProjectsContextModalState(thread, project, maxContextMessages);
+    const { data, usedCount, remaining, fillPercentage, isNearLimit } = modalState;
+    return `
+      <div class="projects-context-header">
+        <h3><span>🧠</span><span>Conversation Context</span></h3>
+        <button class="projects-context-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="projects-context-body">
+        ${data.summary ? `
+          <div class="projects-context-section">
+            <h4>Summary</h4>
+            <div class="projects-context-text">${escapeHtmlFn(data.summary)}</div>
+          </div>
+        ` : ''}
+        <div class="projects-context-section">
+          <h4>Live Messages (${data.liveMessages.length})</h4>
+          ${data.liveMessages.length ? buildContextMessageHtml(data.liveMessages, truncateTextFn, escapeHtmlFn) : '<div class="projects-context-text">No live messages yet.</div>'}
+        </div>
+        ${data.archivedMessages.length ? `
+          <div class="projects-context-section">
+            <button class="projects-context-archive-toggle" type="button">
+              <span>Archived messages (${data.archivedMessages.length})</span>
+              <span>+</span>
+            </button>
+            <div class="projects-context-archive-content">
+              ${buildContextMessageHtml(data.archivedMessages, truncateTextFn, escapeHtmlFn)}
+            </div>
+          </div>
+        ` : ''}
+        ${project?.customInstructions && project.customInstructions.trim().length ? `
+          <div class="projects-context-section">
+            <h4>Custom Instructions</h4>
+            <div class="projects-context-text">${escapeHtmlFn(truncateTextFn(project.customInstructions, 220))}</div>
+          </div>
+        ` : ''}
+      </div>
+      <div class="projects-context-footer">
+        <div class="projects-context-text">${usedCount}/${maxContextMessages} messages in context · ${remaining} remaining</div>
+        <div class="projects-context-bar">
+          <div class="projects-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};"></div>
+        </div>
+        ${isNearLimit ? '<div class="projects-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
+      </div>
+    `;
+  });
+const projectsStreamUtils = resolveProjectsModule('projectsStreamUtils', './projects-stream-utils.js');
 const buildAssistantMessage = projectsStreamUtils.buildAssistantMessage || ((content, meta) => ({
   role: 'assistant',
   content,
   meta
 }));
-const buildStreamMessages = projectsStreamUtils.buildStreamMessages || ((messages, prompt, systemInstruction, summary) => {
-  const baseMessages = Array.isArray(messages) ? [...messages] : [];
-  if (baseMessages.length > 0 && typeof prompt === 'string') {
-    const lastMessage = baseMessages[baseMessages.length - 1];
-    if (lastMessage?.role === 'user' && lastMessage.content === prompt) {
-      baseMessages.pop();
-    }
-  }
-  const finalMessages = [];
-  if (systemInstruction) {
-    const isOngoing = baseMessages.length > 0;
-    const content = isOngoing
-      ? `[Ongoing conversation. Follow these standing instructions without re-introducing yourself:]\n${systemInstruction}`
-      : systemInstruction;
-    finalMessages.push({ role: 'system', content });
-  }
-  if (summary) {
-    finalMessages.push({ role: 'system', content: `Summary so far:\n${summary}` });
-  }
-  finalMessages.push(...baseMessages);
-  return finalMessages;
+const buildStreamMessages = projectsStreamUtils.buildStreamMessages || ((messages) => (Array.isArray(messages) ? [...messages] : []));
+const getSourcesData = projectsStreamUtils.getSourcesData || ((content) => ({ sources: [], cleanText: content || '' }));
+const getTypingIndicatorHtml = projectsStreamUtils.getTypingIndicatorHtml || (() => '');
+const getStreamErrorHtml = projectsStreamUtils.getStreamErrorHtml || ((message) => `<div class="error-content">${escapeHtml(message || 'Unknown error')}</div>`);
+const createStreamingAssistantMessage = projectsStreamUtils.createStreamingAssistantMessage || (() => ({ messageDiv: document.createElement('div') }));
+const updateAssistantFooter = projectsStreamUtils.updateAssistantFooter || (() => {});
+const resetStreamingUi = projectsStreamUtils.resetStreamingUi || ((ui) => ui);
+const projectsStreamRuntimeUtils = resolveProjectsModule('projectsStreamRuntimeUtils', './projects-stream-runtime-utils.js');
+const renderStreamErrorRuntime = projectsStreamRuntimeUtils.renderStreamError;
+const retryStreamFromContextRuntime = projectsStreamRuntimeUtils.retryStreamFromContext;
+const createReasoningAppender = projectsStreamRuntimeUtils.createReasoningAppender
+  || (() => ({ append: () => {} }));
+const renderAssistantContent = projectsStreamRuntimeUtils.renderAssistantContent
+  || ((assistantBubble, text) => { if (assistantBubble) assistantBubble.textContent = String(text || ''); });
+const buildStreamMeta = projectsStreamRuntimeUtils.buildStreamMeta
+  || ((msg, _project, elapsedSec) => ({
+    model: msg?.model || 'default model',
+    tokens: msg?.tokens || null,
+    responseTimeSec: typeof elapsedSec === 'number' ? Number(elapsedSec.toFixed(2)) : null,
+    contextSize: msg?.contextSize || 0,
+    createdAt: Date.now()
+  }));
+const disconnectStreamPort = projectsStreamRuntimeUtils.disconnectStreamPort
+  || ((port) => { try { port?.disconnect(); } catch (_) {} return null; });
+const projectsMessageFlowUtils = resolveProjectsModule('projectsMessageFlowUtils', './projects-message-flow-utils.js');
+const clearChatInput = projectsMessageFlowUtils.clearChatInput || ((inputEl) => {
+  if (!inputEl) return;
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
 });
-const getSourcesData = projectsStreamUtils.getSourcesData || ((content) => {
-  if (typeof extractSources === 'function') {
-    return extractSources(content);
-  }
-  return { sources: [], cleanText: content };
-});
-const getTypingIndicatorHtml = projectsStreamUtils.getTypingIndicatorHtml || (() => `
-    <div class="typing-indicator">
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-    </div>
-  `);
-const getStreamErrorHtml = projectsStreamUtils.getStreamErrorHtml || ((message) => {
-  const safeMessage = escapeHtml(message || 'Unknown error');
-  return `
-    <div class="error-content">
-      <div class="error-text">${safeMessage}</div>
-      <div class="error-actions">
-        <button class="retry-btn" type="button">Retry</button>
+const createGeneratingImageMessage = projectsMessageFlowUtils.createGeneratingImageMessage || (() => {
+  const tempWrapper = document.createElement('div');
+  tempWrapper.className = 'chat-message chat-message-assistant image-message';
+  tempWrapper.innerHTML = `
+    <div class="chat-bubble-wrapper">
+      <div class="chat-bubble">
+        <div class="chat-content">Generating image...</div>
       </div>
     </div>
   `;
+  return tempWrapper;
 });
+const resolveAssistantModelLabel = projectsMessageFlowUtils.resolveAssistantModelLabel
+  || ((project, provider, buildModelDisplayNameFn) => {
+    if (project?.modelDisplayName) return project.modelDisplayName;
+    if (project?.model && typeof buildModelDisplayNameFn === 'function') {
+      return buildModelDisplayNameFn(provider, project.model);
+    }
+    return 'default model';
+  });
+const buildStreamContext = projectsMessageFlowUtils.buildStreamContext || ((params = {}) => ({
+  prompt: params.content || '',
+  projectId: params.currentProjectId || null,
+  threadId: params.currentThreadId || null,
+  model: params.project?.model || null,
+  modelProvider: params.project?.modelProvider || params.currentProvider || 'openrouter',
+  modelDisplayName: params.project?.modelDisplayName || null,
+  customInstructions: params.project?.customInstructions || '',
+  summary: params.summary || '',
+  webSearch: Boolean(params.webSearch),
+  reasoning: Boolean(params.reasoning)
+}));
+const setSendStreamingState = projectsMessageFlowUtils.setSendStreamingState
+  || ((sendBtn, setChatStreamingStateFn, isStreaming) => {
+    if (sendBtn) sendBtn.style.display = isStreaming ? 'none' : 'block';
+    if (typeof setChatStreamingStateFn === 'function') setChatStreamingStateFn(Boolean(isStreaming));
+  });
+const projectsSummarizationFlowUtils = resolveProjectsModule('projectsSummarizationFlowUtils', './projects-summarization-flow-utils.js');
+const maybeSummarizeBeforeStreaming = projectsSummarizationFlowUtils.maybeSummarizeBeforeStreaming
+  || (async ({ thread }) => thread);
+const projectsStreamRequestUtils = resolveProjectsModule('projectsStreamRequestUtils', './projects-stream-request-utils.js');
+const resolveStreamToggles = projectsStreamRequestUtils.resolveStreamToggles
+  || ((options, el) => ({
+    webSearch: typeof options?.webSearch === 'boolean' ? options.webSearch : Boolean(el?.chatWebSearch?.checked),
+    reasoning: typeof options?.reasoning === 'boolean' ? options.reasoning : Boolean(el?.chatReasoning?.checked)
+  }));
+const buildStartStreamPayload = projectsStreamRequestUtils.buildStartStreamPayload
+  || ((params = {}) => ({
+    type: 'start_stream',
+    prompt: params.content || '',
+    messages: Array.isArray(params.messages) ? params.messages : [],
+    model: params.project?.model || null,
+    provider: params.project?.modelProvider || params.provider || 'openrouter',
+    webSearch: Boolean(params.webSearch),
+    reasoning: Boolean(params.reasoning),
+    tabId: `Project_${params.project?.id || ''}`,
+    retry: params.retry === true
+  }));
+const projectsStreamChunkUtils = resolveProjectsModule('projectsStreamChunkUtils', './projects-stream-chunk-utils.js');
+const createStreamChunkState = projectsStreamChunkUtils.createStreamChunkState
+  || ((streamingUi, createReasoningAppenderFn) => ({
+    fullContent: '',
+    assistantBubble: streamingUi?.content || null,
+    messageDiv: streamingUi?.messageDiv || null,
+    reasoningStreamState: { inReasoning: false, carry: '' },
+    reasoningAppender: typeof createReasoningAppenderFn === 'function'
+      ? createReasoningAppenderFn(streamingUi?.messageDiv || null, streamingUi?.content || null)
+      : { append: () => {} }
+  }));
+const applyContentChunk = projectsStreamChunkUtils.applyContentChunk
+  || ((state, msg, deps = {}) => {
+    if (!state || msg?.type !== 'content') return false;
+    let contentChunk = msg.content || '';
+    let reasoningChunk = '';
+    if (typeof deps.extractReasoningFromStreamChunk === 'function') {
+      const parsed = deps.extractReasoningFromStreamChunk(state.reasoningStreamState, contentChunk);
+      contentChunk = parsed.content;
+      reasoningChunk = parsed.reasoning;
+    }
+    if (reasoningChunk) state.reasoningAppender?.append?.(reasoningChunk);
+    if (!contentChunk) return true;
+    state.fullContent += contentChunk;
+    deps.renderAssistantContent?.(state.assistantBubble, state.fullContent);
+    deps.scrollToBottom?.();
+    return true;
+  });
+const applyReasoningChunk = projectsStreamChunkUtils.applyReasoningChunk
+  || ((state, msg) => {
+    if (!state || msg?.type !== 'reasoning' || !msg.reasoning) return false;
+    state.reasoningAppender?.append?.(msg.reasoning);
+    return true;
+  });
 
 function updateProjectsContextButton(thread, Project) {
   if (!elements.ProjectsContextBtn) return;
@@ -313,9 +991,8 @@ function updateProjectsContextButton(thread, Project) {
     return;
   }
 
-  const data = buildProjectsContextData(thread);
-  const label = buildContextBadgeLabel(data.liveMessages.length);
-  const isActive = Boolean(label);
+  const state = getProjectsContextButtonState(thread, Project, MAX_CONTEXT_MESSAGES);
+  const { isActive, label } = state;
   elements.ProjectsContextBtn.classList.toggle('inactive', !isActive);
   elements.ProjectsContextBtn.setAttribute('aria-disabled', isActive ? 'false' : 'true');
 
@@ -329,83 +1006,24 @@ function updateProjectsContextButton(thread, Project) {
     }
   }
 
-  const usedCount = getContextUsageCount(thread, Project);
-  const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
-  elements.ProjectsContextBtn.title = isActive
-    ? `${usedCount} messages in context · ${remaining} remaining`
-    : 'No conversation context yet';
-}
-
-function buildContextMessageHtml(messages) {
-  return (messages || []).map((msg) => {
-    const role = msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User';
-    const roleClass = msg.role === 'assistant' ? 'assistant' : '';
-    const preview = truncateText(msg.content || '', 160);
-    return `
-      <div class="projects-context-item">
-        <div class="projects-context-role ${roleClass}">${escapeHtml(role)}</div>
-        <div class="projects-context-text">${escapeHtml(preview)}</div>
-      </div>
-    `;
-  }).join('');
+  elements.ProjectsContextBtn.title = state.title;
 }
 
 function openProjectsContextModal(thread, Project) {
   if (!thread) return;
-  const data = buildProjectsContextData(thread);
-  const usedCount = getContextUsageCount(thread, Project);
-  const remaining = Math.max(MAX_CONTEXT_MESSAGES - usedCount, 0);
-  const fillPercentage = Math.min((usedCount / MAX_CONTEXT_MESSAGES) * 100, 100);
-  const isNearLimit = fillPercentage > 75;
 
   const overlay = document.createElement('div');
   overlay.className = 'projects-context-overlay';
 
   const modal = document.createElement('div');
   modal.className = 'projects-context-modal';
-
-  modal.innerHTML = `
-    <div class="projects-context-header">
-      <h3><span>🧠</span><span>Conversation Context</span></h3>
-      <button class="projects-context-close" type="button" aria-label="Close">×</button>
-    </div>
-    <div class="projects-context-body">
-      ${data.summary ? `
-        <div class="projects-context-section">
-          <h4>Summary</h4>
-          <div class="projects-context-text">${escapeHtml(data.summary)}</div>
-        </div>
-      ` : ''}
-      <div class="projects-context-section">
-        <h4>Live Messages (${data.liveMessages.length})</h4>
-        ${data.liveMessages.length ? buildContextMessageHtml(data.liveMessages) : '<div class="projects-context-text">No live messages yet.</div>'}
-      </div>
-      ${data.archivedMessages.length ? `
-        <div class="projects-context-section">
-          <button class="projects-context-archive-toggle" type="button">
-            <span>Archived messages (${data.archivedMessages.length})</span>
-            <span>+</span>
-          </button>
-          <div class="projects-context-archive-content">
-            ${buildContextMessageHtml(data.archivedMessages)}
-          </div>
-        </div>
-      ` : ''}
-      ${Project?.customInstructions && Project.customInstructions.trim().length ? `
-        <div class="projects-context-section">
-          <h4>Custom Instructions</h4>
-          <div class="projects-context-text">${escapeHtml(truncateText(Project.customInstructions, 220))}</div>
-        </div>
-      ` : ''}
-    </div>
-    <div class="projects-context-footer">
-      <div class="projects-context-text">${usedCount}/${MAX_CONTEXT_MESSAGES} messages in context · ${remaining} remaining</div>
-      <div class="projects-context-bar">
-        <div class="projects-context-bar-fill" style="width: ${fillPercentage}%; background: ${isNearLimit ? 'var(--color-warning)' : 'var(--color-success)'};"></div>
-      </div>
-      ${isNearLimit ? '<div class="projects-context-warning">⚠️ Context is nearing capacity.</div>' : ''}
-    </div>
-  `;
+  modal.innerHTML = buildProjectsContextModalHtml({
+    thread,
+    project: Project,
+    maxContextMessages: MAX_CONTEXT_MESSAGES,
+    truncateText,
+    escapeHtml
+  });
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
@@ -432,26 +1050,6 @@ function openProjectsContextModal(thread, Project) {
 
 // ============ STORAGE FUNCTIONS ============
 
-function normalizeThreadProjectId(thread) {
-  if (!thread || typeof thread !== 'object') return thread;
-  const projectId = thread.projectId || thread.ProjectId || thread.spaceId || null;
-  const normalized = { ...thread, projectId };
-  delete normalized.ProjectId;
-  delete normalized.spaceId;
-  return normalized;
-}
-
-function ensureThreadMessage(message, threadId, index, baseTime) {
-  const createdAt = message.createdAt || message.meta?.createdAt || (baseTime + index);
-  const id = message.id || `${threadId}_msg_${index}`;
-  return {
-    ...message,
-    id,
-    threadId,
-    createdAt
-  };
-}
-
 async function persistThreadToChatStore(thread) {
   if (!chatStore || typeof chatStore.putThread !== 'function') return;
   if (!thread || !thread.id) return;
@@ -464,12 +1062,7 @@ async function persistThreadToChatStore(thread) {
   const archivedUpdatedAt = thread.archivedUpdatedAt || null;
   const baseTime = normalized.updatedAt || normalized.createdAt || Date.now();
 
-  const threadRecord = { ...normalized };
-  delete threadRecord.messages;
-  delete threadRecord.summary;
-  delete threadRecord.summaryUpdatedAt;
-  delete threadRecord.archivedMessages;
-  delete threadRecord.archivedUpdatedAt;
+  const threadRecord = buildThreadRecordForStorage(normalized);
 
   if (typeof chatStore.deleteThread === 'function') {
     await chatStore.deleteThread(threadRecord.id);
@@ -556,42 +1149,9 @@ async function loadThreads(projectId = null) {
 
     const result = await getLocalStorage([STORAGE_KEYS.PROJECT_THREADS]);
     const rawThreads = result[STORAGE_KEYS.PROJECT_THREADS];
-    let threads = [];
-    let normalized = false;
-
-    if (Array.isArray(rawThreads)) {
-      threads = rawThreads;
-    } else if (rawThreads && typeof rawThreads === 'object') {
-      Object.entries(rawThreads).forEach(([key, value]) => {
-        if (!Array.isArray(value)) return;
-        value.forEach((thread) => {
-          if (!thread || typeof thread !== 'object') return;
-          const normalizedThread = { ...thread };
-          if (normalizedThread.projectId === undefined) {
-            normalizedThread.projectId = normalizedThread.ProjectId || key;
-          }
-          delete normalizedThread.ProjectId;
-          threads.push(normalizedThread);
-          normalized = true;
-        });
-      });
-    } else {
-      threads = [];
-    }
-
-    threads.forEach((thread) => {
-      if (!thread) return;
-      if (thread.projectId === undefined && thread.ProjectId !== undefined) {
-        thread.projectId = thread.ProjectId;
-        delete thread.ProjectId;
-        normalized = true;
-        return;
-      }
-      if (thread.ProjectId !== undefined) {
-        delete thread.ProjectId;
-        normalized = true;
-      }
-    });
+    const normalizedResult = normalizeLegacyThreadsPayload(rawThreads);
+    const threads = normalizedResult.threads;
+    const normalized = normalizedResult.normalized;
 
     if (normalized) {
       await saveThreads(threads);
@@ -633,101 +1193,15 @@ async function getThreadCount(projectId) {
   return threads.length;
 }
 
-async function checkStorageUsage() {
-  const bytesInUse = await chrome.storage.local.getBytesInUse();
-  const percentUsed = (bytesInUse / MAX_STORAGE_BYTES) * 100;
-
-  return {
-    bytesInUse,
-    maxBytes: MAX_STORAGE_BYTES,
-    percentUsed,
-    formatted: `${(bytesInUse / 1024 / 1024).toFixed(1)}MB of 10MB`
-  };
-}
-
-function formatBytes(bytes) {
-  const safeBytes = Number.isFinite(bytes) ? bytes : 0;
-  return `${(safeBytes / 1024 / 1024).toFixed(1)}MB`;
-}
-
-function buildStorageLabel(label, bytesUsed, maxBytes = null) {
-  if (typeof maxBytes === 'number' && maxBytes > 0) {
-    return `${label}: ${formatBytes(bytesUsed)} of ${formatBytes(maxBytes)}`;
-  }
-  return `${label}: ${formatBytes(bytesUsed)}`;
-}
-
-async function getIndexedDbStorageUsage() {
-  let imageBytes = 0;
-  let chatBytes = 0;
-  let quotaBytes = null;
-  let percentUsed = null;
-
-  if (typeof getImageStoreStats === 'function') {
-    const imageStats = await getImageStoreStats();
-    if (typeof imageStats?.bytesUsed === 'number') {
-      imageBytes = imageStats.bytesUsed;
-    }
-  }
-
-  if (typeof getChatStoreStats === 'function') {
-    const chatStats = await getChatStoreStats();
-    if (typeof chatStats?.bytesUsed === 'number') {
-      chatBytes = chatStats.bytesUsed;
-    }
-  } else if (window?.chatStore?.getStats) {
-    const chatStats = await window.chatStore.getStats();
-    if (typeof chatStats?.bytesUsed === 'number') {
-      chatBytes = chatStats.bytesUsed;
-    }
-  }
-
-  const bytesUsed = imageBytes + chatBytes;
-
-  if (navigator?.storage?.estimate) {
-    try {
-      const estimate = await navigator.storage.estimate();
-      if (typeof estimate?.quota === 'number') {
-        quotaBytes = estimate.quota;
-        if (quotaBytes > 0) {
-          percentUsed = (bytesUsed / quotaBytes) * 100;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to estimate storage quota:', e);
-    }
-  }
-
-  return {
-    bytesUsed,
-    percentUsed,
-    quotaBytes
-  };
-}
-
-async function estimateItemSize(item) {
-  const json = JSON.stringify(item);
-  return new Blob([json]).size;
-}
-
 // ============ Project CRUD ============
 
 async function createProject(data) {
   const Projects = await loadProjects();
-  const Project = {
+  const Project = createProjectRecord({
+    data,
     id: generateId('project'),
-    name: data.name,
-    description: data.description || '',
-    icon: data.icon || '📁',
-    model: data.model || '',
-    modelProvider: data.modelProvider || null,
-    modelDisplayName: data.modelDisplayName || '',
-    customInstructions: data.customInstructions || '',
-    webSearch: data.webSearch || false,
-    reasoning: data.reasoning || false,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
+    now: Date.now()
+  });
   Projects.push(Project);
   await saveProjects(Projects);
   return Project;
@@ -738,11 +1212,7 @@ async function updateProject(id, data) {
   const index = Projects.findIndex(s => s.id === id);
   if (index === -1) throw new Error('Project not found');
 
-  Projects[index] = {
-    ...Projects[index],
-    ...data,
-    updatedAt: Date.now()
-  };
+  Projects[index] = applyProjectUpdate(Projects[index], data, Date.now());
   await saveProjects(Projects);
   return Projects[index];
 }
@@ -767,18 +1237,12 @@ async function getProject(id) {
 
 async function createThread(projectId, title = 'New Thread') {
   const threads = await loadThreads();
-  const thread = {
+  const thread = createThreadRecord({
     id: generateId('thread'),
     projectId,
     title,
-    messages: [],
-    summary: '',
-    summaryUpdatedAt: null,
-    archivedMessages: [],
-    archivedUpdatedAt: null,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
+    now: Date.now()
+  });
   threads.push(thread);
   await saveThreads(threads);
   return thread;
@@ -789,11 +1253,7 @@ async function updateThread(id, data) {
   const index = threads.findIndex(t => t.id === id);
   if (index === -1) throw new Error('Thread not found');
 
-  threads[index] = {
-    ...threads[index],
-    ...data,
-    updatedAt: Date.now()
-  };
+  threads[index] = applyThreadUpdate(threads[index], data, Date.now());
   await saveThreads(threads);
   return threads[index];
 }
@@ -810,16 +1270,14 @@ async function getThread(id) {
 }
 
 async function addMessageToThread(threadId, message) {
-  const thread = await getThread(threadId);
+  let thread = await getThread(threadId);
   if (!thread) throw new Error('Thread not found');
-
-  thread.messages.push(message);
-  thread.updatedAt = Date.now();
-
-  // Auto-generate title from first user message if title is default
-  if (thread.messages.length === 1 && message.role === 'user' && thread.title === 'New Thread') {
-    thread.title = generateThreadTitle(message.content);
-  }
+  thread = appendMessageToThreadData({
+    thread,
+    message,
+    now: Date.now(),
+    generateThreadTitle
+  });
 
   const threads = await loadThreads();
   const index = threads.findIndex(t => t.id === threadId);
@@ -856,141 +1314,42 @@ let ProjectRecentModelsByProvider = {
 const elements = {};
 
 function initElements() {
-  // Views
-  elements.ProjectsListView = document.getElementById('projects-list-view');
-  elements.ProjectView = document.getElementById('project-view');
-
-  // Projects list
-  elements.ProjectsGrid = document.getElementById('projects-grid');
-  elements.emptyState = document.getElementById('empty-state');
-  elements.createProjectBtn = document.getElementById('create-project-btn');
-  elements.ProjectsSettingsBtn = document.getElementById('projects-settings-btn');
-  elements.emptyCreateBtn = document.getElementById('empty-create-btn');
-  elements.storageFooter = document.getElementById('storage-footer');
-  elements.storageFillImages = document.getElementById('storage-fill-images');
-  elements.storageTextImages = document.getElementById('storage-text-images');
-  elements.storageWarning = document.getElementById('storage-warning');
-  elements.warningMessage = document.getElementById('warning-message');
-  elements.warningClose = document.getElementById('warning-close');
-
-  // Project view
-  elements.backBtn = document.getElementById('back-btn');
-  elements.ProjectTitle = document.getElementById('project-title');
-  elements.ProjectSettingsBtn = document.getElementById('project-settings-btn');
-  elements.newThreadBtn = document.getElementById('new-thread-btn');
-  elements.threadList = document.getElementById('thread-list');
-  elements.chatEmptyState = document.getElementById('chat-empty-state');
-  elements.chatContainer = document.getElementById('chat-container');
-  elements.chatMessages = document.getElementById('chat-messages');
-  elements.chatInput = document.getElementById('chat-input');
-  elements.chatInputContainer = document.getElementById('chat-input-container');
-  elements.sendBtn = document.getElementById('send-btn');
-  elements.stopBtn = document.getElementById('stop-btn');
-  elements.chatModelIndicator = document.getElementById('chat-model-indicator');
-  elements.ProjectsContextBtn = document.getElementById('projects-context-btn');
-  elements.ProjectsContextBadge = document.querySelector('.projects-context-badge');
-  elements.chatWebSearch = document.getElementById('chat-web-search');
-  elements.chatReasoning = document.getElementById('chat-reasoning');
-  elements.chatImageMode = document.getElementById('chat-image-mode');
-
-  // Project modal
-  elements.ProjectModal = document.getElementById('project-modal');
-  elements.modalTitle = document.getElementById('modal-title');
-  elements.modalClose = document.getElementById('modal-close');
-  elements.ProjectForm = document.getElementById('project-form');
-  elements.ProjectName = document.getElementById('project-name');
-  elements.ProjectDescription = document.getElementById('project-description');
-  elements.ProjectModel = document.getElementById('project-model');
-  elements.ProjectModelInput = document.getElementById('project-model-input');
-  elements.ProjectInstructions = document.getElementById('project-instructions');
-  elements.ProjectIcon = document.getElementById('project-icon');
-  elements.iconPreview = document.getElementById('icon-preview');
-  elements.emojiGrid = document.getElementById('emoji-grid');
-  elements.emojiGridInner = document.getElementById('emoji-grid-inner');
-  elements.ProjectWebSearch = document.getElementById('project-web-search');
-  elements.ProjectReasoning = document.getElementById('project-reasoning');
-  elements.modalCancel = document.getElementById('modal-cancel');
-  elements.modalSave = document.getElementById('modal-save');
-
-  // Rename modal
-  elements.renameModal = document.getElementById('rename-modal');
-  elements.renameModalClose = document.getElementById('rename-modal-close');
-  elements.renameForm = document.getElementById('rename-form');
-  elements.threadTitle = document.getElementById('thread-title');
-  elements.renameCancel = document.getElementById('rename-cancel');
-
-  // Delete modal
-  elements.deleteModal = document.getElementById('delete-modal');
-  elements.deleteTitle = document.getElementById('delete-title');
-  elements.deleteModalClose = document.getElementById('delete-modal-close');
-  elements.deleteMessage = document.getElementById('delete-message');
-  elements.deleteSize = document.getElementById('delete-size');
-  elements.deleteCancel = document.getElementById('delete-cancel');
-  elements.deleteConfirm = document.getElementById('delete-confirm');
+  Object.assign(elements, collectProjectsElements(document));
 }
 
 // ============ VIEW SWITCHING ============
 
 function showView(viewName) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const state = applyViewSelection(viewName, {
+    listView: elements.ProjectsListView,
+    projectView: elements.ProjectView
+  });
 
-  if (viewName === 'list') {
-    elements.ProjectsListView.classList.add('active');
+  if (state.shouldResetSelection) {
     currentProjectId = null;
     currentThreadId = null;
     currentProjectData = null;
     updateProjectsContextButton(null, null);
-  } else if (viewName === 'Project') {
-    elements.ProjectView.classList.add('active');
   }
 }
 
 // ============ RENDERING ============
 
 async function renderProjectsList() {
-  const Projects = await loadProjects();
-
-  if (Projects.length === 0) {
-    elements.ProjectsGrid.style.display = 'none';
-    elements.emptyState.style.display = 'flex';
+  const ProjectsRaw = await loadProjects();
+  const visibility = getProjectsListVisibilityState(ProjectsRaw);
+  elements.ProjectsGrid.style.display = visibility.gridDisplay;
+  elements.emptyState.style.display = visibility.emptyDisplay;
+  if (visibility.showEmpty) {
     return;
   }
 
-  elements.ProjectsGrid.style.display = 'grid';
-  elements.emptyState.style.display = 'none';
+  const Projects = sortProjectsByUpdatedAt(ProjectsRaw);
 
-  // Sort by updatedAt descending
-  Projects.sort((a, b) => b.updatedAt - a.updatedAt);
-
-  const cardsHtml = await Promise.all(Projects.map(async Project => {
+  const cardsHtml = await Promise.all(Projects.map(async (Project) => {
     const modelName = getProjectModelLabel(Project);
-    const ProjectIcon = Project.icon || '📁';
     const dateStr = formatDate(Project.updatedAt);
-
-    return `
-      <div class="project-card" data-project-id="${Project.id}">
-        <div class="project-card-icon">${ProjectIcon}</div>
-        <div class="project-card-menu menu-dropdown">
-          <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
-          <div class="menu-items" style="display: none;">
-            <button class="menu-item" data-action="edit" data-project-id="${Project.id}">Edit</button>
-            <button class="menu-item danger" data-action="delete" data-project-id="${Project.id}">Delete</button>
-          </div>
-        </div>
-        <div class="project-card-content">
-          <div class="project-card-info">
-            <h3 class="project-card-name">${escapeHtml(Project.name)}</h3>
-          </div>
-          <div class="project-card-footer">
-            <span class="project-card-date">
-              <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
-              ${dateStr}
-            </span>
-            <span class="project-card-model">${escapeHtml(modelName)}</span>
-          </div>
-        </div>
-      </div>
-    `;
+    return buildProjectCardHtml(Project, modelName, dateStr, escapeHtml);
   }));
 
   elements.ProjectsGrid.innerHTML = cardsHtml.join('');
@@ -999,38 +1358,19 @@ async function renderProjectsList() {
   document.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
       const target = e.target;
-
-      // Handle menu button click
-      if (target.closest('[data-action="toggle-menu"]')) {
+      const action = resolveProjectCardClickAction(target, card);
+      if (action.type === 'toggle-menu') {
         e.stopPropagation();
-        toggleMenu(target.closest('[data-action="toggle-menu"]'));
-        return;
-      }
-
-      // Handle edit click
-      if (target.closest('[data-action="edit"]')) {
+        toggleMenu(action.button);
+      } else if (action.type === 'edit') {
         e.stopPropagation();
-        const projectId = target.closest('[data-action="edit"]').dataset.projectId;
-        openEditProjectModal(projectId);
-        return;
-      }
-
-      // Handle delete click
-      if (target.closest('[data-action="delete"]')) {
+        openEditProjectModal(action.projectId);
+      } else if (action.type === 'delete') {
         e.stopPropagation();
-        const projectId = target.closest('[data-action="delete"]').dataset.projectId;
-        openDeleteModal('Project', projectId);
-        return;
+        openDeleteModal('Project', action.projectId);
+      } else if (action.type === 'open') {
+        openProject(action.projectId);
       }
-
-      // Don't navigate if clicking on menu dropdown area
-      if (target.closest('.menu-dropdown')) {
-        return;
-      }
-
-      // Navigate to Project
-      const projectId = card.dataset.projectId;
-      openProject(projectId);
     });
   });
 }
@@ -1039,87 +1379,41 @@ async function renderThreadList() {
   if (!currentProjectId) return;
 
   const threads = await loadThreads(currentProjectId);
-
-  // Sort by updatedAt descending
-  threads.sort((a, b) => b.updatedAt - a.updatedAt);
-
-  if (threads.length === 0) {
-    elements.threadList.innerHTML = '<p class="text-muted" style="text-align: center; padding: 20px;">No threads yet</p>';
+  const threadViewState = getThreadListViewState(threads);
+  if (threadViewState.isEmpty) {
+    elements.threadList.innerHTML = buildEmptyThreadListHtml();
     return;
   }
 
-  elements.threadList.innerHTML = threads.map(thread => `
-    <div class="thread-item ${thread.id === currentThreadId ? 'active' : ''}" data-thread-id="${thread.id}">
-      <h4 class="thread-title">${escapeHtml(thread.title)}</h4>
-      <span class="thread-time">${formatRelativeTime(thread.updatedAt)}</span>
-      <div class="thread-menu menu-dropdown">
-        <button class="menu-btn" data-action="toggle-menu">&#8942;</button>
-        <div class="menu-items" style="display: none;">
-          <button class="menu-item" data-action="rename" data-thread-id="${thread.id}">Rename</button>
-          <div class="menu-item-submenu">
-            <button class="menu-item" data-action="export-parent">&#9666; Export</button>
-            <div class="submenu-items">
-              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="md">Markdown</button>
-              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="pdf">PDF</button>
-              <button class="menu-item" data-action="export" data-thread-id="${thread.id}" data-format="docx">DOCX</button>
-            </div>
-          </div>
-          <button class="menu-item danger" data-action="delete-thread" data-thread-id="${thread.id}">Delete</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
+  elements.threadList.innerHTML = buildThreadListHtml(
+    threadViewState.threads,
+    currentThreadId,
+    escapeHtml,
+    formatRelativeTime
+  );
 
   // Add click handlers using event delegation
   document.querySelectorAll('.thread-item').forEach(item => {
     item.addEventListener('click', (e) => {
       const target = e.target;
-
-      // Handle menu button click
-      if (target.closest('[data-action="toggle-menu"]')) {
+      const action = resolveThreadItemClickAction(target, item);
+      if (action.type === 'toggle-menu') {
         e.stopPropagation();
-        toggleMenu(target.closest('[data-action="toggle-menu"]'));
-        return;
-      }
-
-      // Handle rename click
-      if (target.closest('[data-action="rename"]')) {
+        toggleMenu(action.button);
+      } else if (action.type === 'rename') {
         e.stopPropagation();
-        const threadId = target.closest('[data-action="rename"]').dataset.threadId;
-        openRenameModal(threadId);
-        return;
-      }
-
-      // Handle export click
-      if (target.closest('[data-action="export"]')) {
+        openRenameModal(action.threadId);
+      } else if (action.type === 'export') {
         e.stopPropagation();
-        const btn = target.closest('[data-action="export"]');
-        exportThread(btn.dataset.threadId, btn.dataset.format);
-        return;
-      }
-
-      // Prevent export parent from closing menu
-      if (target.closest('[data-action="export-parent"]')) {
+        exportThread(action.threadId, action.format);
+      } else if (action.type === 'delete-thread') {
         e.stopPropagation();
-        return;
-      }
-
-      // Handle delete click
-      if (target.closest('[data-action="delete-thread"]')) {
+        openDeleteModal('thread', action.threadId);
+      } else if (action.type === 'ignore') {
         e.stopPropagation();
-        const threadId = target.closest('[data-action="delete-thread"]').dataset.threadId;
-        openDeleteModal('thread', threadId);
-        return;
+      } else if (action.type === 'open') {
+        openThread(action.threadId);
       }
-
-      // Don't navigate if clicking on menu dropdown area
-      if (target.closest('.menu-dropdown')) {
-        return;
-      }
-
-      // Navigate to thread
-      const threadId = item.dataset.threadId;
-      openThread(threadId);
     });
   });
 }
@@ -1127,156 +1421,25 @@ async function renderThreadList() {
 let currentArchivedMessages = [];
 
 function buildMessageHtml(messages) {
-  const safeMessages = Array.isArray(messages) ? messages : [];
-  return safeMessages.map((msg, index) => {
-    if (msg.role === 'assistant') {
-      if (msg.meta?.imageId) {
-        const meta = msg.meta || null;
-        const metaTime = meta?.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
-        const metaModel = meta?.model || 'default model';
-        const metaText = meta ? `${metaTime} - ${metaModel}` : '';
-        const metaHtml = meta
-          ? `<div class="chat-meta"><span class="chat-meta-text">${escapeHtml(metaText)}</span></div>`
-          : '';
-
-        return `
-          <div class="chat-message chat-message-assistant image-message" data-image-id="${escapeHtml(msg.meta.imageId)}" data-msg-index="${index}">
-            <div class="chat-bubble-wrapper">
-              ${metaHtml}
-              <div class="chat-bubble">
-                <div class="chat-content"></div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      const { sources, cleanText } = typeof extractSources === 'function'
-        ? extractSources(msg.content)
-        : { sources: [], cleanText: msg.content };
-
-      const meta = msg.meta || null;
-      const metaTime = meta?.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
-      const metaModel = meta?.model || 'default model';
-      const metaText = meta ? `${metaTime} - ${metaModel}` : '';
-      const metaHtml = meta
-        ? `<div class="chat-meta"><span class="chat-meta-text">${escapeHtml(metaText)}</span></div>`
-        : '';
-
-      let footerHtml = '';
-      if (meta) {
-        const responseTime = typeof meta.responseTimeSec === 'number'
-          ? `${meta.responseTimeSec.toFixed(2)}s`
-          : '--s';
-        const tokensText = meta.tokens ? `${meta.tokens} tokens` : '-- tokens';
-        const contextBadge = meta.contextSize > 2
-          ? `<span class="chat-context-badge" title="${meta.contextSize} messages in conversation context">🧠 ${Math.floor(meta.contextSize / 2)} Q&A</span>`
-          : '';
-        const tokenStyle = typeof getTokenBarStyle === 'function'
-          ? getTokenBarStyle(meta.tokens || null)
-          : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
-
-        footerHtml = `
-          <div class="chat-footer">
-            <div class="chat-stats">
-              <span class="chat-time">${responseTime}</span>
-              <span class="chat-tokens">${escapeHtml(tokensText)}</span>
-              ${contextBadge}
-            </div>
-            <div class="token-usage-bar" role="progressbar" aria-valuenow="${tokenStyle.percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
-              <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
-            </div>
-          </div>
-        `;
-      }
-
-      return `
-        <div class="chat-message chat-message-assistant" data-msg-index="${index}">
-          <div class="chat-bubble-wrapper">
-            ${metaHtml}
-            <div class="chat-bubble">
-              <div class="chat-content" data-sources='${JSON.stringify(sources)}'>${applyMarkdownStyles(cleanText)}</div>
-              ${footerHtml}
-              <div class="chat-actions">
-                <div class="chat-actions-left">
-                  <button class="action-btn chat-copy-btn" title="Copy answer" aria-label="Copy answer">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                    </svg>
-                  </button>
-                  <div class="export-menu">
-                    <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                        <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
-                      </svg>
-                    </button>
-                    <div class="export-menu-items">
-                      <button class="export-option" data-format="pdf">Export PDF</button>
-                      <button class="export-option" data-format="markdown">Export Markdown</button>
-                      <button class="export-option" data-format="docx">Export DOCX</button>
-                    </div>
-                  </div>
-                </div>
-                <div class="chat-sources-summary"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="chat-message chat-message-user">
-        <div class="chat-bubble">${escapeHtml(msg.content)}</div>
-      </div>
-    `;
-  }).join('');
+  return buildProjectsMessageHtml(messages, {
+    escapeHtml,
+    applyMarkdownStyles,
+    extractSources: (typeof extractSources === 'function' ? extractSources : null),
+    getTokenBarStyle: (typeof getTokenBarStyle === 'function' ? getTokenBarStyle : null)
+  });
 }
 
 function postProcessMessages(root) {
-  const scope = root || document;
-
-  scope.querySelectorAll('.chat-message-assistant .chat-content').forEach(contentEl => {
-    try {
-      const sources = JSON.parse(contentEl.dataset.sources || '[]');
-      if (sources.length > 0 && typeof makeSourceReferencesClickable === 'function') {
-        makeSourceReferencesClickable(contentEl, sources);
-
-        if (typeof createSourcesIndicator === 'function') {
-          const indicator = createSourcesIndicator(sources, contentEl);
-          if (indicator) {
-            contentEl.appendChild(indicator);
-          }
-        }
-      }
-
-      const messageDiv = contentEl.closest('.chat-message-assistant');
-      if (messageDiv) {
-        renderChatSourcesSummary(messageDiv, sources);
-      }
-    } catch (e) {
-      console.error('Error processing sources:', e);
-    }
+  processProjectsAssistantSources(root, {
+    makeSourceReferencesClickable: (typeof makeSourceReferencesClickable === 'function' ? makeSourceReferencesClickable : null),
+    createSourcesIndicator: (typeof createSourcesIndicator === 'function' ? createSourcesIndicator : null),
+    renderChatSourcesSummary,
+    logger: console
   });
-
-  scope.querySelectorAll('.chat-copy-btn').forEach(btn => {
-    if (btn.dataset.bound === 'true') return;
-    btn.dataset.bound = 'true';
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const message = btn.closest('.chat-message-assistant');
-      const contentEl = message?.querySelector('.chat-content');
-      const content = contentEl?.innerText || contentEl?.textContent || '';
-      try {
-        await navigator.clipboard.writeText(content);
-        btn.classList.add('copied');
-        setTimeout(() => {
-          btn.classList.remove('copied');
-        }, 2000);
-      } catch (err) {
-        showToast('Failed to copy', 'error');
-      }
-    });
+  bindProjectsCopyButtons(root, {
+    writeText: (text) => navigator.clipboard.writeText(text),
+    showToast: (typeof showToast === 'function' ? showToast : () => {}),
+    setTimeoutFn: setTimeout
   });
 }
 
@@ -1295,25 +1458,16 @@ function renderChatMessages(messages, thread = null) {
   const archivedMessages = thread?.archivedMessages || [];
   currentArchivedMessages = archivedMessages;
   const summaryUpdatedAt = thread?.summaryUpdatedAt || null;
-  const showSummaryBadge = summaryUpdatedAt && Date.now() - summaryUpdatedAt < 30000;
+  const showSummaryBadge = shouldShowSummaryBadge(summaryUpdatedAt, Date.now(), 30000);
 
-  const archiveHtml = archivedMessages.length > 0
-    ? `
-      <div class="chat-archive-block" data-archive-open="false">
-        <button class="chat-archive-toggle" type="button" aria-expanded="false">
-          Earlier messages (${archivedMessages.length})
-        </button>
-        <div class="chat-archive-content"></div>
-      </div>
-    `
-    : '';
-
-  const summaryBadgeHtml = showSummaryBadge
-    ? '<div class="chat-summary-badge">Summary updated</div>'
-    : '';
+  const archiveHtml = buildArchiveSectionHtml(archivedMessages);
 
   const messagesHtml = buildMessageHtml(messages);
-  chatMessagesEl.innerHTML = `${archiveHtml}${summaryBadgeHtml}${messagesHtml}`;
+  chatMessagesEl.innerHTML = buildChatMessagesContainerHtml({
+    archiveHtml,
+    showSummaryBadge,
+    messagesHtml
+  });
 
   postProcessMessages(chatMessagesEl);
   hydrateImageCards(chatMessagesEl);
@@ -1323,80 +1477,20 @@ function renderChatMessages(messages, thread = null) {
 
 function toggleArchiveSection() {
   const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
-  if (!chatMessagesEl) return;
-  const archiveBlock = chatMessagesEl.querySelector('.chat-archive-block');
-  if (!archiveBlock) return;
-  const contentEl = archiveBlock.querySelector('.chat-archive-content');
-  if (!contentEl) return;
-
-  const isOpen = archiveBlock.getAttribute('data-archive-open') === 'true';
-  const toggleBtn = archiveBlock.querySelector('.chat-archive-toggle');
-
-  if (isOpen) {
-    contentEl.innerHTML = '';
-    archiveBlock.setAttribute('data-archive-open', 'false');
-    archiveBlock.classList.remove('open');
-    if (toggleBtn) {
-      toggleBtn.setAttribute('aria-expanded', 'false');
-    }
-    return;
-  }
-
-  const archivedHtml = buildMessageHtml(currentArchivedMessages);
-  contentEl.innerHTML = archivedHtml || '<div class="chat-archive-empty">No archived messages.</div>';
-  archiveBlock.setAttribute('data-archive-open', 'true');
-  archiveBlock.classList.add('open');
-  if (toggleBtn) {
-    toggleBtn.setAttribute('aria-expanded', 'true');
-  }
-
-  postProcessMessages(contentEl);
+  toggleArchiveSectionInContainer({
+    chatMessagesEl,
+    currentArchivedMessages,
+    buildMessageHtml,
+    postProcessMessages
+  });
 }
 
 function closeExportMenus() {
-  document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
+  closeProjectsExportMenus(document);
 }
 
 function renderChatSourcesSummary(messageDiv, sources) {
-  const summary = messageDiv?.querySelector('.chat-sources-summary');
-  if (!summary) return;
-  summary.innerHTML = '';
-
-  if (!sources || sources.length === 0 || typeof getUniqueDomains !== 'function') {
-    return;
-  }
-
-  const uniqueDomains = getUniqueDomains(sources);
-  const stack = document.createElement('div');
-  stack.className = 'sources-favicon-stack';
-
-  uniqueDomains.slice(0, 5).forEach((domain, index) => {
-    const favicon = document.createElement('img');
-    favicon.src = domain.favicon;
-    favicon.alt = domain.domain;
-    favicon.style.zIndex = String(5 - index);
-    favicon.onerror = () => {
-      favicon.src = 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"%23888\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>';
-    };
-    stack.appendChild(favicon);
-  });
-
-  const count = document.createElement('span');
-  count.className = 'sources-count';
-  count.textContent = `${sources.length} source${sources.length !== 1 ? 's' : ''}`;
-
-  summary.appendChild(stack);
-  summary.appendChild(count);
-}
-
-function buildThreadHtml(messages) {
-  return (messages || []).map((msg) => {
-    const role = msg.role === 'assistant' ? 'Assistant' : 'User';
-    const content = typeof applyMarkdownStyles === 'function'
-      ? applyMarkdownStyles(msg.content || '')
-      : escapeHtml(msg.content || '');
-    return `<h2>${role}</h2><div>${content}</div>`;
-  }).join('');
+  renderProjectsSourcesSummary(messageDiv, sources, (typeof getUniqueDomains === 'function' ? getUniqueDomains : null));
 }
 
 async function exportCurrentThread(format) {
@@ -1409,7 +1503,7 @@ async function exportCurrentThread(format) {
   } else if (format === 'docx' && typeof exportDocx === 'function') {
     exportDocx(messages, `${thread?.title || 'thread'}.docx`);
   } else if (format === 'pdf' && typeof exportPdf === 'function') {
-    const html = buildThreadHtml(messages);
+    const html = buildThreadExportHtml(messages, { applyMarkdownStyles, escapeHtml });
     exportPdf(html, thread?.title || 'thread');
   }
 }
@@ -1447,7 +1541,12 @@ async function renderStorageUsage() {
 
   const now = Date.now();
   const maxAgeMs = 30_000;
-  const hasFreshCache = renderStorageUsage._cachedUsage && (now - renderStorageUsage._lastUpdate) < maxAgeMs;
+  const hasFreshCache = shouldUseCachedStorageUsage({
+    now,
+    lastUpdate: renderStorageUsage._lastUpdate,
+    maxAgeMs,
+    cachedUsage: renderStorageUsage._cachedUsage
+  });
 
   if (!hasFreshCache) {
     if (!renderStorageUsage._inflight) {
@@ -1465,24 +1564,18 @@ async function renderStorageUsage() {
   }
 
   const storageUsage = renderStorageUsage._cachedUsage || { bytesUsed: 0, percentUsed: 0, quotaBytes: null };
-  const percentUsed = typeof storageUsage.percentUsed === 'number' ? storageUsage.percentUsed : 0;
+  const meterState = buildStorageMeterViewState({ usage: storageUsage, buildStorageLabel });
 
-  elements.storageTextImages.textContent = buildStorageLabel('IndexedDB Storage', storageUsage.bytesUsed, storageUsage.quotaBytes);
-  elements.storageFillImages.style.width = `${Math.min(percentUsed, 100)}%`;
+  elements.storageTextImages.textContent = meterState.text;
+  elements.storageFillImages.style.width = meterState.width;
 
   elements.storageFillImages.classList.remove('warning', 'danger');
-  if (percentUsed >= 85) {
-    elements.storageFillImages.classList.add('danger');
-  } else if (percentUsed >= 70) {
-    elements.storageFillImages.classList.add('warning');
+  if (meterState.fillClass) {
+    elements.storageFillImages.classList.add(meterState.fillClass);
   }
 
-  if (percentUsed >= 95) {
-    showStorageWarning('critical', 'Storage full. Delete images or threads to free space.');
-  } else if (percentUsed >= 85) {
-    showStorageWarning('high', 'Storage almost full. Delete images or threads to continue using Projects.');
-  } else if (percentUsed >= 70) {
-    showStorageWarning('medium', 'Storage is filling up. Consider deleting old threads or images.');
+  if (meterState.warning) {
+    showStorageWarning(meterState.warning.level, meterState.warning.message);
   } else {
     hideStorageWarning();
   }
@@ -1497,129 +1590,11 @@ function invalidateStorageUsageCache() {
 }
 
 function showStorageWarning(level, message) {
-  elements.storageWarning.className = `storage-warning ${level}`;
-  elements.storageWarning.style.display = 'flex';
-  elements.warningMessage.textContent = message;
+  showProjectsStorageWarning(elements.storageWarning, elements.warningMessage, level, message);
 }
 
 function hideStorageWarning() {
-  elements.storageWarning.style.display = 'none';
-}
-
-// ============ ESCAPE HTML ============
-
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function getImageExtension(mimeType) {
-  if (mimeType === 'image/jpeg') return 'jpg';
-  if (mimeType === 'image/webp') return 'webp';
-  if (mimeType === 'image/gif') return 'gif';
-  return 'png';
-}
-
-function downloadImage(dataUrl, imageId, mimeType) {
-  if (!dataUrl) return;
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = `wegweiser-image-${imageId}.${getImageExtension(mimeType)}`;
-  link.click();
-}
-
-function openImageLightbox(dataUrl, imageId, mimeType) {
-  if (!dataUrl) return;
-  const overlay = document.createElement('div');
-  overlay.className = 'image-lightbox';
-
-  const content = document.createElement('div');
-  content.className = 'image-lightbox-content';
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'image-lightbox-toolbar';
-
-  const downloadBtn = document.createElement('button');
-  downloadBtn.type = 'button';
-  downloadBtn.className = 'btn btn-secondary';
-  downloadBtn.textContent = 'Download';
-  downloadBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    downloadImage(dataUrl, imageId, mimeType);
-  });
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'btn btn-secondary';
-  closeBtn.textContent = 'Close';
-
-  toolbar.appendChild(downloadBtn);
-  toolbar.appendChild(closeBtn);
-
-  const img = document.createElement('img');
-  img.src = dataUrl;
-  img.alt = 'Generated image';
-
-  content.appendChild(toolbar);
-  content.appendChild(img);
-  overlay.appendChild(content);
-  document.body.appendChild(overlay);
-
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener('keydown', handleKey);
-  };
-
-  const handleKey = (e) => {
-    if (e.key === 'Escape') {
-      close();
-    }
-  };
-
-  closeBtn.addEventListener('click', close);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
-  document.addEventListener('keydown', handleKey);
-}
-
-async function hydrateImageCards(root) {
-  if (typeof buildImageCard !== 'function') return;
-  if (typeof getImageCacheEntry !== 'function') return;
-
-  const scope = root || document;
-  const messages = scope.querySelectorAll('.image-message');
-  for (const message of messages) {
-    const imageId = message.getAttribute('data-image-id');
-    const contentEl = message.querySelector('.chat-content');
-    if (!imageId || !contentEl) continue;
-
-    const entry = await getImageCacheEntry(imageId);
-    const dataUrl = entry?.dataUrl || entry?.data || '';
-    const mimeType = entry?.mimeType || 'image/png';
-
-    let card;
-    if (dataUrl) {
-      card = buildImageCard({
-        state: 'ready',
-        imageUrl: dataUrl,
-        mode: 'Projects',
-        onView: () => openImageLightbox(dataUrl, imageId, mimeType),
-        onDownload: () => downloadImage(dataUrl, imageId, mimeType)
-      });
-      const thumb = card.querySelector('.image-card-thumb');
-      if (thumb) {
-        thumb.addEventListener('click', () => openImageLightbox(dataUrl, imageId, mimeType));
-      }
-    } else {
-      card = buildImageCard({ state: 'expired' });
-    }
-
-    contentEl.innerHTML = '';
-    contentEl.appendChild(card);
-  }
+  hideProjectsStorageWarning(elements.storageWarning);
 }
 
 // ============ ACTIONS ============
@@ -1635,22 +1610,11 @@ async function openProject(projectId) {
   currentThreadId = null;
 
   elements.ProjectTitle.textContent = Project.name;
-  elements.chatEmptyState.style.display = 'flex';
-  elements.chatContainer.style.display = 'none';
+  applyChatPanelStateToElements(elements, buildEmptyChatPanelState());
   updateChatModelIndicator(null);
 
   showView('Project');
   await renderThreadList();
-}
-
-function sanitizeFilename(name) {
-  return (name || 'thread').replace(/[^a-zA-Z0-9 _-]/g, '').trim().substring(0, 50) || 'thread';
-}
-
-function getFullThreadMessages(thread) {
-  const archived = Array.isArray(thread.archivedMessages) ? thread.archivedMessages : [];
-  const live = Array.isArray(thread.messages) ? thread.messages : [];
-  return [...archived, ...live];
 }
 
 async function exportThread(threadId, format) {
@@ -1676,10 +1640,7 @@ async function exportThread(threadId, format) {
       exportDocx(allMessages, `${filename}.docx`);
       showToast('Exported as DOCX', 'success');
     } else if (format === 'pdf') {
-      const html = allMessages.map(msg => {
-        const role = msg.role === 'assistant' ? 'Assistant' : 'User';
-        return `<h2>${role}</h2><p>${escapeHtmlForExport(msg.content || '')}</p>`;
-      }).join('');
+      const html = buildExportPdfHtml(allMessages, escapeHtmlForExport);
       exportPdf(html, filename);
       showToast('Exported as PDF', 'success');
     }
@@ -1707,14 +1668,11 @@ async function openThread(threadId) {
   const Project = await getProject(currentProjectId);
   if (Project) {
     currentProjectData = Project;
-    elements.chatWebSearch.checked = Project.webSearch || false;
-    elements.chatReasoning.checked = Project.reasoning || false;
-    applyProjectImageMode(Project);
+    applyProjectChatSettingsToElements(Project, elements, applyProjectImageMode);
     updateChatModelIndicator(Project);
   }
 
-  elements.chatEmptyState.style.display = 'none';
-  elements.chatContainer.style.display = 'flex';
+  applyChatPanelStateToElements(elements, buildActiveChatPanelState());
 
     renderChatMessages(thread.messages, thread);
   await renderThreadList(); // Update active state
@@ -1727,9 +1685,7 @@ async function createNewThread() {
   const Project = await getProject(currentProjectId);
   if (Project) {
     currentProjectData = Project;
-    elements.chatWebSearch.checked = Project.webSearch || false;
-    elements.chatReasoning.checked = Project.reasoning || false;
-    applyProjectImageMode(Project);
+    applyProjectChatSettingsToElements(Project, elements, applyProjectImageMode);
   }
 
   const thread = await createThread(currentProjectId);
@@ -1739,23 +1695,13 @@ async function createNewThread() {
 }
 
 function toggleMenu(button) {
-  // Close all other menus
-  document.querySelectorAll('.menu-items').forEach(menu => {
-    if (menu !== button.nextElementSibling) {
-      menu.style.display = 'none';
-    }
-  });
-
-  const menu = button.nextElementSibling;
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  toggleProjectsDropdownMenu(button, document);
 }
 
 // Close menus when clicking outside
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.menu-dropdown')) {
-    document.querySelectorAll('.menu-items').forEach(menu => {
-      menu.style.display = 'none';
-    });
+    closeProjectsDropdownMenus(document);
   }
 
   if (!e.target.closest('.export-menu')) {
@@ -1766,18 +1712,19 @@ document.addEventListener('click', (e) => {
 // ============ MODAL HANDLERS ============
 
 function openCreateProjectModal() {
+  const viewState = buildCreateProjectModalViewState();
   editingProjectId = null;
-  elements.modalTitle.textContent = 'Create Project';
-  elements.modalSave.textContent = 'Create Project';
+  elements.modalTitle.textContent = viewState.title;
+  elements.modalSave.textContent = viewState.saveLabel;
   elements.ProjectForm.reset();
   // Reset icon to default
-  elements.ProjectIcon.value = '📁';
-  elements.iconPreview.textContent = '📁';
+  elements.ProjectIcon.value = viewState.icon;
+  elements.iconPreview.textContent = viewState.icon;
   elements.emojiGrid.classList.remove('show');
   // Reset toggles
-  elements.ProjectWebSearch.checked = false;
-  elements.ProjectReasoning.checked = false;
-  elements.ProjectModal.style.display = 'flex';
+  elements.ProjectWebSearch.checked = viewState.webSearch;
+  elements.ProjectReasoning.checked = viewState.reasoning;
+  setModalVisibility(elements.ProjectModal, true);
   elements.ProjectName.focus();
 }
 
@@ -1802,59 +1749,49 @@ function setChatStreamingState(isStreaming) {
 async function openEditProjectModal(projectId) {
   const Project = await getProject(projectId);
   if (!Project) return;
+  const viewState = buildEditProjectModalViewState({
+    project: Project,
+    currentProvider,
+    normalizeProvider: normalizeProviderSafe,
+    buildCombinedModelId: buildCombinedModelIdSafe,
+    getProjectModelLabel
+  });
 
   editingProjectId = projectId;
-  elements.modalTitle.textContent = 'Edit Project';
-  elements.modalSave.textContent = 'Save Changes';
+  elements.modalTitle.textContent = viewState.title;
+  elements.modalSave.textContent = viewState.saveLabel;
 
-  elements.ProjectName.value = Project.name;
-  elements.ProjectDescription.value = Project.description;
-  elements.ProjectIcon.value = Project.icon || '📁';
-  elements.iconPreview.textContent = Project.icon || '📁';
-    const modelProvider = normalizeProviderSafe(Project.modelProvider || currentProvider);
-    const combinedId = Project.model ? buildCombinedModelIdSafe(modelProvider, Project.model) : '';
-    elements.ProjectModel.value = combinedId;
+  elements.ProjectName.value = viewState.name;
+  elements.ProjectDescription.value = viewState.description;
+  elements.ProjectIcon.value = viewState.icon;
+  elements.iconPreview.textContent = viewState.icon;
+    elements.ProjectModel.value = viewState.modelCombinedId;
     if (elements.ProjectModelInput) {
-      elements.ProjectModelInput.value = Project.model ? getProjectModelLabel(Project) : '';
+      elements.ProjectModelInput.value = viewState.modelDisplayName;
     }
-  elements.ProjectInstructions.value = Project.customInstructions;
-  elements.ProjectWebSearch.checked = Project.webSearch || false;
-  elements.ProjectReasoning.checked = Project.reasoning || false;
+  elements.ProjectInstructions.value = viewState.customInstructions;
+  elements.ProjectWebSearch.checked = viewState.webSearch;
+  elements.ProjectReasoning.checked = viewState.reasoning;
   elements.emojiGrid.classList.remove('show');
 
-  elements.ProjectModal.style.display = 'flex';
+  setModalVisibility(elements.ProjectModal, true);
   elements.ProjectName.focus();
 }
 
 function closeProjectModal() {
-  elements.ProjectModal.style.display = 'none';
+  setModalVisibility(elements.ProjectModal, false);
   editingProjectId = null;
 }
 
 async function handleProjectFormSubmit(e) {
   e.preventDefault();
 
-    const combinedModelId = elements.ProjectModel.value;
-    const parsedModel = parseCombinedModelIdSafe(combinedModelId);
-    const modelProvider = combinedModelId ? normalizeProviderSafe(parsedModel.provider) : null;
-    const modelId = combinedModelId ? parsedModel.modelId : '';
-    const modelDisplayName = combinedModelId
-      ? (elements.ProjectModelInput?.value || (typeof buildModelDisplayName === 'function'
-        ? buildModelDisplayName(modelProvider, modelId)
-        : modelId))
-      : '';
-
-    const data = {
-      name: elements.ProjectName.value.trim(),
-      description: elements.ProjectDescription.value.trim(),
-      icon: elements.ProjectIcon.value || '📁',
-      model: modelId,
-      modelProvider,
-      modelDisplayName,
-      customInstructions: elements.ProjectInstructions.value.trim(),
-      webSearch: elements.ProjectWebSearch.checked,
-      reasoning: elements.ProjectReasoning.checked
-    };
+  const data = buildProjectFormData({
+    elements,
+    parseCombinedModelId: parseCombinedModelIdSafe,
+    normalizeProvider: normalizeProviderSafe,
+    buildModelDisplayName
+  });
 
   if (!data.name) {
     showToast('Name is required', 'error');
@@ -1891,13 +1828,13 @@ async function openRenameModal(threadId) {
 
   renamingThreadId = threadId;
   elements.threadTitle.value = thread.title;
-  elements.renameModal.style.display = 'flex';
+  setModalVisibility(elements.renameModal, true);
   elements.threadTitle.focus();
   elements.threadTitle.select();
 }
 
 function closeRenameModal() {
-  elements.renameModal.style.display = 'none';
+  setModalVisibility(elements.renameModal, false);
   renamingThreadId = null;
 }
 
@@ -1926,22 +1863,24 @@ async function openDeleteModal(type, id) {
   if (type === 'Project') {
     const Project = await getProject(id);
     const threadCount = await getThreadCount(id);
-    elements.deleteTitle.textContent = 'Delete Project';
-    elements.deleteMessage.textContent = `Are you sure you want to delete "${Project.name}" and all its threads?`;
-    elements.deleteSize.textContent = `This will delete ${threadCount} thread${threadCount !== 1 ? 's' : ''}.`;
+    const modalContent = buildProjectDeleteModalContent(Project.name, threadCount);
+    elements.deleteTitle.textContent = modalContent.title;
+    elements.deleteMessage.textContent = modalContent.message;
+    elements.deleteSize.textContent = modalContent.sizeText;
   } else {
     const thread = await getThread(id);
     const size = await estimateItemSize(thread);
-    elements.deleteTitle.textContent = 'Delete Thread';
-    elements.deleteMessage.textContent = `Are you sure you want to delete "${thread.title}"?`;
-    elements.deleteSize.textContent = `This will free ~${(size / 1024).toFixed(1)}KB.`;
+    const modalContent = buildThreadDeleteModalContent(thread.title, size);
+    elements.deleteTitle.textContent = modalContent.title;
+    elements.deleteMessage.textContent = modalContent.message;
+    elements.deleteSize.textContent = modalContent.sizeText;
   }
 
-  elements.deleteModal.style.display = 'flex';
+  setModalVisibility(elements.deleteModal, true);
 }
 
 function closeDeleteModal() {
-  elements.deleteModal.style.display = 'none';
+  setModalVisibility(elements.deleteModal, false);
   deletingItem = null;
 }
 
@@ -1964,8 +1903,7 @@ async function handleDeleteConfirm() {
 
       if (currentThreadId === deletingItem.id) {
         currentThreadId = null;
-        elements.chatEmptyState.style.display = 'flex';
-        elements.chatContainer.style.display = 'none';
+        applyChatPanelStateToElements(elements, buildEmptyChatPanelState());
       }
       invalidateStorageUsageCache();
       await renderThreadList();
@@ -2090,9 +2028,7 @@ async function loadModels() {
 
 function setupEmojiPicker() {
   // Populate emoji grid
-  elements.emojiGridInner.innerHTML = Project_EMOJIS.map(emoji =>
-    `<button type="button" class="emoji-btn" data-emoji="${emoji}">${emoji}</button>`
-  ).join('');
+  elements.emojiGridInner.innerHTML = buildEmojiButtonsHtml(Project_EMOJIS);
 
   // Toggle emoji grid on icon preview click
   elements.iconPreview.addEventListener('click', (e) => {
@@ -2113,7 +2049,7 @@ function setupEmojiPicker() {
 
   // Close emoji grid when clicking outside
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.icon-picker-wrapper')) {
+    if (shouldCloseEmojiGridOnDocumentClick(e.target)) {
       elements.emojiGrid.classList.remove('show');
     }
   });
@@ -2191,35 +2127,25 @@ function bindEvents() {
   }
 
   elements.chatMessages.addEventListener('click', async (e) => {
-    const archiveToggle = e.target.closest('.chat-archive-toggle');
-    if (archiveToggle) {
+    const action = resolveChatMessageClickAction(e.target);
+    if (action.type === 'archive-toggle') {
       e.preventDefault();
       e.stopPropagation();
       toggleArchiveSection();
       return;
     }
 
-    const exportBtn = e.target.closest('.export-btn');
-    if (exportBtn) {
+    if (action.type === 'export-menu-toggle') {
       e.preventDefault();
       e.stopPropagation();
-      const menu = exportBtn.closest('.export-menu');
-      if (menu) {
-        const isOpen = menu.classList.contains('open');
-        closeExportMenus();
-        if (!isOpen) {
-          menu.classList.add('open');
-        }
-      }
+      toggleProjectsExportMenu(e.target.closest('.export-btn'), document);
       return;
     }
 
-    const exportOption = e.target.closest('.export-option');
-    if (exportOption) {
+    if (action.type === 'export-option') {
       e.preventDefault();
       e.stopPropagation();
-      const format = exportOption.getAttribute('data-format');
-      await exportCurrentThread(format);
+      await exportCurrentThread(action.format);
       closeExportMenus();
       return;
     }
@@ -2228,15 +2154,15 @@ function bindEvents() {
   // Close modals on backdrop click
   [elements.ProjectModal, elements.renameModal, elements.deleteModal].forEach(modal => {
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.style.display = 'none';
+      if (shouldCloseModalOnBackdropClick(e, modal)) {
+        setModalVisibility(modal, false);
       }
     });
   });
 
   // Close modals on Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+    if (isEscapeCloseEvent(e)) {
       closeProjectModal();
       closeRenameModal();
       closeDeleteModal();
@@ -2246,231 +2172,43 @@ function bindEvents() {
 
 // ============ CHAT FUNCTIONALITY ============
 
-function createStreamingAssistantMessage() {
-  const tokenStyle = typeof getTokenBarStyle === 'function'
-    ? getTokenBarStyle(null)
-    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
-
-  const messageDiv = document.createElement('div');
-  messageDiv.className = 'chat-message chat-message-assistant';
-  messageDiv.innerHTML = `
-    <div class="chat-bubble-wrapper">
-      <div class="chat-meta">
-        <span class="chat-meta-text">Streaming...</span>
-      </div>
-      <div class="chat-bubble">
-        <div class="chat-content">
-          <div class="typing-indicator">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-          </div>
-        </div>
-        <div class="chat-footer">
-          <div class="chat-stats">
-            <span class="chat-time">--s</span>
-            <span class="chat-tokens">-- tokens</span>
-            <span class="chat-context-badge" style="display: none;"></span>
-          </div>
-          <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
-            <div class="token-usage-fill" style="width: ${tokenStyle.percent}%; background: ${tokenStyle.gradient};"></div>
-          </div>
-        </div>
-        <div class="chat-actions">
-          <div class="chat-actions-left">
-            <button class="action-btn chat-copy-btn" title="Copy answer" aria-label="Copy answer">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-            </button>
-            <div class="export-menu">
-              <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                  <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
-                </svg>
-              </button>
-              <div class="export-menu-items">
-                <button class="export-option" data-format="pdf">Export PDF</button>
-                <button class="export-option" data-format="markdown">Export Markdown</button>
-                <button class="export-option" data-format="docx">Export DOCX</button>
-              </div>
-            </div>
-          </div>
-          <div class="chat-sources-summary"></div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  return {
-    messageDiv,
-    wrapper: messageDiv.querySelector('.chat-bubble-wrapper'),
-    content: messageDiv.querySelector('.chat-content'),
-    metaText: messageDiv.querySelector('.chat-meta-text'),
-    timeEl: messageDiv.querySelector('.chat-time'),
-    tokensEl: messageDiv.querySelector('.chat-tokens'),
-    contextBadgeEl: messageDiv.querySelector('.chat-context-badge'),
-    tokenFillEl: messageDiv.querySelector('.token-usage-fill'),
-    tokenBarEl: messageDiv.querySelector('.token-usage-bar'),
-    sourcesSummaryEl: messageDiv.querySelector('.chat-sources-summary')
-  };
-}
-
-function updateAssistantFooter(ui, meta) {
-  if (!ui || !meta) return;
-
-  const metaTime = meta.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : '';
-  const metaModel = meta.model || 'default model';
-  if (ui.metaText) {
-    ui.metaText.textContent = `${metaTime} - ${metaModel}`;
-  }
-
-  if (ui.timeEl) {
-    ui.timeEl.textContent = typeof meta.responseTimeSec === 'number'
-      ? `${meta.responseTimeSec.toFixed(2)}s`
-      : '--s';
-  }
-
-  if (ui.tokensEl) {
-    ui.tokensEl.textContent = meta.tokens ? `${meta.tokens} tokens` : '-- tokens';
-  }
-
-  if (ui.contextBadgeEl) {
-    if (meta.contextSize > 2) {
-      ui.contextBadgeEl.style.display = 'inline-flex';
-      ui.contextBadgeEl.textContent = `🧠 ${Math.floor(meta.contextSize / 2)} Q&A`;
-      ui.contextBadgeEl.title = `${meta.contextSize} messages in conversation context`;
-    } else {
-      ui.contextBadgeEl.style.display = 'none';
-    }
-  }
-
-  const tokenStyle = typeof getTokenBarStyle === 'function'
-    ? getTokenBarStyle(meta.tokens || null)
-    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
-
-  if (ui.tokenFillEl) {
-    ui.tokenFillEl.style.width = `${tokenStyle.percent}%`;
-    ui.tokenFillEl.style.background = tokenStyle.gradient;
-  }
-
-  if (ui.tokenBarEl) {
-    ui.tokenBarEl.setAttribute('aria-valuenow', tokenStyle.percent);
-  }
-}
-
-function resetStreamingUi(ui) {
-  if (!ui) return ui;
-  if (ui.content) {
-    ui.content.innerHTML = getTypingIndicatorHtml();
-  }
-  if (ui.metaText) {
-    ui.metaText.textContent = 'Streaming...';
-  }
-  if (ui.timeEl) {
-    ui.timeEl.textContent = '--s';
-  }
-  if (ui.tokensEl) {
-    ui.tokensEl.textContent = '-- tokens';
-  }
-  if (ui.contextBadgeEl) {
-    ui.contextBadgeEl.style.display = 'none';
-    ui.contextBadgeEl.textContent = '';
-  }
-  if (ui.sourcesSummaryEl) {
-    ui.sourcesSummaryEl.textContent = '';
-  }
-  if (ui.wrapper) {
-    const reasoningBubble = ui.wrapper.querySelector('.chat-reasoning-bubble');
-    if (reasoningBubble) {
-      reasoningBubble.remove();
-    }
-  }
-  const tokenStyle = typeof getTokenBarStyle === 'function'
-    ? getTokenBarStyle(null)
-    : { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success), #16a34a)' };
-  if (ui.tokenFillEl) {
-    ui.tokenFillEl.style.width = `${tokenStyle.percent}%`;
-    ui.tokenFillEl.style.background = tokenStyle.gradient;
-  }
-  if (ui.tokenBarEl) {
-    ui.tokenBarEl.setAttribute('aria-valuenow', '0');
-  }
-  return ui;
-}
-
 function renderStreamError(ui, message, retryContext) {
-  if (!ui || !ui.content) return;
-  const errorHtml = getStreamErrorHtml(message);
-  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
-    window.safeHtml.setSanitizedHtml(ui.content, errorHtml);
-  } else {
-    ui.content.innerHTML = errorHtml;
+  if (typeof renderStreamErrorRuntime === 'function') {
+    renderStreamErrorRuntime(ui, message, retryContext, {
+      getStreamErrorHtml,
+      setSanitizedHtml: (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function')
+        ? window.safeHtml.setSanitizedHtml
+        : null,
+      getRetryInProgress: () => retryInProgress,
+      getIsStreaming: () => isStreaming,
+      retryStreamFromContext: (ctx, state) => retryStreamFromContext(ctx, state)
+    });
+    return;
   }
-  const retryBtn = ui.content.querySelector('.retry-btn');
-  if (!retryBtn) return;
-  retryBtn.addEventListener('click', async () => {
-    if (retryInProgress || isStreaming) return;
-    retryBtn.disabled = true;
-    await retryStreamFromContext(retryContext, ui);
-  });
+  if (!ui || !ui.content) return;
+  ui.content.innerHTML = getStreamErrorHtml(message);
 }
 
 async function retryStreamFromContext(retryContext, ui) {
-  if (!retryContext || isStreaming) {
-    if (typeof showToast === 'function') {
-      showToast('Nothing to retry yet', 'error');
-    }
+  if (typeof retryStreamFromContextRuntime === 'function') {
+    await retryStreamFromContextRuntime(retryContext, ui, {
+      getIsStreaming: () => isStreaming,
+      getRetryInProgress: () => retryInProgress,
+      setRetryInProgress: (value) => { retryInProgress = Boolean(value); },
+      getThread,
+      getProject,
+      showToast: (typeof showToast === 'function') ? showToast : null,
+      resetStreamingUi: (state) => resetStreamingUi(state, getTokenBarStyle),
+      sendBtn: elements.sendBtn,
+      setChatStreamingState,
+      setIsStreaming: (value) => { isStreaming = Boolean(value); },
+      streamMessage,
+      renderThreadList,
+      logger: console
+    });
     return;
   }
-  retryInProgress = true;
-  try {
-    const thread = await getThread(retryContext.threadId);
-    const Project = await getProject(retryContext.projectId);
-    if (!thread || !Project) {
-      if (typeof showToast === 'function') {
-        showToast('Retry failed: Project or thread not found', 'error');
-      }
-      return;
-    }
-    const effectiveProject = {
-      ...Project,
-      model: retryContext.model,
-      modelProvider: retryContext.modelProvider,
-      modelDisplayName: retryContext.modelDisplayName,
-      customInstructions: retryContext.customInstructions
-    };
-
-    resetStreamingUi(ui);
-    elements.sendBtn.style.display = 'none';
-    setChatStreamingState(true);
-    isStreaming = true;
-    const startTime = Date.now();
-    await streamMessage(
-      retryContext.prompt,
-      effectiveProject,
-      thread,
-      ui,
-      startTime,
-      {
-        webSearch: retryContext.webSearch,
-        reasoning: retryContext.reasoning,
-        retryContext,
-        retry: true
-      }
-    );
-  } catch (err) {
-    console.error('Stream retry failed:', err);
-    if (typeof showToast === 'function') {
-      showToast(err?.message || 'Retry failed', 'error');
-    }
-  } finally {
-    elements.sendBtn.style.display = 'block';
-    setChatStreamingState(false);
-    isStreaming = false;
-    retryInProgress = false;
-    await renderThreadList();
-  }
+  if (!retryContext || isStreaming) return;
 }
 
 async function sendImageMessage(content, Project) {
@@ -2487,30 +2225,14 @@ async function sendImageMessage(content, Project) {
     content
   });
 
-  elements.chatInput.value = '';
-  elements.chatInput.style.height = 'auto';
+  clearChatInput(elements.chatInput);
 
   const thread = await getThread(currentThreadId);
   if (thread) {
     renderChatMessages(thread.messages, thread);
   }
 
-  const tempWrapper = document.createElement('div');
-  tempWrapper.className = 'chat-message chat-message-assistant image-message';
-  tempWrapper.innerHTML = `
-    <div class="chat-bubble-wrapper">
-      <div class="chat-bubble">
-        <div class="chat-content"></div>
-      </div>
-    </div>
-  `;
-
-  const tempContent = tempWrapper.querySelector('.chat-content');
-  if (tempContent && typeof buildImageCard === 'function') {
-    tempContent.appendChild(buildImageCard({ state: 'generating' }));
-  } else if (tempContent) {
-    tempContent.textContent = 'Generating image...';
-  }
+  const tempWrapper = createGeneratingImageMessage(typeof buildImageCard === 'function' ? buildImageCard : null);
 
   elements.chatMessages.appendChild(tempWrapper);
   elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
@@ -2547,12 +2269,7 @@ async function sendImageMessage(content, Project) {
       });
     }
 
-    let metaModel = 'default model';
-    if (Project?.modelDisplayName) {
-      metaModel = Project.modelDisplayName;
-    } else if (Project?.model && typeof buildModelDisplayName === 'function') {
-      metaModel = buildModelDisplayName(provider, Project.model);
-    }
+    const metaModel = resolveAssistantModelLabel(Project, provider, buildModelDisplayName);
 
     await addMessageToThread(currentThreadId, {
       role: 'assistant',
@@ -2602,82 +2319,54 @@ async function sendMessage() {
   });
 
   // Clear input
-  elements.chatInput.value = '';
-  elements.chatInput.style.height = 'auto';
+  clearChatInput(elements.chatInput);
 
   // Re-render messages
   let thread = await getThread(currentThreadId);
   if (!thread) return;
 
-  const liveWindowSize = getLiveWindowSize(thread.summary);
-  const { historyToSummarize, liveMessages } = splitMessagesForSummary(thread.messages, liveWindowSize);
-  const skipSummary = shouldSkipSummarization(content);
-  if (historyToSummarize.length > 0 && !skipSummary) {
-    try {
-      if (typeof showToast === 'function') {
-        showToast('Updating summary...', 'info');
-      }
-      const summaryMessages = typeof buildSummarizerMessages === 'function'
-        ? buildSummarizerMessages(thread.summary, historyToSummarize)
-        : historyToSummarize;
-      const summaryRes = await chrome.runtime.sendMessage({
-        type: 'summarize_thread',
-        messages: summaryMessages,
-        model: Project.model || null,
-        provider: Project.modelProvider || currentProvider
-      });
-      const minSummaryLength = getSummaryMinLength(historyToSummarize.length);
-      if (summaryRes?.ok && typeof summaryRes.summary === 'string' && summaryRes.summary.trim().length >= minSummaryLength) {
-        thread.summary = summaryRes.summary.trim();
-        thread.summaryUpdatedAt = Date.now();
-        const updatedArchive = appendArchivedMessages(thread.archivedMessages, historyToSummarize);
-        thread.archivedMessages = updatedArchive;
-        thread.archivedUpdatedAt = Date.now();
-        thread.messages = liveMessages;
-        await updateThread(currentThreadId, {
-          messages: liveMessages,
-          summary: thread.summary,
-          summaryUpdatedAt: thread.summaryUpdatedAt,
-          archivedMessages: updatedArchive,
-          archivedUpdatedAt: thread.archivedUpdatedAt
-        });
-      } else if (typeof showToast === 'function') {
-        showToast('Summary update failed; continuing without it', 'error');
-      }
-    } catch (err) {
-      console.warn('Summary update failed:', err);
-      if (typeof showToast === 'function') {
-        showToast('Summary update failed; continuing without it', 'error');
-      }
-    }
-  }
+  thread = await maybeSummarizeBeforeStreaming({
+    thread,
+    content,
+    currentThreadId,
+    project: Project,
+    currentProvider
+  }, {
+    getLiveWindowSize,
+    splitMessagesForSummary,
+    shouldSkipSummarization,
+    getSummaryMinLength,
+    appendArchivedMessages,
+    buildSummarizerMessages: (typeof buildSummarizerMessages === 'function') ? buildSummarizerMessages : null,
+    sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+    updateThread,
+    showToast: (typeof showToast === 'function') ? showToast : null,
+    logger: console
+  });
 
     renderChatMessages(thread.messages, thread);
 
   const webSearch = elements.chatWebSearch?.checked;
   const reasoning = elements.chatReasoning?.checked;
-  const streamContext = {
-    prompt: content,
-    projectId: currentProjectId,
-    threadId: currentThreadId,
-    model: Project.model || null,
-    modelProvider: Project.modelProvider || currentProvider,
-    modelDisplayName: Project.modelDisplayName || null,
-    customInstructions: Project.customInstructions || '',
+  const streamContext = buildStreamContext({
+    content,
+    currentProjectId,
+    currentThreadId,
+    project: Project,
+    currentProvider,
     summary: thread.summary || '',
-    webSearch: Boolean(webSearch),
-    reasoning: Boolean(reasoning)
-  };
+    webSearch,
+    reasoning
+  });
   lastStreamContext = streamContext;
 
   const startTime = Date.now();
-  const streamingUi = createStreamingAssistantMessage();
+  const streamingUi = createStreamingAssistantMessage(getTokenBarStyle);
   elements.chatMessages.appendChild(streamingUi.messageDiv);
   elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 
   // Show stop button, hide send
-  elements.sendBtn.style.display = 'none';
-  setChatStreamingState(true);
+  setSendStreamingState(elements.sendBtn, setChatStreamingState, true);
   isStreaming = true;
 
   // Start streaming
@@ -2692,8 +2381,7 @@ async function sendMessage() {
     showToast(err.message || 'Failed to send message', 'error');
   } finally {
     // Restore buttons
-    elements.sendBtn.style.display = 'block';
-    setChatStreamingState(false);
+    setSendStreamingState(elements.sendBtn, setChatStreamingState, false);
     isStreaming = false;
 
     await renderThreadList();
@@ -2705,107 +2393,49 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
     // Create port for streaming
     streamPort = chrome.runtime.connect({ name: 'streaming' });
 
-    let fullContent = '';
-    const assistantBubble = streamingUi?.content || null;
-    const messageDiv = streamingUi?.messageDiv || null;
-    const reasoningStreamState = { inReasoning: false, carry: "" };
-    let reasoningTextEl = null;
-
-    const ensureReasoningBubble = () => {
-      if (reasoningTextEl) return;
-      const bubble = messageDiv?.querySelector('.chat-bubble');
-      if (!bubble) return;
-      const wrapper = document.createElement('div');
-      wrapper.className = 'chat-reasoning-bubble';
-      wrapper.style.marginBottom = '12px';
-      wrapper.innerHTML = `
-        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-            <span>💭</span>
-            <span>Reasoning:</span>
-          </div>
-          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
-        </div>
-      `;
-      const contentEl = assistantBubble || bubble.querySelector('.chat-content');
-      if (contentEl) {
-        bubble.insertBefore(wrapper, contentEl);
-      } else {
-        bubble.appendChild(wrapper);
-      }
-      reasoningTextEl = wrapper.querySelector('.reasoning-text');
-    };
+    const chunkState = createStreamChunkState(streamingUi, createReasoningAppender);
+    const assistantBubble = chunkState.assistantBubble;
+    const messageDiv = chunkState.messageDiv;
+    const safeHtmlSetter = (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function')
+      ? window.safeHtml.setSanitizedHtml
+      : null;
 
     streamPort.onMessage.addListener(async (msg) => {
-      if (msg.type === 'content') {
-        let contentChunk = msg.content || '';
-        let reasoningChunk = '';
-        if (typeof extractReasoningFromStreamChunk === 'function') {
-          const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
-          contentChunk = parsed.content;
-          reasoningChunk = parsed.reasoning;
-        }
-
-        if (reasoningChunk) {
-          ensureReasoningBubble();
-          if (reasoningTextEl) {
-            reasoningTextEl.textContent += reasoningChunk;
-          }
-        }
-
-        if (!contentChunk) {
-          return;
-        }
-
-        fullContent += contentChunk;
-        if (assistantBubble) {
-          const rendered = applyMarkdownStyles(fullContent);
-          if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
-            window.safeHtml.setSanitizedHtml(assistantBubble, rendered);
-          } else {
-            assistantBubble.innerHTML = rendered;
-          }
-        }
-        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-      } else if (msg.type === 'reasoning' && msg.reasoning) {
-        ensureReasoningBubble();
-        if (reasoningTextEl) {
-          reasoningTextEl.textContent += msg.reasoning;
-        }
+      if (applyContentChunk(chunkState, msg, {
+        extractReasoningFromStreamChunk: (typeof extractReasoningFromStreamChunk === 'function')
+          ? extractReasoningFromStreamChunk
+          : null,
+        renderAssistantContent: (bubble, text) => renderAssistantContent(bubble, text, {
+          applyMarkdownStyles,
+          setSanitizedHtml: safeHtmlSetter
+        }),
+        scrollToBottom: () => { elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight; }
+      })) {
+        return;
+      }
+      if (applyReasoningChunk(chunkState, msg)) {
+        return;
       } else if (msg.type === 'complete') {
         const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : null;
-        let metaModel = msg.model || 'default model';
-        if (Project.modelDisplayName) {
-          metaModel = Project.modelDisplayName;
-        } else if (Project.model && typeof buildModelDisplayName === 'function') {
-          metaModel = buildModelDisplayName(Project.modelProvider || currentProvider, Project.model);
-        }
-        const meta = {
-          model: metaModel,
-          tokens: msg.tokens || null,
-          responseTimeSec: typeof elapsedSec === 'number' ? Number(elapsedSec.toFixed(2)) : null,
-          contextSize: msg.contextSize || 0,
-          createdAt: Date.now()
-        };
+        const meta = buildStreamMeta(msg, Project, elapsedSec, {
+          buildModelDisplayName,
+          currentProvider
+        });
 
         // Save assistant message to thread
-        await addMessageToThread(currentThreadId, buildAssistantMessage(fullContent, meta));
+        await addMessageToThread(currentThreadId, buildAssistantMessage(chunkState.fullContent, meta));
         const updatedThread = await getThread(currentThreadId);
         if (updatedThread) {
           updateProjectsContextButton(updatedThread, currentProjectData);
         }
 
-        updateAssistantFooter(streamingUi, meta);
+        updateAssistantFooter(streamingUi, meta, getTokenBarStyle);
 
-        const { sources, cleanText } = getSourcesData(fullContent);
-        if (assistantBubble) {
-          const rendered = applyMarkdownStyles(cleanText);
-          if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
-            window.safeHtml.setSanitizedHtml(assistantBubble, rendered);
-          } else {
-            assistantBubble.innerHTML = rendered;
-          }
-        }
+        const { sources, cleanText } = getSourcesData(chunkState.fullContent);
+        renderAssistantContent(assistantBubble, cleanText, {
+          applyMarkdownStyles,
+          setSanitizedHtml: safeHtmlSetter
+        });
 
         if (sources.length > 0) {
           // Make references clickable
@@ -2830,8 +2460,7 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
           removeReasoningBubbles(messageDiv);
         }
 
-        streamPort.disconnect();
-        streamPort = null;
+        streamPort = disconnectStreamPort(streamPort);
         resolve();
       } else if (msg.type === 'error') {
         renderStreamError(streamingUi, msg.error, options.retryContext || lastStreamContext);
@@ -2841,8 +2470,7 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
         if (typeof removeReasoningBubbles === 'function') {
           removeReasoningBubbles(messageDiv);
         }
-        streamPort.disconnect();
-        streamPort = null;
+        streamPort = disconnectStreamPort(streamPort);
         reject(new Error(msg.error));
       }
     });
@@ -2858,25 +2486,18 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
     const messages = buildStreamMessages(thread.messages, content, Project.customInstructions, thread.summary);
 
     // Use chat toggles (temporary override) instead of Project settings
-    const webSearch = typeof options.webSearch === 'boolean'
-      ? options.webSearch
-      : elements.chatWebSearch.checked;
-    const reasoning = typeof options.reasoning === 'boolean'
-      ? options.reasoning
-      : elements.chatReasoning.checked;
+    const { webSearch, reasoning } = resolveStreamToggles(options, elements);
 
     // Send stream request
-    streamPort.postMessage({
-      type: 'start_stream',
-      prompt: content,
-      messages: messages,
-      model: Project.model || null,
-      provider: Project.modelProvider || currentProvider,
-      webSearch: webSearch,
-      reasoning: reasoning,
-      tabId: `Project_${Project.id}`,
+    streamPort.postMessage(buildStartStreamPayload({
+      content,
+      messages,
+      project: Project,
+      provider: currentProvider,
+      webSearch,
+      reasoning,
       retry: options.retry === true
-    });
+    }));
   });
 }
 
@@ -2886,8 +2507,7 @@ function stopStreaming() {
     streamPort = null;
   }
   isStreaming = false;
-  elements.sendBtn.style.display = 'block';
-  setChatStreamingState(false);
+  setSendStreamingState(elements.sendBtn, setChatStreamingState, false);
   showToast('Generation stopped', 'info');
 }
 

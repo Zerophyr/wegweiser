@@ -27,6 +27,10 @@ const setLocalStorage = (values) => (
 );
 // encrypted-storage
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
+const sidepanelModuleResolver = (typeof window !== "undefined" && window.sidepanelModuleResolver)
+  || (typeof require === "function" ? require("./sidepanel-module-resolver.js") : null);
+const resolveSidepanelModule = sidepanelModuleResolver?.resolveSidepanelModule
+  || ((windowKey) => ((typeof window !== "undefined" && window && window[windowKey]) ? window[windowKey] : {}));
 const SIDEPANEL_PROJECT_ID = "__sidepanel__";
 
 const promptEl = document.getElementById("prompt");
@@ -89,7 +93,7 @@ let selectedCombinedModelId = null;
 let sidebarSetupRequired = false;
 let lastStreamContext = null;
 
-const sidepanelProviderUtils = (typeof window !== "undefined" && window.sidepanelProviderUtils) || {};
+const sidepanelProviderUtils = resolveSidepanelModule("sidepanelProviderUtils", "./sidepanel-provider.js");
 const normalizeProviderSafe = sidepanelProviderUtils.normalizeProviderSafe || ((providerId) => providerId === "naga" ? "naga" : "openrouter");
 const getProviderLabelSafe = sidepanelProviderUtils.getProviderLabelSafe || ((providerId) => normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter");
 const getProviderStorageKeySafe = sidepanelProviderUtils.getProviderStorageKeySafe || ((baseKey, providerId) => normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey);
@@ -107,36 +111,40 @@ const parseCombinedModelIdSafe = sidepanelProviderUtils.parseCombinedModelIdSafe
   return { provider, modelId };
 });
 const getModelDisplayName = sidepanelProviderUtils.getModelDisplayName || ((model) => model?.displayName || model?.name || model?.id || "");
-const sidepanelStreamUtils = (typeof window !== "undefined" && window.sidepanelStreamUtils) || {};
-const buildStreamErrorHtml = sidepanelStreamUtils.buildStreamErrorHtml || ((message) => {
-  const safeMessage = escapeHtml(message || "Unknown error");
-  return `
-    <div class="error-content">
-      <div class="error-text">${safeMessage}</div>
-      <div class="error-actions">
-        <button class="retry-btn" type="button">Retry</button>
-      </div>
-    </div>
-  `;
-});
-const sanitizePrompt = sidepanelStreamUtils.sanitizePrompt || ((prompt) => {
-  if (!prompt || typeof prompt !== "string") return "";
-  const trimmed = prompt.trim();
-  const maxLength = 10000;
-  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
-});
-const getImageExtension = sidepanelStreamUtils.getImageExtension || ((mimeType) => {
-  if (mimeType === "image/jpeg") return "jpg";
-  if (mimeType === "image/webp") return "webp";
-  if (mimeType === "image/gif") return "gif";
-  return "png";
-});
-const getImageViewerBaseUrl = sidepanelStreamUtils.getImageViewerBaseUrl || (() => {
-  if (typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function") {
-    return chrome.runtime.getURL("src/image-viewer/image-viewer.html");
-  }
-  return "";
-});
+const sidepanelStreamUtils = resolveSidepanelModule("sidepanelStreamUtils", "./sidepanel-stream-utils.js");
+const {
+  buildStreamErrorHtml = (message) => `<div class="error-content"><div class="error-text">${escapeHtml(message || "Unknown error")}</div><div class="error-actions"><button class="retry-btn" type="button">Retry</button></div></div>`,
+  sanitizePrompt = (prompt) => String(prompt || "").trim().slice(0, 10000),
+  getImageExtension = (mimeType) => (mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : mimeType === "image/gif" ? "gif" : "png"),
+  getImageViewerBaseUrl = () => ((typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function")
+    ? chrome.runtime.getURL("src/image-viewer/image-viewer.html")
+    : "")
+} = sidepanelStreamUtils;
+const sidepanelAnswerStoreUtils = resolveSidepanelModule("sidepanelAnswerStoreUtils", "./sidepanel-answer-store-utils.js");
+const {
+  ANSWER_CACHE_KEY_PREFIX = "or_sidepanel_answer_",
+  getAnswerStorage = (chromeApi) => {
+    const api = chromeApi || (typeof chrome !== "undefined" ? chrome : null);
+    return api?.storage?.session || api?.storage?.local || null;
+  },
+  getCurrentTabId = async () => "default",
+  getSidepanelThreadId = async () => "sidepanel_default",
+  buildAnswerCacheKey = (tabId) => `${ANSWER_CACHE_KEY_PREFIX}${tabId}`
+} = sidepanelAnswerStoreUtils;
+const sidepanelAnswerUiUtils = resolveSidepanelModule("sidepanelAnswerUiUtils", "./sidepanel-answer-ui-utils.js");
+const {
+  hasAnswerContent = (html) => Boolean(String(html || "").trim()),
+  buildSourcesCountLabel = (count) => `${count} source${count !== 1 ? "s" : ""}`
+} = sidepanelAnswerUiUtils;
+const sidepanelExportUtils = resolveSidepanelModule("sidepanelExportUtils", "./sidepanel-export-utils.js");
+const {
+  closeExportMenus = (rootDocument) => (rootDocument || document).querySelectorAll(".export-menu").forEach((menu) => menu.classList.remove("open")),
+  getExportPayload = () => ({ text: "", html: "", messages: [] })
+} = sidepanelExportUtils;
+const sidepanelSourcesSummaryUtils = resolveSidepanelModule("sidepanelSourcesSummaryUtils", "./sidepanel-sources-summary-utils.js");
+const {
+  renderSourcesSummaryToElement = () => {}
+} = sidepanelSourcesSummaryUtils;
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -299,7 +307,7 @@ function estimateTokens(text) {
 // ---- Answer visibility management ----
 function updateAnswerVisibility() {
   const clearBtn = document.getElementById("clear-answer-btn");
-  if (answerEl.innerHTML.trim() === "") {
+  if (!hasAnswerContent(answerEl.innerHTML)) {
     answerEl.classList.add("hidden");
     if (clearBtn) clearBtn.style.display = "none";
   } else {
@@ -323,30 +331,7 @@ function setAnswerLoading(isLoading) {
 }
 
 // ---- Sidepanel answer persistence ----
-const ANSWER_CACHE_KEY_PREFIX = "or_sidepanel_answer_";
 let answerPersistTimeout = null;
-
-function getAnswerStorage() {
-  if (chrome?.storage?.session) {
-    return chrome.storage.session;
-  }
-  return chrome?.storage?.local || null;
-}
-
-async function getCurrentTabId() {
-  try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tabs[0]?.id || "default";
-  } catch (e) {
-    console.warn("Failed to resolve current tab id:", e);
-    return "default";
-  }
-}
-
-async function getSidepanelThreadId() {
-  const tabId = await getCurrentTabId();
-  return `sidepanel_${tabId}`;
-}
 
 function scheduleAnswerPersist() {
   if (answerPersistTimeout) {
@@ -385,7 +370,7 @@ async function persistAnswers() {
   const storage = getAnswerStorage();
   if (!storage) return;
   const tabId = await getCurrentTabId();
-  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
+  const key = buildAnswerCacheKey(tabId);
   if (!html.trim()) {
     if (typeof storage.remove === "function") {
       await storage.remove([key]);
@@ -421,7 +406,7 @@ async function restorePersistedAnswers() {
   const storage = getAnswerStorage();
   if (!storage) return;
   const tabId = await getCurrentTabId();
-  const key = `${ANSWER_CACHE_KEY_PREFIX}${tabId}`;
+  const key = buildAnswerCacheKey(tabId);
   const stored = await storage.get([key]);
   const payload = stored?.[key];
   if (payload?.html) {
@@ -440,55 +425,22 @@ async function restorePersistedAnswers() {
   }
 }
 
-function closeExportMenus() {
-  document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
-}
-
 function renderSourcesSummary(answerItem, sources) {
   const summary = answerItem?.querySelector('.answer-sources-summary');
-  if (!summary) return;
-  summary.innerHTML = '';
-
-  if (!sources || sources.length === 0 || typeof getUniqueDomains !== 'function') {
-    return;
-  }
-
-  const uniqueDomains = getUniqueDomains(sources);
-  const stack = document.createElement('div');
-  stack.className = 'sources-favicon-stack';
-
-  uniqueDomains.slice(0, 5).forEach((domain, index) => {
-    const favicon = document.createElement('img');
-    favicon.src = domain.favicon;
-    favicon.alt = domain.domain;
-    favicon.style.zIndex = String(5 - index);
-    favicon.onerror = () => {
-      favicon.src = 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" fill=\"%23888\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>';
-    };
-    stack.appendChild(favicon);
-  });
-
-  const count = document.createElement('span');
-  count.className = 'sources-count';
-  count.textContent = `${sources.length} source${sources.length !== 1 ? 's' : ''}`;
-
-  summary.appendChild(stack);
-  summary.appendChild(count);
+  renderSourcesSummaryToElement(summary, sources, getUniqueDomains, buildSourcesCountLabel);
 }
 
 function exportAnswer(answerItem, format) {
   if (!answerItem) return;
-  const answerContent = answerItem.querySelector('.answer-content');
-  const text = answerContent?.innerText || answerContent?.textContent || '';
-  const messages = [{ role: 'assistant', content: text }];
+  const payload = getExportPayload(answerItem);
+  const messages = payload.messages;
 
   if (format === 'markdown' && typeof exportMarkdownFile === 'function') {
     exportMarkdownFile(messages, 'answer.md');
   } else if (format === 'docx' && typeof exportDocx === 'function') {
     exportDocx(messages, 'answer.docx');
   } else if (format === 'pdf' && typeof exportPdf === 'function') {
-    const html = answerContent?.innerHTML || '';
-    exportPdf(html, 'answer');
+    exportPdf(payload.html, 'answer');
   }
 }
 

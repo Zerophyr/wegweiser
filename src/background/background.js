@@ -26,6 +26,42 @@ import {
   buildAuthHeaders,
   buildBalanceHeaders
 } from '/src/background/provider-utils.js';
+import {
+  extractOpenRouterImageUrl,
+  buildDataUrlFromBase64,
+  isNagaChatImageModel,
+  arrayBufferToBase64,
+  fetchImageAsDataUrl,
+  resolveModelCapabilitiesFromList
+} from '/src/background/background-image-utils.js';
+import {
+  parseModelsPayload,
+  getNagaStartupsCacheKeys
+} from '/src/background/background-models-utils.js';
+import {
+  parseStoredTabId,
+  loadContextsFromStorage,
+  persistContextForTab as persistContextForTabInStorage,
+  removeContextForTab as removeContextForTabInStorage
+} from '/src/background/background-context-store-utils.js';
+import {
+  createDebugStreamState,
+  setDebugEnabled as setDebugStreamEnabledState,
+  getDebugSnapshot,
+  clearDebugEntries,
+  applyDebugStorageChange,
+  createDebugLogger
+} from '/src/background/background-debug-stream-utils.js';
+import {
+  createSafePortSender,
+  buildStreamRequestBody
+} from '/src/background/background-stream-runtime-utils.js';
+import {
+  splitSseLines,
+  parseSseDataLine,
+  getStreamDeltaStats,
+  getReasoningText
+} from '/src/background/background-stream-chunk-utils.js';
 
 const {
   deriveModelCapabilities = () => ({
@@ -57,18 +93,16 @@ const setLocalStorage = (values) => (
 // Cache management
 const lastBalanceByProvider = {};
 const lastBalanceAtByProvider = {};
-const debugStreamLog = createDebugStreamLog();
-let debugStreamEnabled = false;
+const debugStreamState = createDebugStreamState(createDebugStreamLog(), false);
+const debugStreamLog = debugStreamState.log;
+const debugLogger = createDebugLogger(debugStreamState, pushDebugStreamEntry);
 
 chrome.storage.local.get([STORAGE_KEYS.DEBUG_STREAM]).then((items) => {
-  debugStreamEnabled = Boolean(items[STORAGE_KEYS.DEBUG_STREAM]);
+  debugStreamState.enabled = Boolean(items[STORAGE_KEYS.DEBUG_STREAM]);
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  if (changes[STORAGE_KEYS.DEBUG_STREAM]) {
-    debugStreamEnabled = Boolean(changes[STORAGE_KEYS.DEBUG_STREAM].newValue);
-  }
+  applyDebugStorageChange(debugStreamState, changes, area, STORAGE_KEYS.DEBUG_STREAM);
 });
 
 let cachedConfig = {
@@ -85,30 +119,16 @@ const contextStorage = (chrome?.storage?.session) ? chrome.storage.session : chr
 const contextStoragePrefix = STORAGE_KEYS.CONTEXT_SESSION_PREFIX || "or_context_session_";
 let contextLoadPromise = null;
 
-function getContextStorageKey(tabId) {
-  const keyId = tabId === undefined || tabId === null ? "default" : String(tabId);
-  return `${contextStoragePrefix}${keyId}`;
-}
-
-function parseStoredTabId(tabId) {
-  if (tabId === "default") return "default";
-  const asNumber = Number(tabId);
-  return Number.isNaN(asNumber) ? tabId : asNumber;
-}
-
 async function ensureContextLoaded() {
   if (contextLoadPromise) return contextLoadPromise;
   contextLoadPromise = (async () => {
     if (!contextStorage?.get) return;
-    const all = await contextStorage.get(null);
-    if (!all) return;
-    Object.keys(all).forEach((key) => {
-      if (!key.startsWith(contextStoragePrefix)) return;
-      const tabKey = key.slice(contextStoragePrefix.length);
-      const messages = all[key];
-      if (Array.isArray(messages)) {
-        conversationContexts.set(parseStoredTabId(tabKey), messages);
-      }
+    const loaded = await loadContextsFromStorage({
+      getAll: () => contextStorage.get(null),
+      prefix: contextStoragePrefix
+    });
+    loaded.forEach((messages, tabId) => {
+      conversationContexts.set(parseStoredTabId(tabId), messages);
     });
   })().catch((e) => {
     console.warn("Failed to load stored context:", e);
@@ -117,16 +137,11 @@ async function ensureContextLoaded() {
 }
 
 async function persistContextForTab(tabId) {
-  if (!contextStorage?.set) return;
-  const key = getContextStorageKey(tabId);
-  const messages = conversationContexts.get(tabId) || [];
-  await contextStorage.set({ [key]: messages });
+  await persistContextForTabInStorage(contextStorage, conversationContexts, tabId, contextStoragePrefix);
 }
 
 async function removeContextForTab(tabId) {
-  if (!contextStorage?.remove) return;
-  const key = getContextStorageKey(tabId);
-  await contextStorage.remove([key]);
+  await removeContextForTabInStorage(contextStorage, tabId, contextStoragePrefix);
 }
 
 // ---- Tab cleanup to prevent memory leak ----
@@ -151,53 +166,6 @@ async function getApiKeyForProvider(providerId) {
     : (keys[STORAGE_KEYS.API_KEY] || "");
 }
 
-function parseModelsPayload(payload) {
-  const list = Array.isArray(payload) ? payload : (payload?.data || []);
-  return list.map((model) => {
-    const supportedEndpoints = Array.isArray(model?.supported_endpoints)
-      ? model.supported_endpoints
-      : (Array.isArray(model?.supportedEndpoints) ? model.supportedEndpoints : []);
-    const supportedParametersRaw = Array.isArray(model?.supported_parameters)
-      ? model.supported_parameters
-      : (Array.isArray(model?.supportedParameters) ? model.supportedParameters : null);
-    const supportedParameters = supportedParametersRaw
-      ? supportedParametersRaw.map((value) => String(value).toLowerCase())
-      : null;
-    const architecture = model?.architecture || model?.arch || null;
-    const derived = deriveModelCapabilities({
-      supported_endpoints: supportedEndpoints,
-      architecture,
-      output_modalities: model?.output_modalities,
-      output_modality: model?.output_modality,
-      input_modalities: model?.input_modalities,
-      modality: model?.modality,
-      modalities: model?.modalities
-    });
-
-    return {
-      id: model.id,
-      name: model.name || model.id,
-      ownedBy: model.owned_by || model.ownedBy || model.owner || "",
-      supportedEndpoints,
-      supportedParameters,
-      supportsReasoning: typeof model.supports_reasoning === "boolean"
-        ? model.supports_reasoning
-        : (typeof model.supportsReasoning === "boolean" ? model.supportsReasoning : undefined),
-      supportsChat: Boolean(derived?.supportsChat),
-      supportsImages: Boolean(derived?.supportsImages),
-      outputsImage: Boolean(derived?.outputsImage),
-      isImageOnly: Boolean(derived?.isImageOnly)
-    };
-  });
-}
-
-function getNagaStartupsCacheKeys() {
-  return {
-    startupsKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE,
-    timeKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME
-  };
-}
-
 function broadcastModelsUpdated(provider) {
   try {
     chrome.runtime.sendMessage({
@@ -210,7 +178,7 @@ function broadcastModelsUpdated(provider) {
 }
 
 async function getNagaStartupsMap() {
-  const { startupsKey, timeKey } = getNagaStartupsCacheKeys();
+  const { startupsKey, timeKey } = getNagaStartupsCacheKeys(STORAGE_KEYS);
   const cacheData = await chrome.storage.local.get([
     startupsKey,
     timeKey
@@ -263,7 +231,7 @@ async function refreshProviderModels(providerId, apiKey) {
   }
 
   const data = await res.json();
-  const models = parseModelsPayload(data);
+  const models = parseModelsPayload(data, deriveModelCapabilities);
   if (provider === "naga") {
     const startupsMap = await getNagaStartupsMap().catch(() => ({}));
     models.forEach((model) => {
@@ -384,79 +352,6 @@ async function addHistoryEntry(prompt, answer) {
   return entry;
 }
 
-// ---- Image generation ----
-function extractOpenRouterImageUrl(message) {
-  const images = Array.isArray(message?.images) ? message.images : [];
-  if (!images.length) return "";
-  const first = images[0] || {};
-  const imageUrl = first.image_url || first.imageUrl || {};
-  return imageUrl.url || first.url || "";
-}
-
-function buildDataUrlFromBase64(base64, mimeType = "image/png") {
-  if (!base64 || typeof base64 !== "string") return "";
-  if (base64.startsWith("data:")) return base64;
-  return `data:${mimeType};base64,${base64}`;
-}
-
-function isNagaChatImageModel(modelId) {
-  if (!modelId || typeof modelId !== "string") return false;
-  const normalized = modelId.toLowerCase();
-  if (!normalized.startsWith("gemini-")) return false;
-  return normalized.includes("image");
-}
-
-function arrayBufferToBase64(buffer) {
-  if (!buffer) return "";
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-async function fetchImageAsDataUrl(imageUrl) {
-  if (!imageUrl) return "";
-  const res = await fetch(imageUrl);
-  if (!res.ok) {
-    throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
-  }
-  const blob = await res.blob();
-  const buffer = await blob.arrayBuffer();
-  const base64 = arrayBufferToBase64(buffer);
-  const mimeType = blob.type || res.headers.get("content-type") || "image/png";
-  return buildDataUrlFromBase64(base64, mimeType);
-}
-
-function resolveModelCapabilitiesFromList(models, modelId) {
-  if (!Array.isArray(models) || !modelId) {
-    return {
-      supportsChat: false,
-      supportsImages: false,
-      outputsImage: false,
-      isImageOnly: false
-    };
-  }
-  const match = models.find((model) => model?.id === modelId);
-  if (!match) {
-    return {
-      supportsChat: false,
-      supportsImages: false,
-      outputsImage: false,
-      isImageOnly: false
-    };
-  }
-  return {
-    supportsChat: Boolean(match.supportsChat),
-    supportsImages: Boolean(match.supportsImages),
-    outputsImage: Boolean(match.outputsImage),
-    isImageOnly: Boolean(match.isImageOnly)
-  };
-}
-
 async function callImageGeneration(prompt, providerId, modelId) {
   if (!prompt || typeof prompt !== "string") {
     throw new Error(ERROR_MESSAGES.NO_PROMPT);
@@ -512,7 +407,7 @@ async function callImageGeneration(prompt, providerId, modelId) {
       if (imageBase64) {
         dataUrl = buildDataUrlFromBase64(imageBase64);
       } else if (imageUrl) {
-        dataUrl = await fetchImageAsDataUrl(imageUrl);
+        dataUrl = await fetchImageAsDataUrl(imageUrl, ERROR_MESSAGES.INVALID_RESPONSE);
       }
       if (!dataUrl) {
         throw new Error(ERROR_MESSAGES.INVALID_RESPONSE);
@@ -574,11 +469,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.DEBUG_SET_ENABLED) {
     (async () => {
       try {
-        debugStreamEnabled = Boolean(msg.enabled);
-        await setLocalStorage({
-          [STORAGE_KEYS.DEBUG_STREAM]: debugStreamEnabled
-        });
-        sendResponse({ ok: true, enabled: debugStreamEnabled });
+        const enabled = await setDebugStreamEnabledState(
+          debugStreamState,
+          msg.enabled,
+          setLocalStorage,
+          STORAGE_KEYS.DEBUG_STREAM
+        );
+        sendResponse({ ok: true, enabled });
       } catch (e) {
         sendResponse({ ok: false, error: e?.message || String(e) });
       }
@@ -589,15 +486,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === MESSAGE_TYPES.DEBUG_GET_STREAM_LOG) {
     sendResponse({
       ok: true,
-      enabled: debugStreamEnabled,
-      meta: buildDebugLogMeta(debugStreamLog),
-      entries: debugStreamLog.entries
+      ...getDebugSnapshot(debugStreamState, buildDebugLogMeta)
     });
     return false;
   }
 
   if (msg?.type === MESSAGE_TYPES.DEBUG_CLEAR_STREAM_LOG) {
-    debugStreamLog.entries.length = 0;
+    clearDebugEntries(debugStreamState);
     sendResponse({ ok: true });
     return false;
   }
@@ -1216,16 +1111,14 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
     messages: Array.isArray(messages) ? messages : []
   };
 
-  if (debugStreamEnabled) {
-    pushDebugStreamEntry(debugStreamLog, {
-      type: "summary_start",
-      provider: providerConfig.id,
-      model: requestBody.model,
-      messageCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
-      hasApiKey: Boolean(apiKey),
-      hasProvisioningKey: Boolean(cfg.provisioningKey)
-    });
-  }
+  debugLogger.log({
+    type: "summary_start",
+    provider: providerConfig.id,
+    model: requestBody.model,
+    messageCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
+    hasApiKey: Boolean(apiKey),
+    hasProvisioningKey: Boolean(cfg.provisioningKey)
+  });
 
   let lastError;
   for (let attempt = 0; attempt < API_CONFIG.MAX_RETRIES; attempt++) {
@@ -1244,19 +1137,17 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
 
       const data = await res.json();
 
-      if (debugStreamEnabled) {
-        pushDebugStreamEntry(debugStreamLog, {
-          type: "summary_response",
-          provider: providerConfig.id,
-          status: res.status,
-          ok: res.ok,
-          summaryLength: typeof data?.choices?.[0]?.message?.content === "string"
-            ? data.choices[0].message.content.length
-            : 0,
-          tokens: data?.usage?.total_tokens || null,
-          elapsedMs: Date.now() - summaryStartedAt
-        });
-      }
+      debugLogger.log({
+        type: "summary_response",
+        provider: providerConfig.id,
+        status: res.status,
+        ok: res.ok,
+        summaryLength: typeof data?.choices?.[0]?.message?.content === "string"
+          ? data.choices[0].message.content.length
+          : 0,
+        tokens: data?.usage?.total_tokens || null,
+        elapsedMs: Date.now() - summaryStartedAt
+      });
 
       if (!res.ok) {
         if (res.status === 429) {
@@ -1275,14 +1166,12 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
     } catch (error) {
       lastError = error;
 
-      if (debugStreamEnabled) {
-        pushDebugStreamEntry(debugStreamLog, {
-          type: "summary_error",
-          provider: providerConfig.id,
-          error: error?.message || String(error),
-          elapsedMs: Date.now() - summaryStartedAt
-        });
-      }
+      debugLogger.log({
+        type: "summary_error",
+        provider: providerConfig.id,
+        error: error?.message || String(error),
+        elapsedMs: Date.now() - summaryStartedAt
+      });
 
       if (error.name === 'AbortError') {
         throw new Error(ERROR_MESSAGES.TIMEOUT);
@@ -1413,20 +1302,7 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   const providerConfig = getProviderConfig(providerId);
   const streamStartedAt = Date.now();
 
-  // Helper function to safely send port messages
-  const safeSendMessage = (message) => {
-    if (isDisconnectedFn && isDisconnectedFn()) {
-      console.log('[Streaming] Skipping message send - port disconnected');
-      return false;
-    }
-    try {
-      port.postMessage(message);
-      return true;
-    } catch (e) {
-      console.error('[Streaming] Failed to send message:', e);
-      return false;
-    }
-  };
+  const safeSendMessage = createSafePortSender(port, isDisconnectedFn, console);
 
   // Use custom messages if provided (for Projects), otherwise use conversation context
   let context;
@@ -1464,44 +1340,29 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     modelName = `${modelName}:online`;
   }
 
-  const requestBody = {
-    model: modelName,
-    messages: context,
-    stream: true
-  };
-
-  if (reasoning && providerConfig.id === "openrouter") {
-    requestBody.reasoning = {
-      enabled: true,
-      effort: "medium"
-    };
-  } else if (reasoning && providerConfig.id === "naga") {
-    requestBody.reasoning_effort = "medium";
-  }
-  if (webSearch && providerConfig.id === "naga") {
-    requestBody.web_search_options = {};
-  }
-  if (providerConfig.id === "naga") {
-    requestBody.stream_options = { include_usage: true };
-  }
+  const requestBody = buildStreamRequestBody({
+    modelName,
+    context,
+    providerId: providerConfig.id,
+    webSearch,
+    reasoning
+  });
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-  if (debugStreamEnabled) {
-    pushDebugStreamEntry(debugStreamLog, {
-      type: "stream_start",
-      provider: providerConfig.id,
-      model: modelName,
-      tabId: tabId || null,
-      projectsMode: isProjectsMode,
-      promptChars: typeof prompt === "string" ? prompt.length : 0,
-      messageCount: Array.isArray(context) ? context.length : 0,
-      webSearch: Boolean(webSearch),
-      reasoning: Boolean(reasoning),
-      startedAt: new Date(streamStartedAt).toISOString()
-    });
-  }
+  debugLogger.log({
+    type: "stream_start",
+    provider: providerConfig.id,
+    model: modelName,
+    tabId: tabId || null,
+    projectsMode: isProjectsMode,
+    promptChars: typeof prompt === "string" ? prompt.length : 0,
+    messageCount: Array.isArray(context) ? context.length : 0,
+    webSearch: Boolean(webSearch),
+    reasoning: Boolean(reasoning),
+    startedAt: new Date(streamStartedAt).toISOString()
+  });
 
   let res;
   try {
@@ -1512,40 +1373,34 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
       signal: controller.signal
     });
   } catch (e) {
-    if (debugStreamEnabled) {
-      pushDebugStreamEntry(debugStreamLog, {
-        type: "stream_error",
-        stage: "fetch",
-        message: e?.message || String(e),
-        elapsedMs: Date.now() - streamStartedAt
-      });
-    }
+    debugLogger.log({
+      type: "stream_error",
+      stage: "fetch",
+      message: e?.message || String(e),
+      elapsedMs: Date.now() - streamStartedAt
+    });
     throw e;
   }
 
   clearTimeout(timeoutId);
 
-  if (debugStreamEnabled) {
-    pushDebugStreamEntry(debugStreamLog, {
-      type: "stream_response",
-      status: res.status,
-      ok: res.ok,
-      contentType: res.headers.get("content-type") || null,
-      elapsedMs: Date.now() - streamStartedAt
-    });
-  }
+  debugLogger.log({
+    type: "stream_response",
+    status: res.status,
+    ok: res.ok,
+    contentType: res.headers.get("content-type") || null,
+    elapsedMs: Date.now() - streamStartedAt
+  });
 
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    if (debugStreamEnabled) {
-      pushDebugStreamEntry(debugStreamLog, {
-        type: "stream_error",
-        stage: "response",
-        status: res.status,
-        message: data?.error?.message || ERROR_MESSAGES.API_ERROR,
-        elapsedMs: Date.now() - streamStartedAt
-      });
-    }
+    debugLogger.log({
+      type: "stream_error",
+      stage: "response",
+      status: res.status,
+      message: data?.error?.message || ERROR_MESSAGES.API_ERROR,
+      elapsedMs: Date.now() - streamStartedAt
+    });
     throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
   }
 
@@ -1562,71 +1417,71 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     const { done, value } = await reader.read();
     if (done) {
       console.log('[Streaming] Reader reported done, exiting loop');
-      if (debugStreamEnabled) {
-        pushDebugStreamEntry(debugStreamLog, {
-          type: "stream_reader_done",
-          elapsedMs: Date.now() - streamStartedAt,
-          contentLength: fullContent.length
-        });
-      }
+      debugLogger.log({
+        type: "stream_reader_done",
+        elapsedMs: Date.now() - streamStartedAt,
+        contentLength: fullContent.length
+      });
       break;
     }
 
     // Check if port was disconnected
     if (isDisconnectedFn && isDisconnectedFn()) {
       console.log('[Streaming] Port disconnected, stopping stream');
-      if (debugStreamEnabled) {
-        pushDebugStreamEntry(debugStreamLog, {
-          type: "stream_port_disconnected",
-          elapsedMs: Date.now() - streamStartedAt
-        });
-      }
+      debugLogger.log({
+        type: "stream_port_disconnected",
+        elapsedMs: Date.now() - streamStartedAt
+      });
       break;
     }
 
-    if (debugStreamEnabled && !firstChunkLogged) {
+    if (debugLogger.isEnabled() && !firstChunkLogged) {
       firstChunkLogged = true;
-      pushDebugStreamEntry(debugStreamLog, {
+      debugLogger.log({
         type: "stream_first_chunk",
         elapsedMs: Date.now() - streamStartedAt
       });
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+    const split = splitSseLines(buffer, decoder.decode(value, { stream: true }));
+    const lines = split.lines;
+    buffer = split.buffer;
 
     for (const line of lines) {
       if (line.trim() === '') continue;
-      if (line.trim() === 'data: [DONE]') {
+      const parsed = parseSseDataLine(line);
+      if (parsed.done) {
         console.log('[Streaming] Received [DONE] signal');
-        if (debugStreamEnabled) {
-          pushDebugStreamEntry(debugStreamLog, {
-            type: "stream_done_signal",
-            elapsedMs: Date.now() - streamStartedAt
-          });
-        }
+        debugLogger.log({
+          type: "stream_done_signal",
+          elapsedMs: Date.now() - streamStartedAt
+        });
         continue;
       }
-      if (!line.startsWith('data: ')) continue;
+      if (!parsed.chunk && !parsed.error) continue;
+      if (parsed.error) {
+        console.error('[Streaming] Error parsing chunk:', parsed.error);
+        debugLogger.log({
+          type: "stream_parse_error",
+          message: parsed.error?.message || String(parsed.error),
+          elapsedMs: Date.now() - streamStartedAt
+        });
+        continue;
+      }
 
       try {
-        const jsonStr = line.slice(6);
-        const chunk = JSON.parse(jsonStr);
-        const delta = chunk.choices?.[0]?.delta;
+        const chunk = parsed.chunk;
+        const delta = chunk?.choices?.[0]?.delta;
 
-        if (debugStreamEnabled) {
-          const contentLength = typeof delta?.content === "string" ? delta.content.length : 0;
-          const reasoningLength = typeof delta?.reasoning === "string"
-            ? delta.reasoning.length
-            : (typeof delta?.reasoning_content === "string" ? delta.reasoning_content.length : 0);
-          pushDebugStreamEntry(debugStreamLog, {
+        if (debugLogger.isEnabled()) {
+          const stats = getStreamDeltaStats(delta, chunk);
+          debugLogger.log({
             type: "stream_chunk",
             deltaKeys: delta ? Object.keys(delta) : [],
-            contentLength,
-            reasoningLength,
-            hasUsage: Boolean(chunk.usage),
-            totalTokens: chunk.usage?.total_tokens ?? null,
+            contentLength: stats.contentLength,
+            reasoningLength: stats.reasoningLength,
+            hasUsage: stats.hasUsage,
+            totalTokens: stats.totalTokens,
             elapsedMs: Date.now() - streamStartedAt
           });
         }
@@ -1649,17 +1504,11 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
         // Stream reasoning chunks
         // Note: delta.reasoning and delta.reasoning_details contain the same content
         // We only need to send one of them to avoid duplicates
-        if (delta?.reasoning) {
+        const reasoningText = getReasoningText(delta);
+        if (reasoningText) {
           const sent = safeSendMessage({
             type: 'reasoning',
-            reasoning: delta.reasoning
-          });
-          if (!sent) break; // Stop if port disconnected
-        }
-        if (delta?.reasoning_content) {
-          const sent = safeSendMessage({
-            type: 'reasoning',
-            reasoning: delta.reasoning_content
+            reasoning: reasoningText
           });
           if (!sent) break; // Stop if port disconnected
         }
@@ -1670,13 +1519,11 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
         }
       } catch (e) {
         console.error('[Streaming] Error parsing chunk:', e);
-        if (debugStreamEnabled) {
-          pushDebugStreamEntry(debugStreamLog, {
-            type: "stream_parse_error",
-            message: e?.message || String(e),
-            elapsedMs: Date.now() - streamStartedAt
-          });
-        }
+        debugLogger.log({
+          type: "stream_parse_error",
+          message: e?.message || String(e),
+          elapsedMs: Date.now() - streamStartedAt
+        });
       }
     }
   }
@@ -1686,13 +1533,11 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
   // Handle case where no content was received (e.g., only reasoning, or stream error)
   if (!fullContent || fullContent.length === 0) {
     console.warn('[Streaming] Warning: Stream completed with no content');
-    if (debugStreamEnabled) {
-      pushDebugStreamEntry(debugStreamLog, {
-        type: "stream_no_content",
-        elapsedMs: Date.now() - streamStartedAt,
-        tokens
-      });
-    }
+    debugLogger.log({
+      type: "stream_no_content",
+      elapsedMs: Date.now() - streamStartedAt,
+      tokens
+    });
     safeSendMessage({
       type: 'error',
       error: 'No response content received from the model. The model may have only produced reasoning without a final answer. Please try again.'
@@ -1725,13 +1570,12 @@ async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, por
     contextSize: context.length,
     model: customModel || cfg.model
   });
-  if (debugStreamEnabled) {
-    pushDebugStreamEntry(debugStreamLog, {
-      type: "stream_complete",
-      elapsedMs: Date.now() - streamStartedAt,
-      contentLength: fullContent.length,
-      tokens
-    });
-  }
+  debugLogger.log({
+    type: "stream_complete",
+    elapsedMs: Date.now() - streamStartedAt,
+    contentLength: fullContent.length,
+    tokens
+  });
   console.log('[Streaming] Completion message sent:', completeSent);
 }
+

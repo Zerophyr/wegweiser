@@ -17,7 +17,16 @@ describe("projects UI", () => {
       path.join(__dirname, "..", "src", "projects", "projects.js"),
       "utf8"
     );
-    expect(js).toMatch(/safeHtml\.setSanitizedHtml\(assistantBubble,\s*rendered\)/);
-    expect(js).toMatch(/safeHtml\.setSanitizedHtml\(ui\.content,\s*errorHtml\)/);
+    const runtimeUtils = fs.readFileSync(
+      path.join(__dirname, "..", "src", "projects", "projects-stream-runtime-utils.js"),
+      "utf8"
+    );
+    const chunkUtils = fs.readFileSync(
+      path.join(__dirname, "..", "src", "projects", "projects-stream-chunk-utils.js"),
+      "utf8"
+    );
+    expect(chunkUtils).toMatch(/renderAssistantContent\?\.\(state\.assistantBubble,\s*state\.fullContent\)/);
+    expect(runtimeUtils).toMatch(/setSanitizedHtml\(assistantBubble,\s*rendered\)/);
+    expect(runtimeUtils).toMatch(/setSanitizedHtml\(ui\.content,\s*errorHtml\)/);
   });
 });

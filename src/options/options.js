@@ -99,16 +99,12 @@ function setupKeyVisibilityToggles() {
 
 // ---- Provider helpers ----
 const providerUiUtils = (typeof window !== "undefined" && window.providerUiUtils) || {};
-const normalizeProvider = providerUiUtils.normalizeProviderSafe
-  || ((providerId) => (providerId === "naga" ? "naga" : "openrouter"));
-const getProviderLabelSafe = providerUiUtils.getProviderLabelSafe
-  || ((providerId) => (normalizeProvider(providerId) === "naga" ? "NagaAI" : "OpenRouter"));
-const getProviderStorageKeySafe = providerUiUtils.getProviderStorageKeySafe
-  || ((baseKey, providerId) => (normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey));
-const buildCombinedModelIdSafe = providerUiUtils.buildCombinedModelIdSafe
-  || ((providerId, modelId) => `${normalizeProvider(providerId)}:${modelId}`);
-const parseCombinedModelIdSafe = providerUiUtils.parseCombinedModelIdSafe
-  || ((combinedId) => {
+const {
+  normalizeProviderSafe: normalizeProvider = (providerId) => (providerId === "naga" ? "naga" : "openrouter"),
+  getProviderLabelSafe = (providerId) => (normalizeProvider(providerId) === "naga" ? "NagaAI" : "OpenRouter"),
+  getProviderStorageKeySafe = (baseKey, providerId) => (normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey),
+  buildCombinedModelIdSafe = (providerId, modelId) => `${normalizeProvider(providerId)}:${modelId}`,
+  parseCombinedModelIdSafe = (combinedId) => {
     if (!combinedId || typeof combinedId !== "string") {
       return { provider: "openrouter", modelId: "" };
     }
@@ -119,34 +115,28 @@ const parseCombinedModelIdSafe = providerUiUtils.parseCombinedModelIdSafe
     const provider = normalizeProvider(combinedId.slice(0, splitIndex));
     const modelId = combinedId.slice(splitIndex + 1);
     return { provider, modelId };
-  });
-const getModelDisplayName = providerUiUtils.getModelDisplayName
-  || ((model) => model?.displayName || model?.name || model?.id || "");
-const combineFavoritesByProvider = providerUiUtils.buildCombinedFavoritesList
-  || ((favoritesByProvider) => {
+  },
+  getModelDisplayName = (model) => model?.displayName || model?.name || model?.id || "",
+  buildCombinedFavoritesList: combineFavoritesByProvider = (favoritesByProvider) => {
     const combined = [];
     ["openrouter", "naga"].forEach((provider) => {
       const favorites = favoritesByProvider[provider] || new Set();
-      favorites.forEach((modelId) => {
-        combined.push(buildCombinedModelIdSafe(provider, modelId));
-      });
+      favorites.forEach((modelId) => combined.push(buildCombinedModelIdSafe(provider, modelId)));
     });
     return combined;
-  });
-const combineRecentsByProvider = providerUiUtils.buildCombinedRecentList
-  || ((recentsByProvider) => {
+  },
+  buildCombinedRecentList: combineRecentsByProvider = (recentsByProvider) => {
     const combined = [];
     ["openrouter", "naga"].forEach((provider) => {
       const recents = recentsByProvider[provider] || [];
       recents.forEach((modelId) => {
         const combinedId = buildCombinedModelIdSafe(provider, modelId);
-        if (!combined.includes(combinedId)) {
-          combined.push(combinedId);
-        }
+        if (!combined.includes(combinedId)) combined.push(combinedId);
       });
     });
     return combined;
-  });
+  }
+} = providerUiUtils;
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -374,16 +364,17 @@ function renderPromptHistory(history) {
     div.style.cssText = "background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;";
 
     const ts = new Date(item.createdAt).toLocaleString();
-    const promptPreview = item.prompt.length > 80 ? item.prompt.slice(0, 80) + "…" : item.prompt;
-
-    div.innerHTML = `
+    const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
+    const buildPreview = historyViewUtils.buildHistoryPreviewHtml || ((entry, timestamp, escapeFn) => `
       <div class="history-preview">
-        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px;">${ts}</div>
+        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px;">${timestamp}</div>
         <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 600;">Prompt:</div>
-        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeHtml(promptPreview)}</div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeFn((entry.prompt || "").length > 80 ? `${entry.prompt.slice(0, 80)}...` : (entry.prompt || ""))}</div>
         <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Click to view full context</div>
       </div>
-    `;
+    `);
+
+    div.innerHTML = buildPreview(item, ts, escapeHtml);
 
     div.dataset.itemId = item.id;
 
@@ -422,24 +413,23 @@ function showHistoryDetail(item) {
   if (!previewColumn || !detailContent) return;
 
   const ts = new Date(item.createdAt).toLocaleString();
-
-  detailContent.innerHTML = `
+  const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
+  const buildDetail = historyViewUtils.buildHistoryDetailHtml || ((entry, timestamp, escapeFn) => `
     <div style="margin-bottom: 20px;">
-      <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 12px;">${ts}</div>
-
+      <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 12px;">${timestamp}</div>
       <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Prompt</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeHtml(item.prompt)}</div>
-
+      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeFn(entry.prompt)}</div>
       <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Answer</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeHtml(item.answer || "No answer available")}</div>
-
+      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeFn(entry.answer || "No answer available")}</div>
       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
         <button class="detail-copy-prompt-btn" style="padding: 8px 16px; background: var(--color-primary); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Prompt</button>
         <button class="detail-copy-answer-btn" style="padding: 8px 16px; background: var(--color-accent); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Answer</button>
         <button class="detail-delete-btn" style="padding: 8px 16px; background: var(--color-error); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Delete</button>
       </div>
     </div>
-  `;
+  `);
+
+  detailContent.innerHTML = buildDetail(item, ts, escapeHtml);
 
   // Show the preview column
   previewColumn.classList.add("active");
@@ -754,7 +744,9 @@ function exportHistoryJSON() {
     return;
   }
 
-  const dataStr = JSON.stringify(currentHistory, null, 2);
+  const historyUtils = (typeof window !== "undefined" && window.optionsHistoryUtils) || {};
+  const buildJson = historyUtils.buildHistoryJson || ((history) => JSON.stringify(history, null, 2));
+  const dataStr = buildJson(currentHistory);
   const dataBlob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(dataBlob);
   const link = document.createElement('a');
@@ -772,16 +764,18 @@ function exportHistoryCSV() {
     return;
   }
 
-  // CSV headers
-  let csv = 'Timestamp,Prompt,Answer\n';
-
-  // Add each history item
-  currentHistory.forEach(item => {
-    const timestamp = new Date(item.createdAt).toLocaleString();
-    const prompt = `"${(item.prompt || '').replace(/"/g, '""')}"`;
-    const answer = `"${(item.answer || '').replace(/"/g, '""')}"`;
-    csv += `${timestamp},${prompt},${answer}\n`;
+  const historyUtils = (typeof window !== "undefined" && window.optionsHistoryUtils) || {};
+  const buildCsv = historyUtils.buildHistoryCsv || ((history) => {
+    let csv = "timestamp,prompt,answer\n";
+    history.forEach((item) => {
+      const timestamp = new Date(item.createdAt).toISOString();
+      const prompt = `"${(item.prompt || "").replace(/"/g, '""')}"`;
+      const answer = `"${(item.answer || "").replace(/"/g, '""')}"`;
+      csv += `"${timestamp}",${prompt},${answer}\n`;
+    });
+    return csv;
   });
+  const csv = buildCsv(currentHistory);
 
   const dataBlob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(dataBlob);
