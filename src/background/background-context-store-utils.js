@@ -57,6 +57,10 @@ if (typeof window !== "undefined") {
   window.backgroundContextStoreUtils = backgroundContextStoreUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundContextStoreUtils = backgroundContextStoreUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundContextStoreUtils;
 }

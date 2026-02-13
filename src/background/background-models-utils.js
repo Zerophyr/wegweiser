@@ -64,6 +64,10 @@ if (typeof window !== "undefined") {
   window.backgroundModelsUtils = backgroundModelsUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundModelsUtils = backgroundModelsUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundModelsUtils;
 }

@@ -91,6 +91,10 @@ if (typeof window !== "undefined") {
   window.backgroundImageUtils = backgroundImageUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundImageUtils = backgroundImageUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundImageUtils;
 }

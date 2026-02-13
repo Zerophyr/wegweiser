@@ -52,6 +52,10 @@ if (typeof window !== "undefined") {
   window.backgroundStreamRuntimeUtils = backgroundStreamRuntimeUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundStreamRuntimeUtils = backgroundStreamRuntimeUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundStreamRuntimeUtils;
 }

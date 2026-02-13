@@ -53,6 +53,10 @@ if (typeof window !== "undefined") {
   window.backgroundStreamChunkUtils = backgroundStreamChunkUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundStreamChunkUtils = backgroundStreamChunkUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundStreamChunkUtils;
 }

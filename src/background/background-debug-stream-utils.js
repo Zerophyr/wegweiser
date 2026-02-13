@@ -64,6 +64,10 @@ if (typeof window !== "undefined") {
   window.backgroundDebugStreamUtils = backgroundDebugStreamUtils;
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.backgroundDebugStreamUtils = backgroundDebugStreamUtils;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = backgroundDebugStreamUtils;
 }
