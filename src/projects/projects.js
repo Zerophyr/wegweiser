@@ -1,4 +1,4 @@
-// projects.js - Projects feature logic
+(() => {
 // Storage keys (match constants.js)
 const STORAGE_KEYS = {
   PROJECTS: 'or_projects',
@@ -1196,3 +1196,4 @@ chrome.runtime.onMessage.addListener((msg) => {
     loadModels();
   }
 });
+})();

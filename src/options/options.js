@@ -1,3 +1,4 @@
+(() => {
 // options.js
 
 // Initialize theme on page load
@@ -53,6 +54,9 @@ let recentModelsByProvider = {
 let selectedCombinedModelId = null;
 let currentHistory = []; // Current history data for detail view
 let modelDropdown = null; // ModelDropdownManager instance
+let modelsLoadRequestId = 0;
+let modelsLoadInFlight = false;
+let lastSilentModelsLoadAt = 0;
 
 // Undo state for history deletion
 let pendingDeleteItem = null; // { item, timeout }
@@ -226,6 +230,30 @@ function loadFavoritesAndRecents(localItems, syncItems) {
     openrouter: localItems.or_recent_models || [],
     naga: localItems.or_recent_models_naga || []
   };
+}
+
+
+async function loadCachedModelsFromStorage() {
+  const cache = await getLocalStorage([
+    "or_models_cache",
+    "or_models_cache_naga"
+  ]);
+
+  const toCombined = (models, provider) => (Array.isArray(models) ? models : []).map((model) => {
+    const rawId = model.rawId || model.id;
+    return {
+      id: buildCombinedModelIdSafe(provider, rawId),
+      rawId,
+      provider,
+      displayName: getModelDisplayName(model),
+      name: model.name || model.displayName || rawId
+    };
+  });
+
+  return [
+    ...toCombined(cache.or_models_cache, "openrouter"),
+    ...toCombined(cache.or_models_cache_naga, "naga")
+  ];
 }
 
 function loadSelectedModel(localItems) {
@@ -550,26 +578,40 @@ async function commitDeleteHistoryItem(id) {
 }
 
 // ---- Load models from OpenRouter API ----
-async function loadModels() {
-  modelsStatusEl.textContent = "Loading models…";
+async function loadModels(options = {}) {
+  const { silent = false } = options;
+  const requestId = ++modelsLoadRequestId;
+  const focusedBeforeLoad = document.activeElement === modelInput;
+  const hasActiveModelStatus = (modelsStatusEl.textContent || "").startsWith("Using:");
+
+  if (!silent && !hasActiveModelStatus) {
+    modelsStatusEl.textContent = "Loading models…";
+  }
+
+  modelsLoadInFlight = true;
 
   try {
     const res = await chrome.runtime.sendMessage({ type: "get_models" });
+
+    if (requestId !== modelsLoadRequestId) {
+      return;
+    }
 
     if (!res?.ok) {
       throw new Error(res?.error || "Failed to load models");
     }
 
-    combinedModels = (res.models || []).map((model) => ({
+    const nextModels = (res.models || []).map((model) => ({
       id: model.id,
       rawId: model.rawId || model.id,
       provider: model.provider,
       displayName: getModelDisplayName(model),
       name: model.name || model.displayName || model.id
     }));
+
+    combinedModels = nextModels;
     modelMap = new Map(combinedModels.map((model) => [model.id, model]));
 
-    // Update dropdown with models and favorites
     if (!modelDropdown) {
       initModelDropdown();
     }
@@ -577,8 +619,7 @@ async function loadModels() {
     modelDropdown.setFavorites(buildCombinedFavoritesList());
     modelDropdown.setRecentlyUsed(buildCombinedRecentList());
 
-    // Set initial model value in input if we have a saved model
-    if (selectedCombinedModelId && modelInput) {
+    if (selectedCombinedModelId && modelInput && !focusedBeforeLoad) {
       const selected = modelMap.get(selectedCombinedModelId);
       modelInput.value = selected ? getModelDisplayName(selected) : selectedCombinedModelId;
       modelSelect.value = selectedCombinedModelId;
@@ -594,13 +635,62 @@ async function loadModels() {
       modelsStatusEl.style.color = "var(--color-success)";
     }
   } catch (e) {
-    console.error("Failed to load models:", e);
-    if (typeof e?.message === "string" && e.message.toLowerCase().includes("no api key")) {
-      modelsStatusEl.textContent = "Set at least one API key to load models.";
-    } else {
-      modelsStatusEl.textContent = `Error: ${e.message}`;
+    if (requestId !== modelsLoadRequestId) {
+      return;
     }
-    modelsStatusEl.style.color = "var(--color-error)";
+
+    console.error("Failed to load models:", e);
+    const hasCachedModels = Array.isArray(combinedModels) && combinedModels.length > 0;
+
+    if (hasCachedModels && modelDropdown) {
+      modelDropdown.setModels(combinedModels);
+      modelDropdown.setFavorites(buildCombinedFavoritesList());
+      modelDropdown.setRecentlyUsed(buildCombinedRecentList());
+      if (!silent) {
+        modelsStatusEl.textContent = "Using cached models (refresh failed).";
+        modelsStatusEl.style.color = "var(--color-warning)";
+      }
+      return;
+    }
+
+    const message = String(e?.message || "").toLowerCase();
+    if (message.includes("failed to fetch")) {
+      try {
+        const cachedCombinedModels = await loadCachedModelsFromStorage();
+        if (cachedCombinedModels.length) {
+          combinedModels = cachedCombinedModels;
+          modelMap = new Map(combinedModels.map((model) => [model.id, model]));
+          if (!modelDropdown) {
+            initModelDropdown();
+          }
+          modelDropdown.setModels(combinedModels);
+          modelDropdown.setFavorites(buildCombinedFavoritesList());
+          modelDropdown.setRecentlyUsed(buildCombinedRecentList());
+          if (!silent) {
+            modelsStatusEl.textContent = "Using cached models (provider unavailable).";
+            modelsStatusEl.style.color = "var(--color-warning)";
+          }
+          return;
+        }
+      } catch (_) {
+        // ignore cache fallback errors
+      }
+    }
+
+    if (!silent) {
+      if (message.includes("no api key")) {
+        modelsStatusEl.textContent = "Set at least one API key to load models.";
+      } else if (message.includes("failed to fetch")) {
+        modelsStatusEl.textContent = "Could not reach model provider. Check network/provider status.";
+      } else {
+        modelsStatusEl.textContent = `Error: ${e.message}`;
+      }
+      modelsStatusEl.style.color = "var(--color-error)";
+    }
+  } finally {
+    if (requestId === modelsLoadRequestId) {
+      modelsLoadInFlight = false;
+    }
   }
 }
 
@@ -672,10 +762,10 @@ async function saveProviderKey(provider, value) {
 }
 
 async function updateProviderModelsAfterChange() {
-  combinedModels = [];
-  modelMap = new Map();
-  modelSelect.innerHTML = "";
-  modelsStatusEl.textContent = "";
+  if (!modelsLoadInFlight) {
+    modelsStatusEl.textContent = "Refreshing models…";
+    modelsStatusEl.style.color = "var(--color-text-muted)";
+  }
   await loadModels();
   await notifyProviderSettingsUpdated("all");
 }
@@ -972,6 +1062,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "models_updated") {
-    loadModels();
+    const now = Date.now();
+    if (modelsLoadInFlight || (now - lastSilentModelsLoadAt) < 1500) {
+      return;
+    }
+    lastSilentModelsLoadAt = now;
+    loadModels({ silent: true });
   }
 });
+})();

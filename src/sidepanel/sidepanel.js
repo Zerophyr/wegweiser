@@ -1,3 +1,4 @@
+(() => {
 
 // Import UI constants (if modules are supported, otherwise constants are global)
 const UI_CONSTANTS = window.UI_CONSTANTS || {
@@ -29,7 +30,7 @@ const SIDEPANEL_TOGGLE_STORAGE_KEYS = ["or_web_search", "or_reasoning", "imageMo
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
 const sidepanelModuleResolver = (typeof window !== "undefined" && window.sidepanelModuleResolver)
   || (typeof require === "function" ? require("./sidepanel-module-resolver.js") : null);
-const resolveSidepanelModule = sidepanelModuleResolver?.resolveSidepanelModule
+const resolveSidepanelModuleSafe = sidepanelModuleResolver?.resolveSidepanelModule
   || ((windowKey) => ((typeof window !== "undefined" && window && window[windowKey]) ? window[windowKey] : {}));
 const SIDEPANEL_PROJECT_ID = "__sidepanel__";
 
@@ -91,20 +92,32 @@ let selectedCombinedModelId = null;
 let sidebarSetupRequired = false;
 let lastStreamContext = null;
 
-const sidepanelProviderUtils = resolveSidepanelModule("sidepanelProviderUtils", "./sidepanel-provider.js");
-const { normalizeProviderSafe, getProviderLabelSafe, getProviderStorageKeySafe, buildCombinedModelIdSafe, parseCombinedModelIdSafe, getModelDisplayName } = sidepanelProviderUtils;
-const sidepanelStreamUtils = resolveSidepanelModule("sidepanelStreamUtils", "./sidepanel-stream-utils.js");
-const { buildStreamErrorHtml, sanitizePrompt, getImageExtension, getImageViewerBaseUrl } = sidepanelStreamUtils;
-const sidepanelAnswerStoreUtils = resolveSidepanelModule("sidepanelAnswerStoreUtils", "./sidepanel-answer-store-utils.js");
-const { ANSWER_CACHE_KEY_PREFIX, getAnswerStorage, getCurrentTabId, getSidepanelThreadId, buildAnswerCacheKey } = sidepanelAnswerStoreUtils;
-const sidepanelAnswerUiUtils = resolveSidepanelModule("sidepanelAnswerUiUtils", "./sidepanel-answer-ui-utils.js");
-const { hasAnswerContent, buildSourcesCountLabel } = sidepanelAnswerUiUtils;
-const sidepanelExportUtils = resolveSidepanelModule("sidepanelExportUtils", "./sidepanel-export-utils.js");
-const { closeExportMenus, getExportPayload } = sidepanelExportUtils;
-const sidepanelSourcesSummaryUtils = resolveSidepanelModule("sidepanelSourcesSummaryUtils", "./sidepanel-sources-summary-utils.js");
-const { renderSourcesSummaryToElement } = sidepanelSourcesSummaryUtils;
-const sidepanelPromptControllerUtils = resolveSidepanelModule("sidepanelPromptControllerUtils", "./sidepanel-prompt-controller-utils.js");
-const sidepanelModelControllerUtils = resolveSidepanelModule("sidepanelModelControllerUtils", "./sidepanel-model-controller-utils.js");
+const sidepanelProviderModule = resolveSidepanelModuleSafe("sidepanelProviderUtils", "./sidepanel-provider.js");
+const {
+  normalizeProviderSafe: normalizeProviderSafeFromProvider,
+  getProviderLabelSafe: getProviderLabelSafeFromProvider,
+  getProviderStorageKeySafe: getProviderStorageKeySafeFromProvider,
+  buildCombinedModelIdSafe: buildCombinedModelIdSafeFromProvider,
+  parseCombinedModelIdSafe: parseCombinedModelIdSafeFromProvider,
+  getModelDisplayName: getModelDisplayNameFromProvider
+} = sidepanelProviderModule;
+const sidepanelStreamModule = resolveSidepanelModuleSafe("sidepanelStreamUtils", "./sidepanel-stream-utils.js");
+const {
+  buildStreamErrorHtml: buildStreamErrorHtmlSafe,
+  sanitizePrompt: sanitizePromptSafe,
+  getImageExtension: getImageExtensionFromUtils,
+  getImageViewerBaseUrl: getImageViewerBaseUrlFromUtils
+} = sidepanelStreamModule;
+const sidepanelAnswerStoreModule = resolveSidepanelModuleSafe("sidepanelAnswerStoreUtils", "./sidepanel-answer-store-utils.js");
+const { ANSWER_CACHE_KEY_PREFIX: ANSWER_CACHE_KEY_PREFIX_SAFE, getAnswerStorage: getAnswerStorageSafe, getCurrentTabId: getCurrentTabIdSafe, getSidepanelThreadId: getSidepanelThreadIdSafe, buildAnswerCacheKey: buildAnswerCacheKeySafe } = sidepanelAnswerStoreModule;
+const sidepanelAnswerUiModule = resolveSidepanelModuleSafe("sidepanelAnswerUiUtils", "./sidepanel-answer-ui-utils.js");
+const { hasAnswerContent: hasAnswerContentSafe, buildSourcesCountLabel: buildSourcesCountLabelSafe } = sidepanelAnswerUiModule;
+const sidepanelExportModule = resolveSidepanelModuleSafe("sidepanelExportUtils", "./sidepanel-export-utils.js");
+const { closeExportMenus: closeExportMenusSafe, getExportPayload: getExportPayloadSafe } = sidepanelExportModule;
+const sidepanelSourcesSummaryModule = resolveSidepanelModuleSafe("sidepanelSourcesSummaryUtils", "./sidepanel-sources-summary-utils.js");
+const { renderSourcesSummaryToElement: renderSourcesSummaryToElementSafe } = sidepanelSourcesSummaryModule;
+const sidepanelPromptControllerModule = resolveSidepanelModuleSafe("sidepanelPromptControllerUtils", "./sidepanel-prompt-controller-utils.js");
+const sidepanelModelControllerModule = resolveSidepanelModuleSafe("sidepanelModelControllerUtils", "./sidepanel-model-controller-utils.js");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -124,8 +137,8 @@ async function applyImageModeForModel() {
   setImageToggleTitle("Enable Image Mode");
 }
 
-const buildCombinedFavoritesList = () => sidepanelProviderUtils.buildCombinedFavoritesList(favoriteModelsByProvider);
-const buildCombinedRecentList = () => sidepanelProviderUtils.buildCombinedRecentList(recentModelsByProvider);
+const buildCombinedFavoritesList = () => sidepanelProviderModule.buildCombinedFavoritesList(favoriteModelsByProvider);
+const buildCombinedRecentList = () => sidepanelProviderModule.buildCombinedRecentList(recentModelsByProvider);
 
 function loadFavoritesAndRecents(localItems, syncItems) {
   favoriteModelsByProvider = {
@@ -158,7 +171,7 @@ async function refreshFavoritesOnly() {
 async function loadProviderSetting() {
   try {
     const stored = await getLocalStorage(["or_provider", "or_model_provider"]);
-    currentProvider = normalizeProviderSafe(stored.or_model_provider || stored.or_provider);
+    currentProvider = normalizeProviderSafeFromProvider(stored.or_model_provider || stored.or_provider);
   } catch (e) {
     console.warn("Failed to load provider setting:", e);
   }
@@ -215,7 +228,7 @@ const sidepanelControllerState = {
   get imageModeEnabled() { return imageModeEnabled; },
   set imageModeEnabled(value) { imageModeEnabled = Boolean(value); },
   get currentProvider() { return currentProvider; },
-  set currentProvider(value) { currentProvider = normalizeProviderSafe(value); },
+  set currentProvider(value) { currentProvider = normalizeProviderSafeFromProvider(value); },
   get combinedModels() { return combinedModels; },
   set combinedModels(value) { combinedModels = Array.isArray(value) ? value : []; },
   get modelMap() { return modelMap; },
@@ -258,7 +271,7 @@ function estimateTokens(text) {
 
 function updateAnswerVisibility() {
   const clearBtn = document.getElementById("clear-answer-btn");
-  if (!hasAnswerContent(answerEl.innerHTML)) {
+  if (!hasAnswerContentSafe(answerEl.innerHTML)) {
     answerEl.classList.add("hidden");
     if (clearBtn) clearBtn.style.display = "none";
   } else {
@@ -300,7 +313,7 @@ async function persistAnswers() {
   const html = answerEl.innerHTML || "";
   const metaText = metaEl?.textContent || "";
   if (chatStore && typeof chatStore.putThread === "function") {
-    const threadId = await getSidepanelThreadId();
+    const threadId = await getSidepanelThreadIdSafe();
     if (!html.trim()) {
       if (typeof chatStore.deleteThread === "function") {
         await chatStore.deleteThread(threadId);
@@ -317,10 +330,10 @@ async function persistAnswers() {
     });
     return;
   }
-  const storage = getAnswerStorage();
+  const storage = getAnswerStorageSafe();
   if (!storage) return;
-  const tabId = await getCurrentTabId();
-  const key = buildAnswerCacheKey(tabId);
+  const tabId = await getCurrentTabIdSafe();
+  const key = buildAnswerCacheKeySafe(tabId);
   if (!html.trim()) {
     if (typeof storage.remove === "function") {
       await storage.remove([key]);
@@ -335,7 +348,7 @@ async function persistAnswers() {
 async function restorePersistedAnswers() {
   if (!answerEl) return;
   if (chatStore && typeof chatStore.getThread === "function") {
-    const threadId = await getSidepanelThreadId();
+    const threadId = await getSidepanelThreadIdSafe();
     const payload = await chatStore.getThread(threadId);
     if (payload?.html) {
       if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
@@ -353,10 +366,10 @@ async function restorePersistedAnswers() {
     }
     return;
   }
-  const storage = getAnswerStorage();
+  const storage = getAnswerStorageSafe();
   if (!storage) return;
-  const tabId = await getCurrentTabId();
-  const key = buildAnswerCacheKey(tabId);
+  const tabId = await getCurrentTabIdSafe();
+  const key = buildAnswerCacheKeySafe(tabId);
   const stored = await storage.get([key]);
   const payload = stored?.[key];
   if (payload?.html) {
@@ -377,12 +390,12 @@ async function restorePersistedAnswers() {
 
 function renderSourcesSummary(answerItem, sources) {
   const summary = answerItem?.querySelector('.answer-sources-summary');
-  renderSourcesSummaryToElement(summary, sources, getUniqueDomains, buildSourcesCountLabel);
+  renderSourcesSummaryToElementSafe(summary, sources, getUniqueDomains, buildSourcesCountLabelSafe);
 }
 
 function exportAnswer(answerItem, format) {
   if (!answerItem) return;
-  const payload = getExportPayload(answerItem);
+  const payload = getExportPayloadSafe(answerItem);
   const messages = payload.messages;
 
   if (format === 'markdown' && typeof exportMarkdownFile === 'function') {
@@ -448,7 +461,7 @@ answerEl.addEventListener("click", (e) => {
     const menu = exportBtn.closest('.export-menu');
     if (menu) {
       const isOpen = menu.classList.contains('open');
-      closeExportMenus();
+      closeExportMenusSafe();
       if (!isOpen) {
         menu.classList.add('open');
       }
@@ -463,7 +476,7 @@ answerEl.addEventListener("click", (e) => {
     const format = exportOption.getAttribute('data-format');
     const answerItem = exportOption.closest('.answer-item');
     exportAnswer(answerItem, format);
-    closeExportMenus();
+    closeExportMenusSafe();
     return;
   }
 
@@ -479,7 +492,7 @@ answerEl.addEventListener("click", (e) => {
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.export-menu')) {
-    closeExportMenus();
+    closeExportMenusSafe();
   }
 });
 
@@ -487,7 +500,7 @@ document.addEventListener('click', (e) => {
 
 function openImageInNewTab(dataUrl, imageId) {
   if (!dataUrl) return;
-  const viewerBaseUrl = getImageViewerBaseUrl();
+  const viewerBaseUrl = getImageViewerBaseUrlFromUtils();
   const openUrl = typeof buildImageOpenUrl === "function"
     ? buildImageOpenUrl(dataUrl, imageId || "", viewerBaseUrl)
     : dataUrl;
@@ -506,7 +519,7 @@ function downloadImage(dataUrl, imageId, mimeType) {
   if (!dataUrl) return;
   const link = document.createElement("a");
   link.href = dataUrl;
-  link.download = `wegweiser-image-${imageId}.${getImageExtension(mimeType)}`;
+  link.download = `wegweiser-image-${imageId}.${getImageExtensionFromUtils(mimeType)}`;
   link.click();
 }
 
@@ -553,8 +566,8 @@ function buildSidepanelPromptDeps() {
     answerEl,
     updateAnswerVisibility,
     answerSection,
-    parseCombinedModelIdSafe,
-    normalizeProviderSafe,
+    parseCombinedModelIdSafe: parseCombinedModelIdSafeFromProvider,
+    normalizeProviderSafe: normalizeProviderSafeFromProvider,
     sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
     buildImageCard: (typeof buildImageCard === "function") ? buildImageCard : null,
     putImageCacheEntry: (typeof putImageCacheEntry === "function") ? putImageCacheEntry : null,
@@ -562,15 +575,15 @@ function buildSidepanelPromptDeps() {
     openImageInNewTab,
     downloadImage,
     refreshBalance,
-    sanitizePrompt,
+    sanitizePrompt: sanitizePromptSafe,
     clearPromptAfterSend: (typeof clearPromptAfterSend === "function") ? clearPromptAfterSend : null,
     generateImageImpl: (prompt) => generateImage(prompt),
     typingIndicator,
     showTypingIndicator,
     queryActiveTab: () => chrome.tabs.query({ active: true, currentWindow: true }),
-    getProviderLabelSafe,
+    getProviderLabelSafe: getProviderLabelSafeFromProvider,
     hideTypingIndicator,
-    buildStreamErrorHtml,
+    buildStreamErrorHtml: buildStreamErrorHtmlSafe,
     getStreamingFallbackMessage: (typeof getStreamingFallbackMessage === "function") ? getStreamingFallbackMessage : null,
     extractReasoningFromStreamChunk: (typeof extractReasoningFromStreamChunk === "function") ? extractReasoningFromStreamChunk : null,
     extractSources,
@@ -579,7 +592,7 @@ function buildSidepanelPromptDeps() {
       ? window.safeHtml.setSanitizedHtml
       : null,
     modelMap,
-    getModelDisplayName,
+    getModelDisplayName: getModelDisplayNameFromProvider,
     UI_CONSTANTS,
     removeReasoningBubbles: (typeof removeReasoningBubbles === "function") ? removeReasoningBubbles : null,
     makeSourceReferencesClickable,
@@ -592,12 +605,12 @@ function buildSidepanelPromptDeps() {
 }
 
 async function generateImage(prompt) {
-  return sidepanelPromptControllerUtils.generateImage(buildSidepanelPromptDeps(), prompt);
+  return sidepanelPromptControllerModule.generateImage(buildSidepanelPromptDeps(), prompt);
 }
 
 async function askQuestion() {
   try {
-    return await sidepanelPromptControllerUtils.askQuestion(buildSidepanelPromptDeps());
+    return await sidepanelPromptControllerModule.askQuestion(buildSidepanelPromptDeps());
   } finally {
     if (!activePort) {
       askBtn.disabled = false;
@@ -649,7 +662,7 @@ if (summarizeBtn) {
       }
 
       // Step 2: Sending to provider
-      metaEl.textContent = `📤 Sending to ${getProviderLabelSafe(currentProvider)} for summarization (this may take longer for large pages)...`;
+      metaEl.textContent = `📤 Sending to ${getProviderLabelSafeFromProvider(currentProvider)} for summarization (this may take longer for large pages)...`;
       await new Promise(resolve => setTimeout(resolve, 200)); // Brief pause for UX
 
       const res = await chrome.runtime.sendMessage({
@@ -689,7 +702,7 @@ if (summarizeBtn) {
 
             // Retry the summarization
             showTypingIndicator();
-            metaEl.textContent = `📤 Sending to ${getProviderLabelSafe(currentProvider)} for summarization...`;
+            metaEl.textContent = `📤 Sending to ${getProviderLabelSafeFromProvider(currentProvider)} for summarization...`;
 
             const retryRes = await chrome.runtime.sendMessage({
               type: "summarize_page",
@@ -759,7 +772,7 @@ if (summarizeBtn) {
         const answerItem = document.createElement("div");
         answerItem.className = "answer-item";
         const contextBadge = res.contextSize > 2 ? `<span class="answer-context-badge" title="${res.contextSize} messages in conversation context">🧠 ${Math.floor(res.contextSize / 2)} Q&A</span>` : '';
-        const summaryModel = selectedCombinedModelId ? getModelDisplayName(modelMap.get(selectedCombinedModelId)) : (res.model || "default model");
+        const summaryModel = selectedCombinedModelId ? getModelDisplayNameFromProvider(modelMap.get(selectedCombinedModelId)) : (res.model || "default model");
         answerItem.innerHTML = `
           <div class="answer-meta">
             <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${summaryModel}</span>
@@ -934,7 +947,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 async function loadModels() {
-  return sidepanelModelControllerUtils.loadModels({
+  return sidepanelModelControllerModule.loadModels({
     state: sidepanelControllerState,
     modelStatusEl,
     sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
@@ -943,21 +956,21 @@ async function loadModels() {
     modelInput,
     modelDropdownRef: () => modelDropdown,
     ModelDropdownManager,
-    parseCombinedModelIdSafe,
-    normalizeProviderSafe,
-    getModelDisplayName,
+    parseCombinedModelIdSafe: parseCombinedModelIdSafeFromProvider,
+    normalizeProviderSafe: normalizeProviderSafeFromProvider,
+    getModelDisplayName: getModelDisplayNameFromProvider,
     setLocalStorage,
-    getProviderStorageKeySafe,
+    getProviderStorageKeySafe: getProviderStorageKeySafeFromProvider,
     buildCombinedRecentList,
     buildCombinedFavoritesList,
     setModelDropdown: (value) => { modelDropdown = value; },
     applyImageModeForModel,
-    buildCombinedModelIdSafe
+    buildCombinedModelIdSafe: buildCombinedModelIdSafeFromProvider
   });
 }
 
 async function loadToggleSettings() {
-  return sidepanelModelControllerUtils.loadToggleSettings({
+  return sidepanelModelControllerModule.loadToggleSettings({
     state: sidepanelControllerState,
     getLocalStorage,
     setLocalStorage,
@@ -970,7 +983,7 @@ async function loadToggleSettings() {
 }
 
 async function saveToggleSettings() {
-  return sidepanelModelControllerUtils.saveToggleSettings({
+  return sidepanelModelControllerModule.saveToggleSettings({
     state: sidepanelControllerState,
     setLocalStorage
   });
@@ -1183,3 +1196,4 @@ chrome.runtime.onMessage.addListener((msg) => {
     refreshFavoritesOnly();
   }
 });
+})();

@@ -35,13 +35,23 @@
 
 let cachedStore = null;
 
+function createStoreAdapter() {
+  const memoryStore = createMemoryChatStore();
+  if (typeof indexedDB === "undefined") {
+    return memoryStore;
+  }
+  if (typeof createIndexedDbChatStore !== "function") {
+    return memoryStore;
+  }
+  const indexedDbStore = createIndexedDbChatStore(indexedDB);
+  return (indexedDbStore && typeof indexedDbStore === "object")
+    ? indexedDbStore
+    : memoryStore;
+}
+
 function getDefaultStore() {
-  if (!cachedStore) {
-    if (typeof indexedDB === "undefined") {
-      cachedStore = createMemoryChatStore();
-    } else {
-      cachedStore = createIndexedDbChatStore(indexedDB);
-    }
+  if (!cachedStore || typeof cachedStore !== "object") {
+    cachedStore = createStoreAdapter();
   }
   return cachedStore;
 }

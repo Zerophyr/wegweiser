@@ -26,44 +26,57 @@ import {
   buildAuthHeaders,
   buildBalanceHeaders
 } from '/src/background/provider-utils.js';
-import {
-  extractOpenRouterImageUrl,
-  buildDataUrlFromBase64,
-  isNagaChatImageModel,
-  arrayBufferToBase64,
-  fetchImageAsDataUrl,
-  resolveModelCapabilitiesFromList
-} from '/src/background/background-image-utils.js';
-import {
-  parseModelsPayload,
-  getNagaStartupsCacheKeys
-} from '/src/background/background-models-utils.js';
-import {
-  parseStoredTabId,
-  loadContextsFromStorage,
-  persistContextForTab as persistContextForTabInStorage,
-  removeContextForTab as removeContextForTabInStorage
-} from '/src/background/background-context-store-utils.js';
-import {
-  createDebugStreamState,
-  setDebugEnabled as setDebugStreamEnabledState,
-  getDebugSnapshot,
-  clearDebugEntries,
-  applyDebugStorageChange,
-  createDebugLogger
-} from '/src/background/background-debug-stream-utils.js';
-import {
-  createSafePortSender,
-  buildStreamRequestBody
-} from '/src/background/background-stream-runtime-utils.js';
-import {
-  splitSseLines,
-  parseSseDataLine,
-  getStreamDeltaStats,
-  getReasoningText
-} from '/src/background/background-stream-chunk-utils.js';
+import '/src/background/background-image-utils.js';
+import '/src/background/background-models-utils.js';
+import '/src/background/background-context-store-utils.js';
+import '/src/background/background-debug-stream-utils.js';
+import '/src/background/background-stream-runtime-utils.js';
+import '/src/background/background-stream-chunk-utils.js';
 import { registerBackgroundMessageRouter } from '/src/background/background-message-router-utils.js';
 import { registerStreamingPortListener } from '/src/background/background-provider-stream-controller-utils.js';
+
+const {
+  extractOpenRouterImageUrl = () => null,
+  buildDataUrlFromBase64 = () => null,
+  isNagaChatImageModel = () => false,
+  arrayBufferToBase64 = async () => null,
+  fetchImageAsDataUrl = async () => null,
+  resolveModelCapabilitiesFromList = () => ({ supportsChat: true, supportsImages: false, outputsImage: false, isImageOnly: false })
+} = globalThis.backgroundImageUtils || {};
+
+const {
+  parseModelsPayload = () => [],
+  getNagaStartupsCacheKeys = () => ({ startupsKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE, timeKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME })
+} = globalThis.backgroundModelsUtils || {};
+
+const {
+  parseStoredTabId = (value) => value,
+  loadContextsFromStorage = async () => new Map(),
+  persistContextForTab: persistContextForTabInStorage = async () => {},
+  removeContextForTab: removeContextForTabInStorage = async () => {}
+} = globalThis.backgroundContextStoreUtils || {};
+
+const {
+  createDebugStreamState = () => ({ log: { entries: [] }, enabled: false }),
+  setDebugEnabled: setDebugStreamEnabledState = async (state, enabled) => { state.enabled = Boolean(enabled); return state.enabled; },
+  getDebugSnapshot = () => ({ ok: true, entries: [], meta: {} }),
+  clearDebugEntries = () => {},
+  applyDebugStorageChange = () => {},
+  createDebugLogger = () => ({ isEnabled: () => false, log: () => false })
+} = globalThis.backgroundDebugStreamUtils || {};
+
+const {
+  createSafePortSender = () => ({ send: () => false }),
+  buildStreamRequestBody = () => ({})
+} = globalThis.backgroundStreamRuntimeUtils || {};
+
+const {
+  splitSseLines = () => [],
+  parseSseDataLine = () => null,
+  getStreamDeltaStats = () => ({ hasContent: false, hasReasoning: false }),
+  getReasoningText = () => ""
+} = globalThis.backgroundStreamChunkUtils || {};
+
 
 const {
   deriveModelCapabilities = () => ({
@@ -173,10 +186,19 @@ async function getApiKeyForProvider(providerId) {
 
 function broadcastModelsUpdated(provider) {
   try {
-    chrome.runtime.sendMessage({
+    const maybePromise = chrome.runtime.sendMessage({
       type: MODELS_UPDATED_EVENT,
       provider
     });
+    if (maybePromise && typeof maybePromise.then === "function") {
+      maybePromise.catch((e) => {
+        const msg = String(e?.message || e || "");
+        if (msg.includes("Receiving end does not exist")) {
+          return;
+        }
+        console.warn("Failed to broadcast model update:", e);
+      });
+    }
   } catch (e) {
     // ignore if no listeners
   }

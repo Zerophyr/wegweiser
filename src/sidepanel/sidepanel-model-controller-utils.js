@@ -18,7 +18,8 @@ async function loadModels(deps) {
     buildCombinedRecentList,
     buildCombinedFavoritesList,
     setModelDropdown,
-    applyImageModeForModel
+    applyImageModeForModel,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   } = deps;
 
   try {
@@ -26,14 +27,26 @@ async function loadModels(deps) {
       modelStatusEl.textContent = "Enable a provider to load models.";
       return;
     }
-    modelStatusEl.textContent = "Loading models...";
-    const res = await sendRuntimeMessage({ type: "get_models" });
+    const currentStatus = (modelStatusEl.textContent || "").trim();
+    const hasActiveModelStatus = currentStatus.startsWith("Using:");
+    if (!hasActiveModelStatus) {
+      modelStatusEl.textContent = "Loading models...";
+    }
+    let res = await sendRuntimeMessage({ type: "get_models" });
     if (!res?.ok) {
       modelStatusEl.textContent = res?.error || "Failed to load models";
       return;
     }
 
-    state.combinedModels = res.models || [];
+    if (!Array.isArray(res.models) || res.models.length === 0) {
+      await sleep(300);
+      const retryRes = await sendRuntimeMessage({ type: "get_models" });
+      if (retryRes?.ok) {
+        res = retryRes;
+      }
+    }
+
+    state.combinedModels = Array.isArray(res.models) ? res.models : [];
     state.modelMap = new Map(state.combinedModels.map((model) => [model.id, model]));
 
     const [localItems, syncItems] = await Promise.all([
@@ -105,6 +118,11 @@ async function loadModels(deps) {
     }
 
     dropdown.setModels(state.combinedModels);
+    if (state.combinedModels.length === 0) {
+      modelStatusEl.textContent = "No models available. Check provider keys in Options.";
+      await applyImageModeForModel();
+      return;
+    }
     dropdown.setFavorites(buildCombinedFavoritesList());
     dropdown.setRecentlyUsed(buildCombinedRecentList());
 
