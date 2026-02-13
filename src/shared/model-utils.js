@@ -2,13 +2,10 @@
 
 /**
  * Normalizes a provider id to a supported value.
- * @param {string|null} providerId - Provider identifier.
+ * @param {string|null} _providerId - Provider identifier.
  * @returns {string} Normalized provider id.
  */
-export function normalizeProviderId(providerId) {
-  if (providerId === "openrouter" || providerId === "naga") {
-    return providerId;
-  }
+export function normalizeProviderId(_providerId) {
   return "openrouter";
 }
 
@@ -26,28 +23,12 @@ export function getModelBaseName(modelId) {
 }
 
 /**
- * Resolves a vendor label from Naga owned_by + startups map.
- * @param {string|null|undefined} ownedBy - owned_by value from Naga.
- * @param {Record<string, string>} startupsMap - id -> display_name.
- * @returns {string} Vendor label.
- */
-export function resolveNagaVendorLabel(ownedBy, startupsMap = {}) {
-  const normalized = typeof ownedBy === "string" ? ownedBy.trim() : "";
-  if (!normalized) return "Other";
-  const direct = startupsMap && typeof startupsMap === "object" ? startupsMap[normalized] : "";
-  if (typeof direct === "string" && direct.trim().length) {
-    return direct.trim();
-  }
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-/**
  * Builds a display name with provider prefix.
- * @param {string|null} providerId - Provider identifier.
+ * @param {string|null} _providerId - Provider identifier.
  * @param {string} modelId - Raw model id.
  * @returns {string} Display name.
  */
-export function buildModelDisplayName(providerId, modelId) {
+export function buildModelDisplayName(_providerId, modelId) {
   return typeof modelId === "string" ? modelId : "";
 }
 

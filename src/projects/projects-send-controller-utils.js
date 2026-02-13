@@ -1,6 +1,10 @@
 // projects-send-controller-utils.js - send/stream/retry orchestration for Projects
 
 function renderStreamError(deps, ui, message, retryContext) {
+  if (typeof deps.renderStreamError === "function") {
+    deps.renderStreamError(ui, message, retryContext);
+    return;
+  }
   if (typeof deps.renderStreamErrorRuntime === "function") {
     deps.renderStreamErrorRuntime(ui, message, retryContext, {
       getStreamErrorHtml: deps.getStreamErrorHtml,
@@ -12,7 +16,11 @@ function renderStreamError(deps, ui, message, retryContext) {
     return;
   }
   if (!ui || !ui.content) return;
-  ui.content.innerHTML = deps.getStreamErrorHtml(message);
+  if (typeof deps.getStreamErrorHtml === "function") {
+    ui.content.innerHTML = deps.getStreamErrorHtml(message);
+    return;
+  }
+  ui.content.textContent = String(message || "Unknown error");
 }
 
 async function retryStreamFromContext(deps, retryContext, ui) {

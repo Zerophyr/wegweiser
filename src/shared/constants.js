@@ -4,15 +4,10 @@
 export const STORAGE_KEYS = {
   PROVIDER: "or_provider",
   API_KEY: "or_api_key",
-  API_KEY_NAGA: "naga_api_key",
-  API_KEY_NAGA_PROVISIONAL: "naga_provisioning_key",
   MODEL: "or_model",
   MODEL_PROVIDER: "or_model_provider",
-  MODEL_NAGA: "or_model_naga",
   FAVORITES: "or_favorites",
-  FAVORITES_NAGA: "or_favorites_naga",
   RECENT_MODELS: "or_recent_models",
-  RECENT_MODELS_NAGA: "or_recent_models_naga",
   HISTORY_LIMIT: "or_history_limit",
   HISTORY: "or_history",
   PROJECTS: "or_projects",
@@ -22,41 +17,46 @@ export const STORAGE_KEYS = {
   MODELS_CACHE: "or_models_cache",
   MODELS_CACHE_TIME: "or_models_cache_time",
   MODELS_CACHE_VERSION: "or_models_cache_version",
-  MODELS_CACHE_NAGA: "or_models_cache_naga",
-  MODELS_CACHE_TIME_NAGA: "or_models_cache_time_naga",
-  MODELS_CACHE_VERSION_NAGA: "or_models_cache_version_naga",
-  NAGA_STARTUPS_CACHE: "naga_startups_cache",
-  NAGA_STARTUPS_CACHE_TIME: "naga_startups_cache_time",
   THEME: "or_theme",
   DEBUG_STREAM: "or_debug_stream",
   IMAGE_CACHE: "or_image_cache",
   COLLAPSE_ON_PROJECTS: "or_collapse_on_projects",
   IMAGE_CACHE_LIMIT_MB: "or_image_cache_limit_mb",
   PROVIDER_ENABLED_OPENROUTER: "or_provider_enabled_openrouter",
-  PROVIDER_ENABLED_NAGA: "or_provider_enabled_naga",
+  MIGRATION_NAGA_REMOVED_V1: "or_migration_naga_removed_v1",
   CONTEXT_SESSION_PREFIX: "or_context_session_"
 };
+
+// Legacy Naga keys retained for one-time migration cleanup.
+export const LEGACY_NAGA_STORAGE_KEYS = [
+  "naga_api_key",
+  "naga_provisioning_key",
+  "or_model_naga",
+  "or_favorites_naga",
+  "or_recent_models_naga",
+  "or_models_cache_naga",
+  "or_models_cache_time_naga",
+  "or_models_cache_version_naga",
+  "naga_startups_cache",
+  "naga_startups_cache_time",
+  "or_provider_enabled_naga"
+];
 
 // Encryption settings (local storage only)
 export const ENCRYPTION_KEY_STORAGE_KEY = "or_crypto_key";
 export const ENCRYPTED_STORAGE_KEYS = [
   STORAGE_KEYS.PROVIDER,
   STORAGE_KEYS.API_KEY,
-  STORAGE_KEYS.API_KEY_NAGA,
-  STORAGE_KEYS.API_KEY_NAGA_PROVISIONAL,
   STORAGE_KEYS.MODEL,
   STORAGE_KEYS.MODEL_PROVIDER,
-  STORAGE_KEYS.MODEL_NAGA,
   STORAGE_KEYS.RECENT_MODELS,
-  STORAGE_KEYS.RECENT_MODELS_NAGA,
   STORAGE_KEYS.HISTORY_LIMIT,
   STORAGE_KEYS.HISTORY,
   STORAGE_KEYS.PROJECTS,
   STORAGE_KEYS.PROJECT_THREADS,
   STORAGE_KEYS.WEB_SEARCH,
   STORAGE_KEYS.REASONING,
-  STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER,
-  STORAGE_KEYS.PROVIDER_ENABLED_NAGA
+  STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER
 ];
 
 if (typeof globalThis !== "undefined") {
@@ -68,13 +68,10 @@ export const NON_ENCRYPTED_KEYS = [
   STORAGE_KEYS.MODELS_CACHE,
   STORAGE_KEYS.MODELS_CACHE_TIME,
   STORAGE_KEYS.MODELS_CACHE_VERSION,
-  STORAGE_KEYS.MODELS_CACHE_NAGA,
-  STORAGE_KEYS.MODELS_CACHE_TIME_NAGA,
-  STORAGE_KEYS.MODELS_CACHE_VERSION_NAGA,
-  STORAGE_KEYS.NAGA_STARTUPS_CACHE,
-  STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME,
   STORAGE_KEYS.IMAGE_CACHE,
-  STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB
+  STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB,
+  STORAGE_KEYS.MIGRATION_NAGA_REMOVED_V1,
+  ...LEGACY_NAGA_STORAGE_KEYS
 ];
 
 // Message types for chrome.runtime.sendMessage
@@ -101,10 +98,10 @@ export const MESSAGE_TYPES = {
 
 // Cache TTL values (in milliseconds)
 export const CACHE_TTL = {
-  BALANCE: 60_000,        // 60 seconds
-  CONFIG: 60_000,         // 60 seconds
-  MODELS: 21_600_000,     // 6 hours
-  IMAGE: 10_800_000       // 3 hours
+  BALANCE: 60_000,
+  CONFIG: 60_000,
+  MODELS: 21_600_000,
+  IMAGE: 10_800_000
 };
 
 export const MODELS_CACHE_SCHEMA_VERSION = 3;
@@ -112,23 +109,22 @@ export const MODELS_CACHE_SCHEMA_VERSION = 3;
 // Default values
 export const DEFAULTS = {
   HISTORY_LIMIT: 20,
-  MAX_CONTEXT_MESSAGES: 16,  // 16 messages = 8 conversation turns (8 user + 8 assistant)
+  MAX_CONTEXT_MESSAGES: 16,
   MODEL: "openai/gpt-4o-mini",
   IMAGE_CACHE_LIMIT_MB: 512,
-  PROVIDER_ENABLED_OPENROUTER: true,
-  PROVIDER_ENABLED_NAGA: false
+  PROVIDER_ENABLED_OPENROUTER: true
 };
 
 // UI constants
 export const UI_CONSTANTS = {
-  TEXTAREA_MAX_HEIGHT: 200,           // Max height for auto-resize textarea (px)
-  TEXTAREA_MIN_HEIGHT: 44,            // Min height for textarea (px)
-  SCROLL_BUTTON_BOTTOM_OFFSET: 280,  // Bottom offset for scroll button (px)
-  SCROLL_THRESHOLD: 100,              // Scroll threshold for showing scroll button (px)
-  CHARS_PER_TOKEN: 4,                 // Rough estimate: 1 token ≈ 4 characters
-  TOKEN_BAR_MAX_TOKENS: 4000,         // Default max tokens for visualization
-  COPY_FEEDBACK_DURATION: 500,        // Duration of copy button color change (ms)
-  DEBOUNCE_DELAY: 150                 // Debounce delay for input events (ms)
+  TEXTAREA_MAX_HEIGHT: 200,
+  TEXTAREA_MIN_HEIGHT: 44,
+  SCROLL_BUTTON_BOTTOM_OFFSET: 280,
+  SCROLL_THRESHOLD: 100,
+  CHARS_PER_TOKEN: 4,
+  TOKEN_BAR_MAX_TOKENS: 4000,
+  COPY_FEEDBACK_DURATION: 500,
+  DEBOUNCE_DELAY: 150
 };
 
 // Error messages
@@ -146,9 +142,9 @@ export const ERROR_MESSAGES = {
 // API configuration
 export const API_CONFIG = {
   BASE_URL: "https://openrouter.ai/api/v1",
-  TIMEOUT: 120000,  // 120 seconds
+  TIMEOUT: 120000,
   MAX_RETRIES: 3,
-  RETRY_DELAY: 1000  // Start with 1 second, will use exponential backoff
+  RETRY_DELAY: 1000
 };
 
 // Provider configuration
@@ -163,15 +159,6 @@ export const PROVIDERS = {
     headers: {
       "X-Title": "Wegweiser"
     }
-  },
-  naga: {
-    id: "naga",
-    label: "NagaAI",
-    baseUrl: "https://api.naga.ac/v1",
-    supportsBalance: true,
-    supportsWebSearch: false,
-    balanceEndpoint: "/account/balance",
-    headers: {}
   }
 };
 
@@ -180,4 +167,3 @@ export const PATTERNS = {
   URL: /(https?:\/\/[^\s<>"]+)/g,
   EMAIL: /[\w.-]+@[\w.-]+\.\w+/g
 };
-

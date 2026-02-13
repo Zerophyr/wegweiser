@@ -81,12 +81,10 @@ let currentProvider = "openrouter";
 let combinedModels = [];
 let modelMap = new Map();
 let favoriteModelsByProvider = {
-  openrouter: new Set(),
-  naga: new Set()
+  openrouter: new Set()
 };
 let recentModelsByProvider = {
-  openrouter: [],
-  naga: []
+  openrouter: []
 };
 let selectedCombinedModelId = null;
 let sidebarSetupRequired = false;
@@ -142,22 +140,19 @@ const buildCombinedRecentList = () => sidepanelProviderModule.buildCombinedRecen
 
 function loadFavoritesAndRecents(localItems, syncItems) {
   favoriteModelsByProvider = {
-    openrouter: new Set(syncItems.or_favorites || []),
-    naga: new Set(syncItems.or_favorites_naga || [])
+    openrouter: new Set(syncItems.or_favorites || [])
   };
 
   recentModelsByProvider = {
-    openrouter: localItems.or_recent_models || [],
-    naga: localItems.or_recent_models_naga || []
+    openrouter: localItems.or_recent_models || []
   };
 }
 
 async function refreshFavoritesOnly() {
   try {
-    const syncItems = await chrome.storage.sync.get(["or_favorites", "or_favorites_naga"]);
+    const syncItems = await chrome.storage.sync.get(["or_favorites"]);
     favoriteModelsByProvider = {
-      openrouter: new Set(syncItems.or_favorites || []),
-      naga: new Set(syncItems.or_favorites_naga || [])
+      openrouter: new Set(syncItems.or_favorites || [])
     };
 
     if (modelDropdown) {
@@ -179,13 +174,8 @@ async function loadProviderSetting() {
 
 // setup panel
 function isProviderReady(localItems) {
-  const openrouterEnabled = localItems.or_provider_enabled_openrouter !== false;
-  const nagaEnabled = Boolean(localItems.or_provider_enabled_naga);
   const openrouterKey = typeof localItems.or_api_key === "string" ? localItems.or_api_key.trim() : "";
-  const nagaKey = typeof localItems.naga_api_key === "string" ? localItems.naga_api_key.trim() : "";
-  const openrouterReady = openrouterEnabled && Boolean(openrouterKey);
-  const nagaReady = nagaEnabled && Boolean(nagaKey);
-  return openrouterReady || nagaReady;
+  return Boolean(openrouterKey);
 }
 
 function updateSetupPanelVisibility(isReady) {
@@ -200,16 +190,13 @@ function updateSetupPanelVisibility(isReady) {
     modelSection.style.display = isReady ? "" : "none";
   }
   if (!isReady && modelStatusEl) {
-    modelStatusEl.textContent = "Enable a provider to load models.";
+    modelStatusEl.textContent = "Add your OpenRouter API key in Options to load models.";
   }
 }
 
 async function refreshSidebarSetupState() {
   const localItems = await getLocalStorage([
-    "or_api_key",
-    "naga_api_key",
-    "or_provider_enabled_openrouter",
-    "or_provider_enabled_naga"
+    "or_api_key"
   ]);
   const ready = isProviderReady(localItems);
   updateSetupPanelVisibility(ready);

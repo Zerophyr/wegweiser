@@ -3,21 +3,16 @@
 const DEFAULT_ENCRYPTED_STORAGE_KEYS = [
   "or_provider",
   "or_api_key",
-  "naga_api_key",
-  "naga_provisioning_key",
   "or_model",
   "or_model_provider",
-  "or_model_naga",
   "or_recent_models",
-  "or_recent_models_naga",
   "or_history_limit",
   "or_history",
   "or_projects",
   "or_project_threads",
   "or_web_search",
   "or_reasoning",
-  "or_provider_enabled_openrouter",
-  "or_provider_enabled_naga"
+  "or_provider_enabled_openrouter"
 ];
 
 const ENCRYPTED_STORAGE_KEYS = Array.isArray(globalThis?.ENCRYPTED_STORAGE_KEYS)

@@ -367,7 +367,7 @@ describe("ModelDropdownManager storage keys", () => {
     const badges = Array.from(document.querySelectorAll(".model-provider-badge"))
       .map((el) => el.textContent);
     expect(badges).toContain("OR");
-    expect(badges).toContain("NG");
+    expect(badges).not.toContain("NG");
   });
 
   test("does not render image badges in model list", () => {

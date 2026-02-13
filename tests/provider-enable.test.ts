@@ -9,35 +9,34 @@ describe("provider enable settings", () => {
       "utf8"
     );
     expect(content).toMatch(/PROVIDER_ENABLED_OPENROUTER/);
-    expect(content).toMatch(/PROVIDER_ENABLED_NAGA/);
+    expect(content).not.toMatch(/PROVIDER_ENABLED_NAGA/);
   });
 
-  test("options UI renders provider cards with enable controls", () => {
+  test("options UI renders only openrouter provider card", () => {
     const content = fs.readFileSync(
       path.join(__dirname, "../src/options/options.html"),
       "utf8"
     );
     expect(content).toMatch(/provider-card-openrouter/);
-    expect(content).toMatch(/provider-card-naga/);
-    expect(content).toMatch(/Enable/);
+    expect(content).not.toMatch(/provider-card-naga/);
+    expect(content).not.toMatch(/enable-openrouter/);
   });
 
-  test("options JS stores provider enable flags", () => {
+  test("options JS does not depend on provider enable toggles", () => {
     const content = fs.readFileSync(
       path.join(__dirname, "../src/options/options.js"),
       "utf8"
     );
-    expect(content).toMatch(/or_provider_enabled_openrouter/);
-    expect(content).toMatch(/or_provider_enabled_naga/);
+    expect(content).not.toMatch(/or_provider_enabled_naga/);
   });
 
-  test("background respects provider enable flags", () => {
+  test("background contains no naga provider flags", () => {
     const content = fs.readFileSync(
       path.join(__dirname, "../src/background/background.js"),
       "utf8"
     );
     expect(content).toMatch(/PROVIDER_ENABLED_OPENROUTER/);
-    expect(content).toMatch(/PROVIDER_ENABLED_NAGA/);
+    expect(content).not.toMatch(/PROVIDER_ENABLED_NAGA/);
   });
 });
 

@@ -1,7 +1,7 @@
 {
   "name": "wegweiser",
   "version": "1.1.5",
-  "description": "Chrome extension for OpenRouter and NagaAI - chat with models from your browser sidebar",
+  "description": "Chrome extension for OpenRouter - chat with models from your browser sidebar",
   "private": true,
   "scripts": {
     "test": "jest",

@@ -471,9 +471,6 @@ class ModelDropdownManager {
     if (provider === 'openrouter') {
       return { label: 'OR', background: '#1d4ed8', color: 'var(--color-text)' };
     }
-    if (provider === 'naga') {
-      return { label: 'NG', background: '#15803d', color: 'var(--color-text)' };
-    }
     return { label: '?', background: 'var(--color-border-hover)', color: 'var(--color-text)' };
   }
 
@@ -724,7 +721,7 @@ class ModelDropdownManager {
       }
       const providerA = this.getModelProviderId(a);
       const providerB = this.getModelProviderId(b);
-      const rank = (provider) => (provider === 'naga' ? 0 : provider === 'openrouter' ? 1 : 2);
+      const rank = (provider) => (provider === 'openrouter' ? 0 : 1);
       const rankDiff = rank(providerA) - rank(providerB);
       if (rankDiff !== 0) return rankDiff;
       return getLabel(a).localeCompare(getLabel(b));

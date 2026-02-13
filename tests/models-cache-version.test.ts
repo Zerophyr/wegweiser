@@ -9,7 +9,7 @@ describe("models cache versioning", () => {
       "utf8"
     );
     expect(content).toMatch(/MODELS_CACHE_VERSION/);
-    expect(content).toMatch(/MODELS_CACHE_VERSION_NAGA/);
+    expect(content).not.toMatch(/MODELS_CACHE_VERSION_NAGA/);
     expect(content).toMatch(/MODELS_CACHE_SCHEMA_VERSION/);
     expect(content).toMatch(/MODELS_CACHE_SCHEMA_VERSION\s*=\s*3/);
   });

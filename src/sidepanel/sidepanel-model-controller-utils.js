@@ -24,7 +24,7 @@ async function loadModels(deps) {
 
   try {
     if (state.sidebarSetupRequired) {
-      modelStatusEl.textContent = "Enable a provider to load models.";
+      modelStatusEl.textContent = "Add your OpenRouter API key in Options to load models.";
       return;
     }
     const currentStatus = (modelStatusEl.textContent || "").trim();
@@ -50,8 +50,8 @@ async function loadModels(deps) {
     state.modelMap = new Map(state.combinedModels.map((model) => [model.id, model]));
 
     const [localItems, syncItems] = await Promise.all([
-      getLocalStorage(["or_recent_models", "or_recent_models_naga"]),
-      chrome.storage.sync.get(["or_favorites", "or_favorites_naga"])
+      getLocalStorage(["or_recent_models"]),
+      chrome.storage.sync.get(["or_favorites"])
     ]);
     loadFavoritesAndRecents(localItems, syncItems);
 
@@ -119,7 +119,7 @@ async function loadModels(deps) {
 
     dropdown.setModels(state.combinedModels);
     if (state.combinedModels.length === 0) {
-      modelStatusEl.textContent = "No models available. Check provider keys in Options.";
+      modelStatusEl.textContent = "No models available. Check your OpenRouter API key in Options.";
       await applyImageModeForModel();
       return;
     }

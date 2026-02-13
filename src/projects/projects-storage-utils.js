@@ -6,6 +6,9 @@ async function getIndexedDbStorageUsage(options = {}) {
   const chatStore = options.chatStore;
   const storageApi = options.storageApi || (typeof navigator !== "undefined" ? navigator.storage : null);
   const logger = options.logger || console;
+  const quotaBytesOverride = Number.isFinite(options.quotaBytesOverride) && options.quotaBytesOverride > 0
+    ? options.quotaBytesOverride
+    : null;
 
   let imageBytes = 0;
   let chatBytes = 0;
@@ -32,7 +35,10 @@ async function getIndexedDbStorageUsage(options = {}) {
   }
 
   const bytesUsed = imageBytes + chatBytes;
-  if (storageApi && typeof storageApi.estimate === "function") {
+  if (quotaBytesOverride) {
+    quotaBytes = quotaBytesOverride;
+    percentUsed = (bytesUsed / quotaBytes) * 100;
+  } else if (storageApi && typeof storageApi.estimate === "function") {
     try {
       const estimate = await storageApi.estimate();
       if (typeof estimate?.quota === "number") {

@@ -28,16 +28,6 @@ function buildStreamRequestBody(params = {}) {
       enabled: true,
       effort: "medium"
     };
-  } else if (params.reasoning && params.providerId === "naga") {
-    requestBody.reasoning_effort = "medium";
-  }
-
-  if (params.webSearch && params.providerId === "naga") {
-    requestBody.web_search_options = {};
-  }
-
-  if (params.providerId === "naga") {
-    requestBody.stream_options = { include_usage: true };
   }
 
   return requestBody;

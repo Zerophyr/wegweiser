@@ -34,6 +34,20 @@ describe("projects storage utils", () => {
     expect(usage.percentUsed).toBeNull();
   });
 
+
+
+  test("uses configured quota override for storage indicator calculations", async () => {
+    const usage = await getIndexedDbStorageUsage({
+      getImageStoreStats: async () => ({ bytesUsed: 200 }),
+      getChatStoreStats: async () => ({ bytesUsed: 300 }),
+      storageApi: { estimate: async () => ({ quota: 2 * 1024 * 1024 * 1024 }) },
+      quotaBytesOverride: 1000
+    });
+
+    expect(usage.bytesUsed).toBe(500);
+    expect(usage.quotaBytes).toBe(1000);
+    expect(usage.percentUsed).toBeCloseTo(50);
+  });
   test("estimateItemSize returns positive byte count", async () => {
     const size = await estimateItemSize({ id: "thread-1", title: "Hello" });
     expect(size).toBeGreaterThan(0);

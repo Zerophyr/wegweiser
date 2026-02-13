@@ -1,7 +1,6 @@
 export {};
 const {
-  parseModelsPayload,
-  getNagaStartupsCacheKeys
+  parseModelsPayload
 } = require("../src/background/background-models-utils.js");
 
 describe("background models utils", () => {
@@ -18,14 +17,4 @@ describe("background models utils", () => {
     expect(parseModelsPayload({})).toEqual([]);
   });
 
-  test("returns naga startup cache key set", () => {
-    const keys = getNagaStartupsCacheKeys({
-      NAGA_STARTUPS_CACHE: "a",
-      NAGA_STARTUPS_CACHE_TIME: "b"
-    });
-    expect(keys).toEqual({
-      startupsKey: "a",
-      timeKey: "b"
-    });
-  });
 });

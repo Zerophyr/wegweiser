@@ -1,18 +1,18 @@
 # 🤖 Wegweiser v1.1.5
 
-> Your friendly AI companion powered by OpenRouter and NagaAI - chat with models right from your browser sidebar!
+> Your friendly AI companion powered by OpenRouter - chat with models right from your browser sidebar!
 
 ## ✨ Features
 
 ### Core Functionality
 - 🎯 **Side Panel Chat** - Chat with AI models directly in your browser sidebar
-- 🔄 **Model Selection** - Combined model list across OpenRouter + NagaAI (only providers with keys)
+- 🔄 **Model Selection** - OpenRouter model list with favorites and recently used models
 - 🏠 **Projects** - Full-page workspace to organize projects, threads, and custom instructions
 - 💬 **Conversation Context** - Remembers last 8 messages for contextual conversations
 - 💾 **Per-Tab Answer Persistence** - Sidebar answers stay until cleared, scoped to the current tab
 - 💰 **Token Insights** - Token estimate + usage bar before and after sending
 - 🧾 **Adaptive Summaries** - Automatic summaries keep long Projects threads usable
-- 📊 **Balance Display** - OpenRouter + NagaAI balance (NagaAI requires provisioning key)
+- 📊 **Balance Display** - Live OpenRouter balance and credits usage
 - 🗃️ **Encrypted IndexedDB Chats** - Chat data stored in IndexedDB with AES-GCM encryption
 - 🔐 **Encrypted Local Settings** - Sensitive settings encrypted at rest with a device-local key
 - 🌐 **Web Search** - Enable web search for up-to-date information
@@ -35,10 +35,10 @@ _(Coming soon)_
 
 1. Get your API key:
    - OpenRouter: [openrouter.ai](https://openrouter.ai)
-   - NagaAI: [naga.ac](https://naga.ac)
+
 2. Click the extension icon or open the side panel
 3. Click the gear icon (⚙️) to open options
-4. Enter API keys in the provider cards (NagaAI: add provisioning key to see balance)
+4. Enter your OpenRouter API key in the provider card
 5. Enable the providers you want to load models for (Enable is disabled until a key is present)
 6. Models refresh automatically when providers are enabled/disabled
 7. If no provider is enabled, the sidebar shows a setup panel with an “Open Options” shortcut
@@ -75,8 +75,8 @@ _(Coming soon)_
 3. Theme applies immediately
 
 ### Options Highlights
-1. **Provider cards + Enable toggles**: Enable OpenRouter and/or NagaAI (disabled until a key is present)
-2. **Provisioning key**: Optional NagaAI key to enable balance display
+1. **Provider card + Enable toggle**: OpenRouter is enabled when a valid API key is present
+2. **Balance display**: Uses OpenRouter credits endpoint automatically
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
 5. **Image storage**: Clear generated images and set the storage limit (IndexedDB)
@@ -137,8 +137,8 @@ Wegweiser-extension/
 - ✅ **Short Summary Acceptance** - Minimum summary length adapts to history size
 - 🗂️ **Archived Messages** - Collapsible “Earlier messages (N)” with full bubbles
 - 🏷️ **Summary Badge** - Visual indicator after summary refresh
-- 🔁 **Multi-Provider Models** - Combined OpenRouter + NagaAI model list with provider badges
-- 💳 **NagaAI Balance Support** - Provisioning key unlocks balance display
+- 🔁 **Model Browser** - OpenRouter model list with search, favorites, and recents
+- 💳 **OpenRouter Balance Support** - Credit balance and usage in options/sidebar
 - 👁️ **Key Visibility Toggle** - Inline eye icons for API/provisioning keys in Options
 - 🧪 **Streaming Debug Log** - Optional log for troubleshooting stuck streams
 - 📤 **Thread Export** - Export threads as PDF, Markdown, or DOCX via three-dot menu

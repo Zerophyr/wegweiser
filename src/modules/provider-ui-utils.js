@@ -1,31 +1,22 @@
 // provider-ui-utils.js - Shared provider/model helper functions for UI pages
 
-function normalizeProviderSafe(providerId) {
-  if (typeof normalizeProviderId === "function") {
-    return normalizeProviderId(providerId);
-  }
-  return providerId === "naga" ? "naga" : "openrouter";
+function normalizeProviderSafe() {
+  return "openrouter";
 }
 
-function getProviderLabelSafe(providerId) {
-  if (typeof getProviderLabel === "function") {
-    return getProviderLabel(providerId);
-  }
-  return normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter";
+function getProviderLabelSafe() {
+  return "OpenRouter";
 }
 
-function getProviderStorageKeySafe(baseKey, providerId) {
-  if (typeof getProviderStorageKey === "function") {
-    return getProviderStorageKey(baseKey, providerId);
-  }
-  return normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
+function getProviderStorageKeySafe(baseKey) {
+  return baseKey;
 }
 
 function buildCombinedModelIdSafe(providerId, modelId) {
   if (typeof buildCombinedModelId === "function") {
     return buildCombinedModelId(providerId, modelId);
   }
-  return `${normalizeProviderSafe(providerId)}:${modelId}`;
+  return `openrouter:${modelId}`;
 }
 
 function parseCombinedModelIdSafe(combinedId) {
@@ -39,9 +30,7 @@ function parseCombinedModelIdSafe(combinedId) {
   if (splitIndex === -1) {
     return { provider: "openrouter", modelId: combinedId };
   }
-  const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
-  const modelId = combinedId.slice(splitIndex + 1);
-  return { provider, modelId };
+  return { provider: "openrouter", modelId: combinedId.slice(splitIndex + 1) };
 }
 
 function getModelDisplayName(model) {
@@ -50,25 +39,21 @@ function getModelDisplayName(model) {
 
 function buildCombinedFavoritesList(favoriteModelsByProvider) {
   const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const favorites = favoriteModelsByProvider[provider] || new Set();
-    favorites.forEach((modelId) => {
-      combined.push(buildCombinedModelIdSafe(provider, modelId));
-    });
+  const favorites = favoriteModelsByProvider?.openrouter || new Set();
+  favorites.forEach((modelId) => {
+    combined.push(buildCombinedModelIdSafe("openrouter", modelId));
   });
   return combined;
 }
 
 function buildCombinedRecentList(recentModelsByProvider) {
   const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const recents = recentModelsByProvider[provider] || [];
-    recents.forEach((modelId) => {
-      const combinedId = buildCombinedModelIdSafe(provider, modelId);
-      if (!combined.includes(combinedId)) {
-        combined.push(combinedId);
-      }
-    });
+  const recents = recentModelsByProvider?.openrouter || [];
+  recents.forEach((modelId) => {
+    const combinedId = buildCombinedModelIdSafe("openrouter", modelId);
+    if (!combined.includes(combinedId)) {
+      combined.push(combinedId);
+    }
   });
   return combined;
 }

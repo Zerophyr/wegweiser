@@ -125,10 +125,7 @@ function getProvider(modelId) {
  * @param {string|null} providerId - Provider identifier.
  * @returns {string} Normalized provider id.
  */
-function normalizeProviderId(providerId) {
-  if (providerId === "openrouter" || providerId === "naga") {
-    return providerId;
-  }
+function normalizeProviderId(_providerId) {
   return "openrouter";
 }
 
@@ -137,8 +134,8 @@ function normalizeProviderId(providerId) {
  * @param {string|null} providerId - Provider identifier.
  * @returns {string} Display label.
  */
-function getProviderLabel(providerId) {
-  return normalizeProviderId(providerId) === "naga" ? "NagaAI" : "OpenRouter";
+function getProviderLabel(_providerId) {
+  return "OpenRouter";
 }
 
 /**
@@ -146,8 +143,8 @@ function getProviderLabel(providerId) {
  * @param {string|null} providerId - Provider identifier.
  * @returns {string} Placeholder prefix.
  */
-function getProviderApiKeyPlaceholder(providerId) {
-  return normalizeProviderId(providerId) === "naga" ? "ng-..." : "sk-or-...";
+function getProviderApiKeyPlaceholder(_providerId) {
+  return "sk-or-...";
 }
 
 /**
@@ -156,12 +153,8 @@ function getProviderApiKeyPlaceholder(providerId) {
  * @param {string|null} providerId - Provider identifier.
  * @returns {string} Provider-scoped key.
  */
-function getProviderStorageKey(baseKey, providerId) {
-  const provider = normalizeProviderId(providerId);
-  if (provider === "openrouter") {
-    return baseKey;
-  }
-  return `${baseKey}_${provider}`;
+function getProviderStorageKey(baseKey, _providerId) {
+  return baseKey;
 }
 
 /**
@@ -178,20 +171,16 @@ function getModelBaseName(modelId) {
 }
 
 /**
- * Resolves a vendor label from Naga owned_by + startups map.
- * @param {string|null|undefined} ownedBy - owned_by value from Naga.
- * @param {Record<string, string>} startupsMap - id -> display_name.
- * @returns {string} Vendor label.
+ * Compatibility helper retained for old imports.
+ * @param {string|null|undefined} ownedBy
+ * @returns {string}
  */
-function resolveNagaVendorLabel(ownedBy, startupsMap = {}) {
+function resolveVendorLabel(ownedBy) {
   const normalized = typeof ownedBy === "string" ? ownedBy.trim() : "";
   if (!normalized) return "Other";
-  const direct = startupsMap && typeof startupsMap === "object" ? startupsMap[normalized] : "";
-  if (typeof direct === "string" && direct.trim().length) {
-    return direct.trim();
-  }
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
+
 
 /**
  * Builds a display name with provider prefix.
@@ -517,7 +506,7 @@ if (typeof module !== "undefined") {
     getProviderApiKeyPlaceholder,
     getProviderStorageKey,
     getModelBaseName,
-    resolveNagaVendorLabel,
+    resolveVendorLabel,
     buildModelDisplayName,
     buildCombinedModelId,
     parseCombinedModelId,

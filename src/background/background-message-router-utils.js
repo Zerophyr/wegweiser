@@ -180,16 +180,14 @@ export function registerBackgroundMessageRouter(chromeApi, deps) {
       (async () => {
         try {
           const provider = deps.normalizeProviderId(msg.provider || deps.cachedConfig.modelProvider || deps.cachedConfig.provider);
-          const keyItems = await deps.getLocalStorage([deps.STORAGE_KEYS.API_KEY, deps.STORAGE_KEYS.API_KEY_NAGA]);
+          const keyItems = await deps.getLocalStorage([deps.STORAGE_KEYS.API_KEY]);
           await deps.setLocalStorage({
             [deps.STORAGE_KEYS.MODEL]: msg.model,
             [deps.STORAGE_KEYS.MODEL_PROVIDER]: provider
           });
           deps.cachedConfig.model = msg.model;
           deps.cachedConfig.modelProvider = provider;
-          deps.cachedConfig.apiKey = provider === "naga"
-            ? (keyItems[deps.STORAGE_KEYS.API_KEY_NAGA] || "")
-            : (keyItems[deps.STORAGE_KEYS.API_KEY] || "");
+          deps.cachedConfig.apiKey = keyItems[deps.STORAGE_KEYS.API_KEY] || "";
           deps.setLastConfigLoadAt(Date.now());
           sendResponse({ ok: true });
         } catch (e) {
@@ -216,50 +214,33 @@ export function registerBackgroundMessageRouter(chromeApi, deps) {
       (async () => {
         try {
           const keys = await deps.getLocalStorage([
-            deps.STORAGE_KEYS.API_KEY,
-            deps.STORAGE_KEYS.API_KEY_NAGA,
-            deps.STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER,
-            deps.STORAGE_KEYS.PROVIDER_ENABLED_NAGA
+            deps.STORAGE_KEYS.API_KEY
           ]);
-          const isOpenRouterEnabled = keys[deps.STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER] !== false;
-          const isNagaEnabled = Boolean(keys[deps.STORAGE_KEYS.PROVIDER_ENABLED_NAGA]);
-          const providersToLoad = [
-            { id: "openrouter", enabled: isOpenRouterEnabled, apiKey: keys[deps.STORAGE_KEYS.API_KEY] },
-            { id: "naga", enabled: isNagaEnabled, apiKey: keys[deps.STORAGE_KEYS.API_KEY_NAGA] }
-          ].filter((entry) => entry.enabled && entry.apiKey);
+          const apiKey = keys[deps.STORAGE_KEYS.API_KEY] || "";
 
-          if (providersToLoad.length === 0) {
+          if (!apiKey) {
             sendResponse({ ok: true, models: [], reason: "no_enabled_providers" });
             return;
           }
 
-          const combinedModels = [];
-          let lastError = null;
-          for (const entry of providersToLoad) {
-            try {
-              const models = await deps.getProviderModels(entry.id, entry.apiKey);
-              models.forEach((model) => {
-                const displayName = deps.buildModelDisplayName(entry.id, model.id);
-                combinedModels.push({
-                  id: deps.buildCombinedModelId(entry.id, model.id),
-                  rawId: model.id,
-                  provider: entry.id,
-                  displayName,
-                  name: displayName,
-                  vendorLabel: model.vendorLabel,
-                  supportsChat: Boolean(model.supportsChat),
-                  supportsImages: Boolean(model.supportsImages),
-                  outputsImage: Boolean(model.outputsImage),
-                  isImageOnly: Boolean(model.isImageOnly),
-                  supportedParameters: model.supportedParameters || null
-                });
-              });
-            } catch (e) {
-              console.warn(`Failed to load ${entry.id} models:`, e);
-              lastError = e;
-            }
-          }
-          if (!combinedModels.length && lastError) throw lastError;
+          const models = await deps.getProviderModels("openrouter", apiKey);
+          const combinedModels = models.map((model) => {
+            const displayName = deps.buildModelDisplayName("openrouter", model.id);
+            return {
+              id: deps.buildCombinedModelId("openrouter", model.id),
+              rawId: model.id,
+              provider: "openrouter",
+              displayName,
+              name: displayName,
+              vendorLabel: model.vendorLabel,
+              supportsChat: Boolean(model.supportsChat),
+              supportsImages: Boolean(model.supportsImages),
+              outputsImage: Boolean(model.outputsImage),
+              isImageOnly: Boolean(model.isImageOnly),
+              supportedParameters: model.supportedParameters || null
+            };
+          });
+
           sendResponse({ ok: true, models: combinedModels });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || String(e) });

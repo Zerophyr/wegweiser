@@ -78,25 +78,25 @@ describe("provider helpers", () => {
 
   test("getProviderLabel returns readable labels", () => {
     expect(getProviderLabel("openrouter")).toBe("OpenRouter");
-    expect(getProviderLabel("naga")).toBe("NagaAI");
+    expect(getProviderLabel("naga")).toBe("OpenRouter");
   });
 
   test("getProviderStorageKey returns scoped keys", () => {
     expect(getProviderStorageKey("or_model", "openrouter")).toBe("or_model");
-    expect(getProviderStorageKey("or_model", "naga")).toBe("or_model_naga");
+    expect(getProviderStorageKey("or_model", "naga")).toBe("or_model");
   });
 
-  test("parseModelsResponse handles OpenRouter and NagaAI shapes", () => {
+  test("parseModelsResponse handles object and array payloads", () => {
     const or = parseModelsResponse({ data: [{ id: "openai/gpt-4o", name: "GPT-4o" }] });
-    const naga = parseModelsResponse([{ id: "naga/gpt-4o", name: "GPT-4o" }]);
+    const list = parseModelsResponse([{ id: "google/gemini-2.5-flash", name: "Gemini" }]);
     expect(or[0].id).toBe("openai/gpt-4o");
-    expect(naga[0].id).toBe("naga/gpt-4o");
+    expect(list[0].id).toBe("google/gemini-2.5-flash");
   });
 
   test("getProviderApiKeyPlaceholder returns provider-specific prefixes", () => {
     const { getProviderApiKeyPlaceholder } = require("../src/shared/utils.js");
     expect(getProviderApiKeyPlaceholder("openrouter")).toBe("sk-or-...");
-    expect(getProviderApiKeyPlaceholder("naga")).toBe("ng-...");
+    expect(getProviderApiKeyPlaceholder("naga")).toBe("sk-or-...");
   });
 });
 
@@ -189,7 +189,7 @@ describe("model display helpers", () => {
     buildModelDisplayName,
     buildCombinedModelId,
     parseCombinedModelId,
-    resolveNagaVendorLabel
+    resolveVendorLabel
   } = require("../src/shared/utils.js");
 
   test("getModelBaseName strips provider segments", () => {
@@ -198,27 +198,24 @@ describe("model display helpers", () => {
     expect(getModelBaseName("mistral:latest")).toBe("latest");
   });
 
-  test("buildModelDisplayName prefixes NG-/OR-", () => {
+  test("buildModelDisplayName returns raw model ids", () => {
     expect(buildModelDisplayName("naga", "anthropic/claude-3-opus")).toBe("anthropic/claude-3-opus");
     expect(buildModelDisplayName("openrouter", "openai/gpt-4o")).toBe("openai/gpt-4o");
   });
 
-  test("combined model IDs round-trip", () => {
+  test("combined model IDs normalize to openrouter", () => {
     const id = buildCombinedModelId("naga", "anthropic/claude-3-opus");
-    expect(id).toBe("naga:anthropic/claude-3-opus");
-    expect(parseCombinedModelId(id)).toEqual({ provider: "naga", modelId: "anthropic/claude-3-opus" });
+    expect(id).toBe("openrouter:anthropic/claude-3-opus");
+    expect(parseCombinedModelId(id)).toEqual({ provider: "openrouter", modelId: "anthropic/claude-3-opus" });
   });
 
-  test("resolveNagaVendorLabel prefers startups display name", () => {
-    expect(resolveNagaVendorLabel("qwen", { qwen: "Qwen" })).toBe("Qwen");
+  test("resolveVendorLabel title-cases provider names", () => {
+    expect(resolveVendorLabel("qwen")).toBe("Qwen");
+    expect(resolveVendorLabel("deepseek")).toBe("Deepseek");
   });
 
-  test("resolveNagaVendorLabel falls back to title case", () => {
-    expect(resolveNagaVendorLabel("deepseek", {})).toBe("Deepseek");
-  });
-
-  test("resolveNagaVendorLabel returns Other for empty input", () => {
-    expect(resolveNagaVendorLabel("", {})).toBe("Other");
+  test("resolveVendorLabel returns Other for empty input", () => {
+    expect(resolveVendorLabel("")).toBe("Other");
   });
 });
 

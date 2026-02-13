@@ -15,6 +15,7 @@ describe('sidepanel setup panel', () => {
     const js = fs.readFileSync(jsPath, 'utf8');
     expect(js).toMatch(/setup panel/i);
     expect(js).toMatch(/openOptionsPage/);
-    expect(js).toMatch(/provider.*enabled/i);
+    expect(js).toMatch(/isProviderReady/);
+    expect(js).toMatch(/or_api_key/);
   });
 });

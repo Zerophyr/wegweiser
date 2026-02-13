@@ -13,10 +13,7 @@ let currentProvider = 'openrouter';
 let lastStreamContext = null;
 let retryInProgress = false;
 const MAX_CONTEXT_MESSAGES = 16;
-const IMAGE_CACHE_LIMIT_DEFAULT = 512;
-const IMAGE_CACHE_LIMIT_MIN = 128;
-const IMAGE_CACHE_LIMIT_MAX = 2048;
-const IMAGE_CACHE_LIMIT_STEP = 64;
+const IMAGE_CACHE_LIMIT_DEFAULT = 512, IMAGE_CACHE_LIMIT_MIN = 128, IMAGE_CACHE_LIMIT_MAX = 2048, IMAGE_CACHE_LIMIT_STEP = 64;
 const getLocalStorage = (keys) => (
   typeof window.getEncrypted === "function"
     ? window.getEncrypted(keys)
@@ -27,7 +24,6 @@ const setLocalStorage = (values) => (
     ? window.setEncrypted(values)
     : chrome.storage.local.set(values)
 );
-// encrypted-storage
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
 const projectsModuleResolver = (typeof window !== "undefined" && window.projectsModuleResolver)
   || (typeof require === "function" ? require("./projects-module-resolver.js") : null);
@@ -41,11 +37,11 @@ function normalizeImageCacheLimitMb(value) {
 }
 const providerUiUtils = resolveProjectsModule('providerUiUtils', '../modules/provider-ui-utils.js');
 const normalizeProviderSafe = providerUiUtils.normalizeProviderSafe
-  || ((providerId) => (providerId === 'naga' ? 'naga' : 'openrouter'));
+  || (() => 'openrouter');
 const getProviderLabelSafe = providerUiUtils.getProviderLabelSafe
-  || ((providerId) => (normalizeProviderSafe(providerId) === 'naga' ? 'NagaAI' : 'OpenRouter'));
+  || (() => 'OpenRouter');
 const getProviderStorageKeySafe = providerUiUtils.getProviderStorageKeySafe
-  || ((baseKey, providerId) => (normalizeProviderSafe(providerId) === 'naga' ? `${baseKey}_naga` : baseKey));
+  || ((baseKey) => baseKey);
 const buildCombinedModelIdSafe = providerUiUtils.buildCombinedModelIdSafe
   || ((providerId, modelId) => `${normalizeProviderSafe(providerId)}:${modelId}`);
 const parseCombinedModelIdSafe = providerUiUtils.parseCombinedModelIdSafe
@@ -66,7 +62,7 @@ const getModelDisplayName = providerUiUtils.getModelDisplayName
 const buildCombinedFavoritesList = providerUiUtils.buildCombinedFavoritesList
   || ((favoritesByProvider) => {
     const combined = [];
-    ['openrouter', 'naga'].forEach((provider) => {
+    ['openrouter'].forEach((provider) => {
       const favorites = favoritesByProvider[provider] || new Set();
       favorites.forEach((modelId) => {
         combined.push(buildCombinedModelIdSafe(provider, modelId));
@@ -77,7 +73,7 @@ const buildCombinedFavoritesList = providerUiUtils.buildCombinedFavoritesList
 const buildCombinedRecentList = providerUiUtils.buildCombinedRecentList
   || ((recentsByProvider) => {
     const combined = [];
-    ['openrouter', 'naga'].forEach((provider) => {
+    ['openrouter'].forEach((provider) => {
       const recents = recentsByProvider[provider] || [];
       recents.forEach((modelId) => {
         const combinedId = buildCombinedModelIdSafe(provider, modelId);
@@ -143,7 +139,6 @@ const Project_EMOJIS = [
   '🎵', '🎬', '📷', '🎤', '✏️', '🖊️', '🖌️', '📐',
   '🏠', '🏢', '🏗️', '🌳', '🌍', '🌎', '🌏', '☀️'
 ];
-// ============ UTILITY FUNCTIONS ============
 const { generateId, formatRelativeTime, formatDate, truncateText, generateThreadTitle, formatBytes, buildStorageLabel, escapeHtml, getImageExtension, sanitizeFilename } = resolveProjectsModule('projectsBasicUtils', './projects-basic-utils.js');
 const { downloadImage, openImageLightbox, hydrateImageCards } = resolveProjectsModule('projectsImageUtils', './projects-image-utils.js');
 const { buildEmptyThreadListHtml, buildThreadListHtml } = resolveProjectsModule('projectsThreadListUtils', './projects-thread-list-utils.js');
@@ -277,7 +272,6 @@ function openProjectsContextModal(thread, Project) {
     });
   }
 }
-// ============ STORAGE FUNCTIONS ============
 async function persistThreadToChatStore(thread) {
   return projectsStorageControllerUtils.persistThreadToChatStore(thread, {
     chatStore,
@@ -287,12 +281,30 @@ async function persistThreadToChatStore(thread) {
   });
 }
 async function loadProjects() {
-  return projectsStorageControllerUtils.loadProjects({
+  const projects = await projectsStorageControllerUtils.loadProjects({
     chatStore,
     getLocalStorage,
     storageKeys: STORAGE_KEYS,
     logger: console
   });
+  let changed = false;
+  const migrated = (Array.isArray(projects) ? projects : []).map((project) => {
+    if (!project || typeof project !== 'object') return project;
+    if (String(project.modelProvider || '').toLowerCase() !== 'naga') return project;
+    changed = true;
+    const nextModel = 'openai/gpt-4o-mini';
+    return {
+      ...project,
+      modelProvider: 'openrouter',
+      model: nextModel,
+      modelDisplayName: nextModel
+    };
+  });
+  if (changed) {
+    await saveProjects(migrated);
+  }
+
+  return migrated;
 }
 async function saveProjects(projects) {
   return projectsStorageControllerUtils.saveProjects(projects, {
@@ -378,7 +390,6 @@ async function addMessageToThread(threadId, message) {
     generateThreadTitle
   });
 }
-// ============ UI STATE ============
 let currentProjectId = null;
 let currentThreadId = null;
 let currentProjectData = null;
@@ -391,19 +402,15 @@ let deletingItem = null; // { type: 'Project'|'thread', id: string }
 let ProjectModelDropdown = null;
 let ProjectModelMap = new Map();
 let ProjectFavoriteModelsByProvider = {
-  openrouter: new Set(),
-  naga: new Set()
+  openrouter: new Set()
 };
 let ProjectRecentModelsByProvider = {
-  openrouter: [],
-  naga: []
+  openrouter: []
 };
-// ============ DOM ELEMENTS ============
 const elements = {};
 function initElements() {
   Object.assign(elements, collectProjectsElements(document));
 }
-// ============ VIEW SWITCHING ============
 function showView(viewName) {
   const state = applyViewSelection(viewName, {
     listView: elements.ProjectsListView,
@@ -416,7 +423,6 @@ function showView(viewName) {
     updateProjectsContextButton(null, null);
   }
 }
-// ============ RENDERING ============
 async function renderProjectsList() {
   const ProjectsRaw = await loadProjects();
   const visibility = getProjectsListVisibilityState(ProjectsRaw);
@@ -605,15 +611,19 @@ async function renderStorageUsage() {
   });
   if (!hasFreshCache) {
     if (!renderStorageUsage._inflight) {
-      renderStorageUsage._inflight = getIndexedDbStorageUsage()
-        .then((usage) => {
-          renderStorageUsage._cachedUsage = usage;
-          renderStorageUsage._lastUpdate = Date.now();
-          return usage;
-        })
-        .finally(() => {
-          renderStorageUsage._inflight = null;
+      renderStorageUsage._inflight = (async () => {
+        const settings = await getLocalStorage([STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB]);
+        const quotaBytesOverride = normalizeImageCacheLimitMb(Number(settings?.[STORAGE_KEYS.IMAGE_CACHE_LIMIT_MB])) * 1024 * 1024;
+        return getIndexedDbStorageUsage({
+          getImageStoreStats: (typeof window.getImageStoreStats === 'function') ? window.getImageStoreStats : null,
+          getChatStoreStats: (chatStore && typeof chatStore.getStats === 'function') ? (() => chatStore.getStats()) : null,
+          chatStore, quotaBytesOverride
         });
+      })().then((usage) => {
+        renderStorageUsage._cachedUsage = usage;
+        renderStorageUsage._lastUpdate = Date.now();
+        return usage;
+      }).finally(() => { renderStorageUsage._inflight = null; });
     }
     renderStorageUsage._cachedUsage = await renderStorageUsage._inflight;
   }
@@ -644,7 +654,6 @@ function showStorageWarning(level, message) {
 function hideStorageWarning() {
   hideProjectsStorageWarning(elements.storageWarning);
 }
-// ============ ACTIONS ============
 async function openProject(projectId) {
   const Project = await getProject(projectId);
   if (!Project) {
@@ -735,7 +744,6 @@ document.addEventListener('click', (e) => {
     closeExportMenus();
   }
 });
-// ============ MODAL HANDLERS ============
 function openCreateProjectModal() {
   projectsModalControllerUtils.openCreateProjectModal({
     buildCreateProjectModalViewState,
@@ -866,23 +874,20 @@ async function handleDeleteConfirm() {
     renderStorageUsage
   });
 }
-// ============ MODEL LOADING ============
 async function loadModels() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'get_models' });
     if (response.ok && response.models) {
       ProjectModelMap = new Map(response.models.map((model) => [model.id, model]));
       const [localItems, syncItems] = await Promise.all([
-        getLocalStorage(['or_recent_models', 'or_recent_models_naga']),
-        chrome.storage.sync.get(['or_favorites', 'or_favorites_naga'])
+        getLocalStorage(['or_recent_models']),
+        chrome.storage.sync.get(['or_favorites'])
       ]);
       ProjectFavoriteModelsByProvider = {
-        openrouter: new Set(syncItems.or_favorites || []),
-        naga: new Set(syncItems.or_favorites_naga || [])
+        openrouter: new Set(syncItems.or_favorites || [])
       };
       ProjectRecentModelsByProvider = {
-        openrouter: localItems.or_recent_models || [],
-        naga: localItems.or_recent_models_naga || []
+        openrouter: localItems.or_recent_models || []
       };
       const resolvedModelInput = elements.ProjectModelInput || document.getElementById('project-model-input');
       if (!ProjectModelDropdown && resolvedModelInput) {
@@ -959,7 +964,6 @@ async function loadModels() {
     console.error('Error loading models:', err);
   }
 }
-// ============ EMOJI PICKER ============
 function setupEmojiPicker() {
   projectsEventsControllerUtils.setupEmojiPicker({
     elements,
@@ -968,7 +972,6 @@ function setupEmojiPicker() {
     shouldCloseEmojiGridOnDocumentClick
   });
 }
-// ============ EVENT BINDINGS ============
 function bindEvents() {
   const imageModeState = { changed: false };
   projectsEventsControllerUtils.bindEvents({
@@ -1006,7 +1009,6 @@ function bindEvents() {
     isEscapeCloseEvent
   });
 }
-// ============ CHAT FUNCTIONALITY ============
 function renderStreamError(ui, message, retryContext) {
   return projectsSendControllerUtils.renderStreamError({
     renderStreamErrorRuntime,
@@ -1154,7 +1156,6 @@ function stopStreaming() {
     showToast
   });
 }
-// ============ CHAT INPUT HANDLERS ============
 function setupChatInput() {
   projectsEventsControllerUtils.setupChatInput({
     elements,
@@ -1162,7 +1163,6 @@ function setupChatInput() {
     stopStreaming
   });
 }
-// ============ INITIALIZATION ============
 async function init() {
   await projectsEventsControllerUtils.initProjectsApp({
     initElements,

@@ -8,7 +8,8 @@ import {
   MODELS_CACHE_SCHEMA_VERSION,
   DEFAULTS,
   ERROR_MESSAGES,
-  API_CONFIG
+  API_CONFIG,
+  LEGACY_NAGA_STORAGE_KEYS
 } from '/src/shared/constants.js';
 import '/src/shared/crypto-store.js';
 import '/src/shared/encrypted-storage.js';
@@ -16,8 +17,7 @@ import '/src/shared/debug-log.js';
 import '/src/shared/model-capabilities.js';
 import {
   buildCombinedModelId,
-  buildModelDisplayName,
-  resolveNagaVendorLabel
+  buildModelDisplayName
 } from '/src/shared/model-utils.js';
 import {
   normalizeProviderId,
@@ -38,15 +38,12 @@ import { registerStreamingPortListener } from '/src/background/background-provid
 const {
   extractOpenRouterImageUrl = () => null,
   buildDataUrlFromBase64 = () => null,
-  isNagaChatImageModel = () => false,
-  arrayBufferToBase64 = async () => null,
   fetchImageAsDataUrl = async () => null,
   resolveModelCapabilitiesFromList = () => ({ supportsChat: true, supportsImages: false, outputsImage: false, isImageOnly: false })
 } = globalThis.backgroundImageUtils || {};
 
 const {
-  parseModelsPayload = () => [],
-  getNagaStartupsCacheKeys = () => ({ startupsKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE, timeKey: STORAGE_KEYS.NAGA_STARTUPS_CACHE_TIME })
+  parseModelsPayload = () => []
 } = globalThis.backgroundModelsUtils || {};
 
 const {
@@ -105,6 +102,37 @@ const setLocalStorage = (values) => (
     : chrome.storage.local.set(values)
 );
 
+async function runNagaRemovalMigration() {
+  try {
+    const markerKey = STORAGE_KEYS.MIGRATION_NAGA_REMOVED_V1;
+    const existing = await chrome.storage.local.get([markerKey, ...LEGACY_NAGA_STORAGE_KEYS, STORAGE_KEYS.PROVIDER, STORAGE_KEYS.MODEL_PROVIDER, STORAGE_KEYS.MODEL]);
+    if (existing[markerKey]) {
+      return;
+    }
+
+    const nextValues = {
+      [markerKey]: true,
+      [STORAGE_KEYS.PROVIDER]: "openrouter",
+      [STORAGE_KEYS.MODEL_PROVIDER]: "openrouter",
+      [STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER]: true
+    };
+
+    const providerWasNaga = String(existing[STORAGE_KEYS.MODEL_PROVIDER] || existing[STORAGE_KEYS.PROVIDER] || "").toLowerCase() === "naga";
+    if (providerWasNaga || !existing[STORAGE_KEYS.MODEL]) {
+      nextValues[STORAGE_KEYS.MODEL] = DEFAULTS.MODEL;
+    }
+
+    await chrome.storage.local.set(nextValues);
+    await chrome.storage.local.remove(LEGACY_NAGA_STORAGE_KEYS);
+    cachedConfig.provider = "openrouter";
+    cachedConfig.modelProvider = "openrouter";
+    cachedConfig.model = nextValues[STORAGE_KEYS.MODEL] || existing[STORAGE_KEYS.MODEL] || DEFAULTS.MODEL;
+    setLastConfigLoadAt(0);
+  } catch (e) {
+    console.warn("Naga removal migration failed:", e);
+  }
+}
+
 // Cache management
 const lastBalanceByProvider = {};
 const lastBalanceAtByProvider = {};
@@ -130,6 +158,8 @@ let lastConfigLoadAt = 0;
 function setLastConfigLoadAt(value) {
   lastConfigLoadAt = Number.isFinite(value) ? value : 0;
 }
+
+runNagaRemovalMigration();
 
 // Conversation context management (per tab)
 const conversationContexts = new Map(); // tabId -> messages array
@@ -174,14 +204,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // ---- Config (API key + model) ----
 
 async function getApiKeyForProvider(providerId) {
-  const provider = normalizeProviderId(providerId);
-  const keys = await getLocalStorage([
-    STORAGE_KEYS.API_KEY,
-    STORAGE_KEYS.API_KEY_NAGA
-  ]);
-  return provider === "naga"
-    ? (keys[STORAGE_KEYS.API_KEY_NAGA] || "")
-    : (keys[STORAGE_KEYS.API_KEY] || "");
+  normalizeProviderId(providerId);
+  const keys = await getLocalStorage([STORAGE_KEYS.API_KEY]);
+  return keys[STORAGE_KEYS.API_KEY] || "";
 }
 
 function broadcastModelsUpdated(provider) {
@@ -204,46 +229,8 @@ function broadcastModelsUpdated(provider) {
   }
 }
 
-async function getNagaStartupsMap() {
-  const { startupsKey, timeKey } = getNagaStartupsCacheKeys(STORAGE_KEYS);
-  const cacheData = await chrome.storage.local.get([
-    startupsKey,
-    timeKey
-  ]);
-
-  const now = Date.now();
-  if (cacheData[startupsKey] &&
-      cacheData[timeKey] &&
-      (now - cacheData[timeKey]) < CACHE_TTL.MODELS) {
-    return cacheData[startupsKey];
-  }
-
-  const providerConfig = getProviderConfig("naga");
-  const res = await fetch(`${providerConfig.baseUrl}/startups`);
-  if (!res.ok) {
-    return {};
-  }
-
-  const data = await res.json().catch(() => null);
-  const list = Array.isArray(data) ? data : (data?.data || []);
-  const map = {};
-  list.forEach((startup) => {
-    const id = startup?.id || startup?.slug || startup?.name;
-    const label = startup?.display_name || startup?.displayName || startup?.name;
-    if (id && label) {
-      map[id] = label;
-    }
-  });
-
-  await chrome.storage.local.set({
-    [startupsKey]: map,
-    [timeKey]: now
-  });
-
-  return map;
-}
-
 async function refreshProviderModels(providerId, apiKey) {
+
   const provider = normalizeProviderId(providerId);
   if (!apiKey) return [];
 
@@ -259,12 +246,6 @@ async function refreshProviderModels(providerId, apiKey) {
 
   const data = await res.json();
   const models = parseModelsPayload(data, deriveModelCapabilities);
-  if (provider === "naga") {
-    const startupsMap = await getNagaStartupsMap().catch(() => ({}));
-    models.forEach((model) => {
-      model.vendorLabel = resolveNagaVendorLabel(model.ownedBy, startupsMap);
-    });
-  }
 
   const { modelsKey, timeKey, versionKey } = getModelsCacheKeys(provider);
   const now = Date.now();
@@ -322,30 +303,21 @@ async function loadConfig() {
     return cachedConfig;
   }
 
-  // SECURITY FIX: Use chrome.storage.local instead of sync for API key
   const items = await getLocalStorage([
     STORAGE_KEYS.PROVIDER,
     STORAGE_KEYS.API_KEY,
-    STORAGE_KEYS.API_KEY_NAGA,
-    STORAGE_KEYS.API_KEY_NAGA_PROVISIONAL,
     STORAGE_KEYS.MODEL,
-    STORAGE_KEYS.MODEL_NAGA,
     STORAGE_KEYS.MODEL_PROVIDER
   ]);
   const provider = normalizeProviderId(items[STORAGE_KEYS.PROVIDER]);
   const modelProvider = normalizeProviderId(items[STORAGE_KEYS.MODEL_PROVIDER] || provider);
-  const apiKey = modelProvider === "naga" ? items[STORAGE_KEYS.API_KEY_NAGA] : items[STORAGE_KEYS.API_KEY];
-  let model = items[STORAGE_KEYS.MODEL];
-  if (!model && modelProvider === "naga") {
-    model = items[STORAGE_KEYS.MODEL_NAGA];
-  }
-  model = model || DEFAULTS.MODEL;
+  const apiKey = items[STORAGE_KEYS.API_KEY] || "";
+  const model = items[STORAGE_KEYS.MODEL] || DEFAULTS.MODEL;
 
   cachedConfig = {
     provider,
     modelProvider,
-    apiKey: apiKey || "",
-    provisioningKey: items[STORAGE_KEYS.API_KEY_NAGA_PROVISIONAL] || "",
+    apiKey,
     model
   };
   lastConfigLoadAt = now;
@@ -398,11 +370,7 @@ async function callImageGeneration(prompt, providerId, modelId) {
   try {
     const models = await getProviderModels(provider, apiKey);
     const capabilities = resolveModelCapabilitiesFromList(models, model);
-    let route = resolveImageRouteFromCapabilities(capabilities);
-
-    if (providerConfig.id === "naga" && isNagaChatImageModel(model)) {
-      route = "chat";
-    }
+    const route = resolveImageRouteFromCapabilities(capabilities);
 
     if (!route) {
       throw new Error(ERROR_MESSAGES.IMAGE_MODEL_REQUIRED);
@@ -617,7 +585,7 @@ registerBackgroundMessageRouter(chrome, {
 });
 const BACKGROUND_ROUTED_IMAGE_QUERY = MESSAGE_TYPES.IMAGE_QUERY;
 // Compatibility markers for source-based tests after router extraction:
-// CLOSE_SIDEPANEL, PROVIDER_ENABLED_OPENROUTER, PROVIDER_ENABLED_NAGA
+// CLOSE_SIDEPANEL, PROVIDER_ENABLED_OPENROUTER
 // chrome.tabs.query({ active: true, currentWindow: true })
 
 // ---- OpenRouter: chat completions with retry logic ----
@@ -668,11 +636,6 @@ async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabI
       effort: "medium"
     };
     console.log('[Reasoning] Reasoning parameter added to request:', requestBody.reasoning);
-  } else if (reasoning && providerConfig.id === "naga") {
-    requestBody.reasoning_effort = "medium";
-  }
-  if (webSearch && providerConfig.id === "naga") {
-    requestBody.web_search_options = {};
   }
 
   // Retry logic with exponential backoff
@@ -771,8 +734,7 @@ async function callOpenRouterWithMessages(messages, customModel = null, customPr
     provider: providerConfig.id,
     model: requestBody.model,
     messageCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
-    hasApiKey: Boolean(apiKey),
-    hasProvisioningKey: Boolean(cfg.provisioningKey)
+    hasApiKey: Boolean(apiKey)
   });
 
   let lastError;
@@ -862,17 +824,14 @@ async function getProviderBalance() {
     return { supported: true, balance: lastBalanceByProvider[cfg.modelProvider] };
   }
 
-  if (providerConfig.id === "naga" && !cfg.provisioningKey) {
-    return { supported: false, balance: null };
-  }
-  if (!cfg.apiKey && providerConfig.id !== "naga") {
+  if (!cfg.apiKey) {
     throw new Error(ERROR_MESSAGES.NO_API_KEY);
   }
 
   const balanceEndpoint = providerConfig.balanceEndpoint || "/credits";
   const res = await fetch(`${providerConfig.baseUrl}${balanceEndpoint}`, {
     method: "GET",
-    headers: buildBalanceHeaders(cfg.apiKey, providerConfig, cfg.provisioningKey)
+    headers: buildBalanceHeaders(cfg.apiKey, providerConfig)
   });
 
   const data = await res.json();
@@ -881,22 +840,12 @@ async function getProviderBalance() {
   }
 
   let balance = null;
-  if (providerConfig.id === "naga") {
-    const rawBalance = data?.balance;
-    if (typeof rawBalance === "number") {
-      balance = rawBalance;
-    } else if (typeof rawBalance === "string") {
-      const parsed = Number.parseFloat(rawBalance);
-      balance = Number.isNaN(parsed) ? null : parsed;
-    }
-  } else {
-    console.log("Credits response:", data);
+  console.log("Credits response:", data);
 
-    const credits = data?.data?.total_credits;
-    const usage = data?.data?.total_usage;
-    if (typeof credits === "number" && typeof usage === "number") {
-      balance = credits - usage;
-    }
+  const credits = data?.data?.total_credits;
+  const usage = data?.data?.total_usage;
+  if (typeof credits === "number" && typeof usage === "number") {
+    balance = credits - usage;
   }
 
   lastBalanceByProvider[cfg.modelProvider] = balance;

@@ -20,7 +20,7 @@ describe("background stream runtime utils", () => {
     expect(port.postMessage).toHaveBeenCalledWith({ type: "x" });
   });
 
-  test("buildStreamRequestBody for openrouter and naga", () => {
+  test("buildStreamRequestBody supports openrouter semantics only", () => {
     const orBody = buildStreamRequestBody({
       modelName: "m1",
       context: [{ role: "user", content: "x" }],
@@ -38,8 +38,8 @@ describe("background stream runtime utils", () => {
       webSearch: true,
       reasoning: true
     });
-    expect(nagaBody.reasoning_effort).toBe("medium");
-    expect(nagaBody.web_search_options).toEqual({});
-    expect(nagaBody.stream_options).toEqual({ include_usage: true });
+    expect(nagaBody.reasoning_effort).toBeUndefined();
+    expect(nagaBody.web_search_options).toBeUndefined();
+    expect(nagaBody.stream_options).toBeUndefined();
   });
 });

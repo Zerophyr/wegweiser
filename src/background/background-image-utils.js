@@ -20,13 +20,6 @@ function buildDataUrlFromBase64(base64, mimeType = "image/png") {
   return `data:${mimeType};base64,${base64}`;
 }
 
-function isNagaChatImageModel(modelId) {
-  if (!modelId || typeof modelId !== "string") return false;
-  const normalized = modelId.toLowerCase();
-  if (!normalized.startsWith("gemini-")) return false;
-  return normalized.includes("image");
-}
-
 function arrayBufferToBase64(buffer) {
   if (!buffer) return "";
   const bytes = new Uint8Array(buffer);
@@ -81,7 +74,6 @@ function resolveModelCapabilitiesFromList(models, modelId) {
 const backgroundImageUtils = {
   extractOpenRouterImageUrl,
   buildDataUrlFromBase64,
-  isNagaChatImageModel,
   arrayBufferToBase64,
   fetchImageAsDataUrl,
   resolveModelCapabilitiesFromList

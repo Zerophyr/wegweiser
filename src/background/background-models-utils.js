@@ -48,16 +48,8 @@ function parseModelsPayload(payload, deriveCapabilities) {
   });
 }
 
-function getNagaStartupsCacheKeys(storageKeys = {}) {
-  return {
-    startupsKey: storageKeys.NAGA_STARTUPS_CACHE || "or_naga_startups_cache",
-    timeKey: storageKeys.NAGA_STARTUPS_CACHE_TIME || "or_naga_startups_cache_time"
-  };
-}
-
 const backgroundModelsUtils = {
-  parseModelsPayload,
-  getNagaStartupsCacheKeys
+  parseModelsPayload
 };
 
 if (typeof window !== "undefined") {
