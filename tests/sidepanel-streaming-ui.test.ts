@@ -14,4 +14,10 @@ describe('sidepanel streaming UI state', () => {
     expect(finallyBlock).toMatch(/if\s*\(!activePort\)[\s\S]*?setPromptStreamingState\(false\);/);
     expect(finallyBlock).not.toMatch(/activePort\s*=\s*null/);
   });
+
+  test('sanitizes restored persisted answers through safe-html helper when available', () => {
+    const jsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js');
+    const js = fs.readFileSync(jsPath, 'utf8');
+    expect(js).toMatch(/safeHtml\.setSanitizedHtml\(answerEl,\s*payload\.html\)/);
+  });
 });

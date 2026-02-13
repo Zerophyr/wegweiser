@@ -40,6 +40,16 @@ const DOMPURIFY_CONFIG = {
   FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur']
 };
 
+function sanitizeWithConfiguredPolicy(html) {
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.sanitizeHtml === 'function') {
+    return window.safeHtml.sanitizeHtml(html, DOMPURIFY_CONFIG);
+  }
+  if (typeof DOMPurify !== 'undefined') {
+    return DOMPurify.sanitize(html, DOMPURIFY_CONFIG);
+  }
+  return html;
+}
+
 const TOPIC_COLOR_COUNT = 6;
 
 function hashText(text) {
@@ -162,10 +172,8 @@ function markdownToHtml(markdown) {
     html = html.replace(`\x00INLINECODE${i}\x00`, code);
   });
 
-  // Sanitize with DOMPurify if available (in browser context)
-  if (typeof DOMPurify !== 'undefined') {
-    html = DOMPurify.sanitize(html, DOMPURIFY_CONFIG);
-  }
+  // Sanitize generated markdown HTML before returning it
+  html = sanitizeWithConfiguredPolicy(html);
 
   return applyTopicClasses(html);
 }
@@ -191,7 +199,11 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
 
   // Convert markdown to HTML (already sanitized by markdownToHtml)
   const html = markdownToHtml(markdown);
-  element.innerHTML = html;
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+    window.safeHtml.setSanitizedHtml(element, html);
+  } else {
+    element.innerHTML = html;
+  }
 
   // Add CSS for markdown elements if not exists
   if (!document.getElementById('markdown-styles')) {
@@ -299,5 +311,5 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
 
 // Export for use in other files
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { markdownToHtml, applyMarkdownStyles, escapeCodeHtml, DOMPURIFY_CONFIG };
+  module.exports = { markdownToHtml, applyMarkdownStyles, escapeCodeHtml, DOMPURIFY_CONFIG, sanitizeWithConfiguredPolicy };
 }

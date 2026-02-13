@@ -394,7 +394,11 @@ async function restorePersistedAnswers() {
     const threadId = await getSidepanelThreadId();
     const payload = await chatStore.getThread(threadId);
     if (payload?.html) {
-      answerEl.innerHTML = payload.html;
+      if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+        window.safeHtml.setSanitizedHtml(answerEl, payload.html);
+      } else {
+        answerEl.innerHTML = payload.html;
+      }
       if (payload.metaText) {
         metaEl.textContent = payload.metaText;
       }
@@ -412,7 +416,11 @@ async function restorePersistedAnswers() {
   const stored = await storage.get([key]);
   const payload = stored?.[key];
   if (payload?.html) {
-    answerEl.innerHTML = payload.html;
+    if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+      window.safeHtml.setSanitizedHtml(answerEl, payload.html);
+    } else {
+      answerEl.innerHTML = payload.html;
+    }
     if (payload.metaText) {
       metaEl.textContent = payload.metaText;
     }
@@ -1106,7 +1114,11 @@ async function askQuestion() {
             // Note: applyMarkdownStyles handles escaping internally via markdownToHtml
             const renderedHTML = applyMarkdownStyles(cleanText);
 
-            answerContent.innerHTML = renderedHTML;
+            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+              window.safeHtml.setSanitizedHtml(answerContent, renderedHTML);
+            } else {
+              answerContent.innerHTML = renderedHTML;
+            }
 
             // Note: Sources are rendered in the completion handler, not during streaming
             // to avoid them being overwritten by subsequent innerHTML updates
@@ -1175,7 +1187,12 @@ async function askQuestion() {
           if (fullAnswer) {
             const { sources, cleanText } = extractSources(fullAnswer);
             // Note: applyMarkdownStyles handles escaping internally
-            answerContent.innerHTML = applyMarkdownStyles(cleanText);
+            const rendered = applyMarkdownStyles(cleanText);
+            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+              window.safeHtml.setSanitizedHtml(answerContent, rendered);
+            } else {
+              answerContent.innerHTML = rendered;
+            }
 
             // Add sources indicator if any
             if (sources.length > 0) {

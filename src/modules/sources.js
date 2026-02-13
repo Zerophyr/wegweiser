@@ -149,16 +149,32 @@ function makeSourceReferencesClickable(answerContent, sources) {
 
   const html = answerContent.innerHTML;
   let newHtml = html;
+  const escape = (value) => {
+    if (typeof escapeHtml === 'function') return escapeHtml(value);
+    const text = typeof value === 'string' ? value : '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
 
   // Find all [number] patterns and make them clickable
   sources.forEach(source => {
     const refPattern = new RegExp(`\\[${source.number}\\]`, 'g');
     const label = source.domain || source.title || source.url;
-    const replacement = `<span class="source-chip" data-source-id="${source.id}" title="${label}">${label}</span>`;
+    const safeId = escape(source.id || '');
+    const safeLabel = escape(label || '');
+    const replacement = `<span class="source-chip" data-source-id="${safeId}" title="${safeLabel}">${safeLabel}</span>`;
     newHtml = newHtml.replace(refPattern, replacement);
   });
 
-  answerContent.innerHTML = newHtml;
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+    window.safeHtml.setSanitizedHtml(answerContent, newHtml);
+  } else {
+    answerContent.innerHTML = newHtml;
+  }
 
   // Add click handlers to the references
   const chips = answerContent.querySelectorAll('.source-chip');

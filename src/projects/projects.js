@@ -2441,7 +2441,12 @@ function resetStreamingUi(ui) {
 
 function renderStreamError(ui, message, retryContext) {
   if (!ui || !ui.content) return;
-  ui.content.innerHTML = getStreamErrorHtml(message);
+  const errorHtml = getStreamErrorHtml(message);
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+    window.safeHtml.setSanitizedHtml(ui.content, errorHtml);
+  } else {
+    ui.content.innerHTML = errorHtml;
+  }
   const retryBtn = ui.content.querySelector('.retry-btn');
   if (!retryBtn) return;
   retryBtn.addEventListener('click', async () => {
@@ -2794,7 +2799,12 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
 
         fullContent += contentChunk;
         if (assistantBubble) {
-          assistantBubble.innerHTML = applyMarkdownStyles(fullContent);
+          const rendered = applyMarkdownStyles(fullContent);
+          if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+            window.safeHtml.setSanitizedHtml(assistantBubble, rendered);
+          } else {
+            assistantBubble.innerHTML = rendered;
+          }
         }
         elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
       } else if (msg.type === 'reasoning' && msg.reasoning) {
@@ -2829,7 +2839,12 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
 
         const { sources, cleanText } = getSourcesData(fullContent);
         if (assistantBubble) {
-          assistantBubble.innerHTML = applyMarkdownStyles(cleanText);
+          const rendered = applyMarkdownStyles(cleanText);
+          if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+            window.safeHtml.setSanitizedHtml(assistantBubble, rendered);
+          } else {
+            assistantBubble.innerHTML = rendered;
+          }
         }
 
         if (sources.length > 0) {
