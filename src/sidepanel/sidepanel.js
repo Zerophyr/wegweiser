@@ -107,6 +107,36 @@ const parseCombinedModelIdSafe = sidepanelProviderUtils.parseCombinedModelIdSafe
   return { provider, modelId };
 });
 const getModelDisplayName = sidepanelProviderUtils.getModelDisplayName || ((model) => model?.displayName || model?.name || model?.id || "");
+const sidepanelStreamUtils = (typeof window !== "undefined" && window.sidepanelStreamUtils) || {};
+const buildStreamErrorHtml = sidepanelStreamUtils.buildStreamErrorHtml || ((message) => {
+  const safeMessage = escapeHtml(message || "Unknown error");
+  return `
+    <div class="error-content">
+      <div class="error-text">${safeMessage}</div>
+      <div class="error-actions">
+        <button class="retry-btn" type="button">Retry</button>
+      </div>
+    </div>
+  `;
+});
+const sanitizePrompt = sidepanelStreamUtils.sanitizePrompt || ((prompt) => {
+  if (!prompt || typeof prompt !== "string") return "";
+  const trimmed = prompt.trim();
+  const maxLength = 10000;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+});
+const getImageExtension = sidepanelStreamUtils.getImageExtension || ((mimeType) => {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/gif") return "gif";
+  return "png";
+});
+const getImageViewerBaseUrl = sidepanelStreamUtils.getImageViewerBaseUrl || (() => {
+  if (typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function") {
+    return chrome.runtime.getURL("src/image-viewer/image-viewer.html");
+  }
+  return "";
+});
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -414,18 +444,6 @@ function closeExportMenus() {
   document.querySelectorAll('.export-menu').forEach(menu => menu.classList.remove('open'));
 }
 
-function buildStreamErrorHtml(message) {
-  const safeMessage = escapeHtml(message || 'Unknown error');
-  return `
-    <div class="error-content">
-      <div class="error-text">${safeMessage}</div>
-      <div class="error-actions">
-        <button class="retry-btn" type="button">Retry</button>
-      </div>
-    </div>
-  `;
-}
-
 function renderSourcesSummary(answerItem, sources) {
   const summary = answerItem?.querySelector('.answer-sources-summary');
   if (!summary) return;
@@ -565,28 +583,6 @@ document.addEventListener('click', (e) => {
 
 // ---- Input validation and sanitization ----
 // Note: escapeHtml() and validateUrl() are now in utils.js
-
-function sanitizePrompt(prompt) {
-  if (!prompt || typeof prompt !== 'string') return "";
-  // Trim and limit length
-  const trimmed = prompt.trim();
-  const maxLength = 10000; // Reasonable limit
-  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
-}
-
-function getImageExtension(mimeType) {
-  if (mimeType === "image/jpeg") return "jpg";
-  if (mimeType === "image/webp") return "webp";
-  if (mimeType === "image/gif") return "gif";
-  return "png";
-}
-
-function getImageViewerBaseUrl() {
-  if (typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function") {
-    return chrome.runtime.getURL("src/image-viewer/image-viewer.html");
-  }
-  return "";
-}
 
 function openImageInNewTab(dataUrl, imageId) {
   if (!dataUrl) return;
@@ -1105,7 +1101,12 @@ async function askQuestion() {
             answerSection.scrollTop = answerSection.scrollHeight;
           } catch (e) {
             console.error('[UI] Error rendering content:', e);
-            answerContent.innerHTML = `<div style="color: red;">Error rendering: ${e.message}</div>`;
+            const renderMessage = `Error rendering: ${e?.message || "Unknown error"}`;
+            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+              window.safeHtml.setSanitizedHtml(answerContent, buildStreamErrorHtml(renderMessage));
+            } else {
+              answerContent.innerHTML = buildStreamErrorHtml(renderMessage);
+            }
           }
         } else if (msg.type === 'complete') {
           // Stream complete

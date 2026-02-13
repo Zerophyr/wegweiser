@@ -20,4 +20,10 @@ describe('sidepanel streaming UI state', () => {
     const js = fs.readFileSync(jsPath, 'utf8');
     expect(js).toMatch(/safeHtml\.setSanitizedHtml\(answerEl,\s*payload\.html\)/);
   });
+
+  test('does not interpolate raw error messages directly into innerHTML', () => {
+    const jsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js');
+    const js = fs.readFileSync(jsPath, 'utf8');
+    expect(js).not.toMatch(/Error rendering:\s*\$\{e\.message\}/);
+  });
 });
