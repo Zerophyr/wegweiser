@@ -87,7 +87,6 @@ _(Coming soon)_
 ```
 Wegweiser-extension/
 ├── .github/                # CI workflows
-├── docs/                   # Internal docs/plans (local workflow)
 ├── scripts/                # Build/release utilities
 ├── src/
 │   ├── background/         # Service worker + provider/API orchestration + background-* helpers

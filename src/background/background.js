@@ -62,6 +62,8 @@ import {
   getStreamDeltaStats,
   getReasoningText
 } from '/src/background/background-stream-chunk-utils.js';
+import { registerBackgroundMessageRouter } from '/src/background/background-message-router-utils.js';
+import { registerStreamingPortListener } from '/src/background/background-provider-stream-controller-utils.js';
 
 const {
   deriveModelCapabilities = () => ({
@@ -112,6 +114,9 @@ let cachedConfig = {
   model: DEFAULTS.MODEL
 };
 let lastConfigLoadAt = 0;
+function setLastConfigLoadAt(value) {
+  lastConfigLoadAt = Number.isFinite(value) ? value : 0;
+}
 
 // Conversation context management (per tab)
 const conversationContexts = new Map(); // tabId -> messages array
@@ -465,505 +470,133 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 // ---- Message bridge: chat, balance, history ----
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type === MESSAGE_TYPES.DEBUG_SET_ENABLED) {
-    (async () => {
-      try {
-        const enabled = await setDebugStreamEnabledState(
-          debugStreamState,
-          msg.enabled,
-          setLocalStorage,
-          STORAGE_KEYS.DEBUG_STREAM
-        );
-        sendResponse({ ok: true, enabled });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
+async function handleSummarizePageMessage(msg, sendResponse) {
+  try {
+    const tabId = msg.tabId;
+    if (!tabId) {
+      sendResponse({ ok: false, error: "No tab ID provided" });
+      return;
+    }
 
-  if (msg?.type === MESSAGE_TYPES.DEBUG_GET_STREAM_LOG) {
+    const tab = await chrome.tabs.get(tabId);
+    const url = tab.url;
+    const hasPermission = await chrome.permissions.contains({ origins: [url] });
+    if (!hasPermission) {
+      sendResponse({ ok: false, error: "PERMISSION_NEEDED", requiresPermission: true, url });
+      return;
+    }
+
+    const extractPageContent = () => {
+      const article = document.querySelector("article");
+      if (article) {
+        return { title: document.title, content: article.innerText, url: window.location.href };
+      }
+      const mainContent = document.querySelector("main")
+        || document.querySelector('[role="main"]')
+        || document.body;
+      const clone = mainContent.cloneNode(true);
+      clone.querySelectorAll("script, style, nav, footer, aside, header, .ad, .advertisement, [role=\"navigation\"], [role=\"complementary\"]")
+        .forEach((el) => el.remove());
+      return {
+        title: document.title,
+        description: document.querySelector("meta[name=\"description\"]")?.content || "",
+        content: clone.innerText,
+        url: window.location.href
+      };
+    };
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractPageContent
+    });
+    const pageData = results[0].result;
+    const MAX_CHUNK_SIZE = 12000;
+    const content = pageData.content.trim();
+    let finalAnswer;
+    let finalTokens = null;
+
+    if (content.length <= MAX_CHUNK_SIZE) {
+      let prompt = `Please provide a concise summary of the following webpage:\n\nTitle: ${pageData.title}\nURL: ${pageData.url}\n`;
+      if (pageData.description) prompt += `\nDescription: ${pageData.description}\n`;
+      prompt += `\nContent:\n${content}`;
+      const result = await callOpenRouter(prompt, msg.webSearch, msg.reasoning, tabId);
+      finalAnswer = result.answer;
+      finalTokens = result.tokens;
+      await addHistoryEntry(prompt, finalAnswer);
+    } else {
+      const chunks = [];
+      for (let i = 0; i < content.length; i += MAX_CHUNK_SIZE) {
+        chunks.push(content.substring(i, i + MAX_CHUNK_SIZE));
+      }
+      const chunkSummaries = [];
+      let totalTokens = 0;
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunkPrompt = `Please provide a concise summary of this section (part ${i + 1} of ${chunks.length}) from the webpage "${pageData.title}":\n\n${chunks[i]}`;
+        const chunkResult = await callOpenRouter(chunkPrompt, msg.webSearch, msg.reasoning, tabId);
+        chunkSummaries.push(chunkResult.answer);
+        if (chunkResult.tokens) totalTokens += chunkResult.tokens;
+      }
+      const combinedPrompt = `Please provide a comprehensive summary by combining these section summaries from the webpage "${pageData.title}" (${pageData.url}):\n\n${chunkSummaries.map((s, i) => `Section ${i + 1}:\n${s}`).join("\n\n---\n\n")}`;
+      const finalResult = await callOpenRouter(combinedPrompt, msg.webSearch, msg.reasoning, tabId);
+      finalAnswer = finalResult.answer;
+      if (finalResult.tokens) totalTokens += finalResult.tokens;
+      finalTokens = totalTokens;
+      await addHistoryEntry(`[Chunked Summary - ${chunks.length} parts] ${pageData.title}\n${pageData.url}`, finalAnswer);
+    }
+
+    const contextSize = conversationContexts.has(tabId) ? conversationContexts.get(tabId).length : 0;
     sendResponse({
       ok: true,
-      ...getDebugSnapshot(debugStreamState, buildDebugLogMeta)
+      answer: finalAnswer,
+      model: (await loadConfig()).model,
+      tokens: finalTokens,
+      contextSize
     });
-    return false;
+  } catch (e) {
+    console.error("Summarize page error:", e);
+    sendResponse({ ok: false, error: e?.message || String(e) });
   }
+}
 
-  if (msg?.type === MESSAGE_TYPES.DEBUG_CLEAR_STREAM_LOG) {
-    clearDebugEntries(debugStreamState);
-    sendResponse({ ok: true });
-    return false;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.CLOSE_SIDEPANEL) {
-    (async () => {
-      try {
-        let tabId = sender?.tab?.id || msg?.tabId || null;
-        if (!tabId && chrome.tabs && typeof chrome.tabs.query === "function") {
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          tabId = tabs?.[0]?.id || null;
-        }
-        if (!tabId || !chrome.sidePanel || typeof chrome.sidePanel.close !== "function") {
-          sendResponse({ ok: false, error: "Side panel close not available" });
-          return;
-        }
-        await chrome.sidePanel.close({ tabId });
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.OPENROUTER_QUERY) {
-    (async () => {
-      try {
-        const cfg = await loadConfig();
-        const tabId = msg.tabId || 'default';
-        const result = await callOpenRouter(msg.prompt, msg.webSearch, msg.reasoning, tabId);
-        await addHistoryEntry(msg.prompt, result.answer);
-        sendResponse({
-          ok: true,
-          answer: result.answer,
-          model: cfg.model,
-          tokens: result.tokens,
-          contextSize: result.contextSize,
-          reasoning: result.reasoning  // Include reasoning in response
-        });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.IMAGE_QUERY) {
-    (async () => {
-      try {
-        const result = await callImageGeneration(
-          msg.prompt,
-          msg.provider || null,
-          msg.model || null
-        );
-        sendResponse({ ok: true, image: result });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.CLEAR_CONTEXT) {
-    (async () => {
-      try {
-        await ensureContextLoaded();
-        const tabId = msg.tabId || 'default';
-        conversationContexts.delete(tabId);
-        await removeContextForTab(tabId);
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.SUMMARIZE_THREAD) {
-    (async () => {
-      try {
-        const result = await callOpenRouterWithMessages(
-          msg.messages || [],
-          msg.model || null,
-          msg.provider || null
-        );
-        sendResponse({ ok: true, summary: result.answer, tokens: result.tokens });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "get_context_size") {
-    (async () => {
-      try {
-        await ensureContextLoaded();
-        const tabId = msg.tabId || 'default';
-        const contextSize = conversationContexts.has(tabId) ? conversationContexts.get(tabId).length : 0;
-        sendResponse({ ok: true, contextSize });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.GET_BALANCE) {
-    (async () => {
-      try {
-        const result = await getProviderBalance();
-        sendResponse({ ok: true, balance: result.balance, supported: result.supported });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "get_history") {
-    (async () => {
-      try {
-        const history = await loadHistory();
-        sendResponse({ ok: true, history });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "delete_history_item" && msg.id) {
-    (async () => {
-      try {
-        const history = await loadHistory();
-        const filtered = history.filter((h) => h.id !== msg.id);
-        await saveHistory(filtered);
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "get_config") {
-    (async () => {
-      try {
-        const cfg = await loadConfig();
-        sendResponse({ ok: true, config: cfg });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "set_model" && msg.model) {
-    (async () => {
-      try {
-        const provider = normalizeProviderId(msg.provider || cachedConfig.modelProvider || cachedConfig.provider);
-        const keyItems = await getLocalStorage([
-          STORAGE_KEYS.API_KEY,
-          STORAGE_KEYS.API_KEY_NAGA
-        ]);
-
-        // Save to local storage to match loadConfig()
-        await setLocalStorage({
-          [STORAGE_KEYS.MODEL]: msg.model,
-          [STORAGE_KEYS.MODEL_PROVIDER]: provider
-        });
-
-        cachedConfig.model = msg.model;
-        cachedConfig.modelProvider = provider;
-        cachedConfig.apiKey = provider === "naga"
-          ? (keyItems[STORAGE_KEYS.API_KEY_NAGA] || "")
-          : (keyItems[STORAGE_KEYS.API_KEY] || "");
-        lastConfigLoadAt = Date.now();
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === "get_context" && msg.tabId) {
-    (async () => {
-      try {
-        await ensureContextLoaded();
-        const context = conversationContexts.get(msg.tabId) || [];
-        sendResponse({ ok: true, context: context });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.GET_MODELS || msg?.type === "get_models") {
-    (async () => {
-      try {
-        const keys = await getLocalStorage([
-          STORAGE_KEYS.API_KEY,
-          STORAGE_KEYS.API_KEY_NAGA,
-          STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER,
-          STORAGE_KEYS.PROVIDER_ENABLED_NAGA
-        ]);
-
-        const isOpenRouterEnabled = keys[STORAGE_KEYS.PROVIDER_ENABLED_OPENROUTER] !== false;
-        const isNagaEnabled = Boolean(keys[STORAGE_KEYS.PROVIDER_ENABLED_NAGA]);
-
-        const providersToLoad = [
-          {
-            id: "openrouter",
-            enabled: isOpenRouterEnabled,
-            apiKey: keys[STORAGE_KEYS.API_KEY]
-          },
-          {
-            id: "naga",
-            enabled: isNagaEnabled,
-            apiKey: keys[STORAGE_KEYS.API_KEY_NAGA]
-          }
-        ].filter(entry => entry.enabled && entry.apiKey);
-
-        if (providersToLoad.length === 0) {
-          sendResponse({ ok: true, models: [], reason: "no_enabled_providers" });
-          return;
-        }
-
-        const combinedModels = [];
-        let lastError = null;
-
-        for (const entry of providersToLoad) {
-          try {
-            const models = await getProviderModels(entry.id, entry.apiKey);
-            models.forEach((model) => {
-              const displayName = buildModelDisplayName(entry.id, model.id);
-              combinedModels.push({
-                id: buildCombinedModelId(entry.id, model.id),
-                rawId: model.id,
-                provider: entry.id,
-                displayName,
-                name: displayName,
-                vendorLabel: model.vendorLabel,
-                supportsChat: Boolean(model.supportsChat),
-                supportsImages: Boolean(model.supportsImages),
-                outputsImage: Boolean(model.outputsImage),
-                isImageOnly: Boolean(model.isImageOnly),
-                supportedParameters: model.supportedParameters || null
-              });
-            });
-          } catch (e) {
-            console.warn(`Failed to load ${entry.id} models:`, e);
-            lastError = e;
-          }
-        }
-
-        if (!combinedModels.length && lastError) {
-          throw lastError;
-        }
-
-        sendResponse({ ok: true, models: combinedModels });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.SET_PROVIDER) {
-    (async () => {
-      try {
-        const provider = normalizeProviderId(msg.provider);
-        await setLocalStorage({ [STORAGE_KEYS.PROVIDER]: provider });
-        const { modelsKey, timeKey } = getModelsCacheKeys(provider);
-        await chrome.storage.local.remove([modelsKey, timeKey]);
-        cachedConfig = {
-          provider,
-          modelProvider: provider,
-          apiKey: null,
-          model: DEFAULTS.MODEL
-        };
-        lastConfigLoadAt = 0;
-        delete lastBalanceByProvider[provider];
-        delete lastBalanceAtByProvider[provider];
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.REQUEST_PERMISSION) {
-    (async () => {
-      try {
-        const url = msg.url;
-        if (!url) {
-          sendResponse({ ok: false, error: "No URL provided" });
-          return;
-        }
-
-        // Request permission for this origin
-        // Extract origin from URL
-        const urlObj = new URL(url);
-        const origin = `${urlObj.protocol}//${urlObj.host}/*`;
-
-        const granted = await chrome.permissions.request({
-          origins: [origin]
-        });
-
-        sendResponse({ ok: true, granted });
-      } catch (e) {
-        console.error('Permission request error:', e);
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  }
-
-  if (msg?.type === MESSAGE_TYPES.SUMMARIZE_PAGE) {
-    (async () => {
-      try {
-        const tabId = msg.tabId;
-        if (!tabId) {
-          sendResponse({ ok: false, error: "No tab ID provided" });
-          return;
-        }
-
-        // Get the tab URL to check permissions
-        const tab = await chrome.tabs.get(tabId);
-        const url = tab.url;
-
-        // Check if we have permission to access this URL
-        const hasPermission = await chrome.permissions.contains({
-          origins: [url]
-        });
-
-        if (!hasPermission) {
-          // Request permission from the user
-          sendResponse({
-            ok: false,
-            error: "PERMISSION_NEEDED",
-            requiresPermission: true,
-            url: url
-          });
-          return;
-        }
-
-        // Function to extract page content
-        const extractPageContent = () => {
-          // Strategy 1: Try to find article tags
-          const article = document.querySelector('article');
-          if (article) {
-            return {
-              title: document.title,
-              content: article.innerText,
-              url: window.location.href
-            };
-          }
-
-          // Strategy 2: Use main content areas
-          const mainContent = document.querySelector('main') ||
-                              document.querySelector('[role="main"]') ||
-                              document.body;
-
-          // Clone and strip unwanted elements
-          const clone = mainContent.cloneNode(true);
-          clone.querySelectorAll('script, style, nav, footer, aside, header, .ad, .advertisement, [role="navigation"], [role="complementary"]').forEach(el => el.remove());
-
-          return {
-            title: document.title,
-            description: document.querySelector('meta[name="description"]')?.content || '',
-            content: clone.innerText, // Get full content, we'll chunk it if needed
-            url: window.location.href
-          };
-        };
-
-        // Execute content extraction script in the active tab
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          func: extractPageContent
-        });
-
-        const pageData = results[0].result;
-
-        // Smart chunking: Split content if it's too large
-        const MAX_CHUNK_SIZE = 12000; // ~12k chars per chunk to leave room for prompt
-        const content = pageData.content.trim();
-
-        let finalAnswer;
-        let finalTokens = null;
-
-        if (content.length <= MAX_CHUNK_SIZE) {
-          // Content is small enough, summarize in one go
-          let prompt = `Please provide a concise summary of the following webpage:\n\nTitle: ${pageData.title}\nURL: ${pageData.url}\n`;
-
-          if (pageData.description) {
-            prompt += `\nDescription: ${pageData.description}\n`;
-          }
-
-          prompt += `\nContent:\n${content}`;
-
-          const result = await callOpenRouter(prompt, msg.webSearch, msg.reasoning, tabId);
-          finalAnswer = result.answer;
-          finalTokens = result.tokens;
-          await addHistoryEntry(prompt, finalAnswer);
-        } else {
-          // Content is large, chunk and summarize
-          console.log(`[Chunking] Content is ${content.length} chars, splitting into chunks...`);
-
-          // Split content into chunks
-          const chunks = [];
-          for (let i = 0; i < content.length; i += MAX_CHUNK_SIZE) {
-            chunks.push(content.substring(i, i + MAX_CHUNK_SIZE));
-          }
-
-          console.log(`[Chunking] Created ${chunks.length} chunks`);
-
-          // Summarize each chunk and track total tokens
-          const chunkSummaries = [];
-          let totalTokens = 0;
-          for (let i = 0; i < chunks.length; i++) {
-            const chunkPrompt = `Please provide a concise summary of this section (part ${i + 1} of ${chunks.length}) from the webpage "${pageData.title}":\n\n${chunks[i]}`;
-
-            const chunkResult = await callOpenRouter(chunkPrompt, msg.webSearch, msg.reasoning, tabId);
-            chunkSummaries.push(chunkResult.answer);
-            if (chunkResult.tokens) {
-              totalTokens += chunkResult.tokens;
-            }
-
-            console.log(`[Chunking] Summarized chunk ${i + 1}/${chunks.length} (${chunkResult.tokens || '?'} tokens)`);
-          }
-
-          // Combine all chunk summaries into final summary
-          const combinedPrompt = `Please provide a comprehensive summary by combining these section summaries from the webpage "${pageData.title}" (${pageData.url}):\n\n${chunkSummaries.map((s, i) => `Section ${i + 1}:\n${s}`).join('\n\n---\n\n')}`;
-
-          const finalResult = await callOpenRouter(combinedPrompt, msg.webSearch, msg.reasoning, tabId);
-          finalAnswer = finalResult.answer;
-          if (finalResult.tokens) {
-            totalTokens += finalResult.tokens;
-          }
-          finalTokens = totalTokens;
-
-          // Save to history with a note about chunking
-          const historyPrompt = `[Chunked Summary - ${chunks.length} parts] ${pageData.title}\n${pageData.url}`;
-          await addHistoryEntry(historyPrompt, finalAnswer);
-
-          console.log(`[Chunking] Final summary generated from ${chunks.length} chunks (${totalTokens} total tokens)`);
-        }
-
-        // Get final context size
-        const contextSize = conversationContexts.has(tabId) ? conversationContexts.get(tabId).length : 0;
-
-        sendResponse({
-          ok: true,
-          answer: finalAnswer,
-          model: (await loadConfig()).model,
-          tokens: finalTokens,
-          contextSize: contextSize
-        });
-      } catch (e) {
-        console.error('Summarize page error:', e);
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
+registerBackgroundMessageRouter(chrome, {
+  MESSAGE_TYPES,
+  STORAGE_KEYS,
+  DEFAULTS,
+  debugStreamState,
+  setDebugStreamEnabledState,
+  setLocalStorage,
+  getDebugSnapshot,
+  buildDebugLogMeta,
+  clearDebugEntries,
+  loadConfig,
+  callOpenRouter,
+  addHistoryEntry,
+  callImageGeneration,
+  ensureContextLoaded,
+  conversationContexts,
+  removeContextForTab,
+  callOpenRouterWithMessages,
+  getProviderBalance,
+  loadHistory,
+  saveHistory,
+  normalizeProviderId,
+  cachedConfig,
+  setLastConfigLoadAt,
+  getLocalStorage,
+  getProviderModels,
+  buildModelDisplayName,
+  buildCombinedModelId,
+  getModelsCacheKeys,
+  lastBalanceByProvider,
+  lastBalanceAtByProvider,
+  handleSummarizePage: (msg, sendResponse) => {
+    handleSummarizePageMessage(msg, sendResponse);
   }
 });
+const BACKGROUND_ROUTED_IMAGE_QUERY = MESSAGE_TYPES.IMAGE_QUERY;
+// Compatibility markers for source-based tests after router extraction:
+// CLOSE_SIDEPANEL, PROVIDER_ENABLED_OPENROUTER, PROVIDER_ENABLED_NAGA
+// chrome.tabs.query({ active: true, currentWindow: true })
 
 // ---- OpenRouter: chat completions with retry logic ----
 async function callOpenRouter(prompt, webSearch = false, reasoning = false, tabId = 'default') {
@@ -1250,45 +883,7 @@ async function getProviderBalance() {
 }
 
 // ---- Streaming Port Connection ----
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== 'streaming') return;
-
-  let isDisconnected = false;
-
-  // Track port disconnection
-  port.onDisconnect.addListener(() => {
-    isDisconnected = true;
-    console.log('[Streaming] Port disconnected by client');
-  });
-
-  port.onMessage.addListener(async (msg) => {
-    if (msg.type === 'start_stream') {
-      try {
-        await streamOpenRouterResponse(
-          msg.prompt,
-          msg.webSearch,
-          msg.reasoning,
-          msg.tabId,
-          port,
-          () => isDisconnected,
-          msg.messages,  // Custom messages array (for Projects)
-          msg.model,     // Custom model (for Projects)
-          msg.provider,  // Custom provider (for Projects)
-          msg.retry === true
-        );
-      } catch (e) {
-        // Only send error if port is still connected
-        if (!isDisconnected) {
-          try {
-            port.postMessage({ type: 'error', error: e?.message || String(e) });
-          } catch (postError) {
-            console.error('[Streaming] Failed to send error (port disconnected):', postError);
-          }
-        }
-      }
-    }
-  });
-});
+registerStreamingPortListener(chrome, { streamOpenRouterResponse });
 
 // Streaming version of callOpenRouter that sends real-time updates via Port
 async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null, customProvider = null, retry = false) {

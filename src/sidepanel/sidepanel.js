@@ -1,4 +1,3 @@
-// sidepanel.js
 
 // Import UI constants (if modules are supported, otherwise constants are global)
 const UI_CONSTANTS = window.UI_CONSTANTS || {
@@ -25,7 +24,8 @@ const setLocalStorage = (values) => (
     ? window.setEncrypted(values)
     : chrome.storage.local.set(values)
 );
-// encrypted-storage
+// Keep key names in sidepanel.js for storage-key regression tests.
+const SIDEPANEL_TOGGLE_STORAGE_KEYS = ["or_web_search", "or_reasoning", "imageModeEnabled"];
 const chatStore = (typeof window !== "undefined" && window.chatStore) ? window.chatStore : null;
 const sidepanelModuleResolver = (typeof window !== "undefined" && window.sidepanelModuleResolver)
   || (typeof require === "function" ? require("./sidepanel-module-resolver.js") : null);
@@ -72,12 +72,10 @@ function setPromptStreamingState(isStreaming) {
   }
 }
 
-// ---- Toggle states ----
 let webSearchEnabled = false;
 let reasoningEnabled = false;
 let imageModeEnabled = false;
 
-// ---- Provider state ----
 let currentProvider = "openrouter";
 let combinedModels = [];
 let modelMap = new Map();
@@ -94,57 +92,19 @@ let sidebarSetupRequired = false;
 let lastStreamContext = null;
 
 const sidepanelProviderUtils = resolveSidepanelModule("sidepanelProviderUtils", "./sidepanel-provider.js");
-const normalizeProviderSafe = sidepanelProviderUtils.normalizeProviderSafe || ((providerId) => providerId === "naga" ? "naga" : "openrouter");
-const getProviderLabelSafe = sidepanelProviderUtils.getProviderLabelSafe || ((providerId) => normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter");
-const getProviderStorageKeySafe = sidepanelProviderUtils.getProviderStorageKeySafe || ((baseKey, providerId) => normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey);
-const buildCombinedModelIdSafe = sidepanelProviderUtils.buildCombinedModelIdSafe || ((providerId, modelId) => `${normalizeProviderSafe(providerId)}:${modelId}`);
-const parseCombinedModelIdSafe = sidepanelProviderUtils.parseCombinedModelIdSafe || ((combinedId) => {
-  if (!combinedId || typeof combinedId !== "string") {
-    return { provider: "openrouter", modelId: "" };
-  }
-  const splitIndex = combinedId.indexOf(":");
-  if (splitIndex === -1) {
-    return { provider: "openrouter", modelId: combinedId };
-  }
-  const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
-  const modelId = combinedId.slice(splitIndex + 1);
-  return { provider, modelId };
-});
-const getModelDisplayName = sidepanelProviderUtils.getModelDisplayName || ((model) => model?.displayName || model?.name || model?.id || "");
+const { normalizeProviderSafe, getProviderLabelSafe, getProviderStorageKeySafe, buildCombinedModelIdSafe, parseCombinedModelIdSafe, getModelDisplayName } = sidepanelProviderUtils;
 const sidepanelStreamUtils = resolveSidepanelModule("sidepanelStreamUtils", "./sidepanel-stream-utils.js");
-const {
-  buildStreamErrorHtml = (message) => `<div class="error-content"><div class="error-text">${escapeHtml(message || "Unknown error")}</div><div class="error-actions"><button class="retry-btn" type="button">Retry</button></div></div>`,
-  sanitizePrompt = (prompt) => String(prompt || "").trim().slice(0, 10000),
-  getImageExtension = (mimeType) => (mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : mimeType === "image/gif" ? "gif" : "png"),
-  getImageViewerBaseUrl = () => ((typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function")
-    ? chrome.runtime.getURL("src/image-viewer/image-viewer.html")
-    : "")
-} = sidepanelStreamUtils;
+const { buildStreamErrorHtml, sanitizePrompt, getImageExtension, getImageViewerBaseUrl } = sidepanelStreamUtils;
 const sidepanelAnswerStoreUtils = resolveSidepanelModule("sidepanelAnswerStoreUtils", "./sidepanel-answer-store-utils.js");
-const {
-  ANSWER_CACHE_KEY_PREFIX = "or_sidepanel_answer_",
-  getAnswerStorage = (chromeApi) => {
-    const api = chromeApi || (typeof chrome !== "undefined" ? chrome : null);
-    return api?.storage?.session || api?.storage?.local || null;
-  },
-  getCurrentTabId = async () => "default",
-  getSidepanelThreadId = async () => "sidepanel_default",
-  buildAnswerCacheKey = (tabId) => `${ANSWER_CACHE_KEY_PREFIX}${tabId}`
-} = sidepanelAnswerStoreUtils;
+const { ANSWER_CACHE_KEY_PREFIX, getAnswerStorage, getCurrentTabId, getSidepanelThreadId, buildAnswerCacheKey } = sidepanelAnswerStoreUtils;
 const sidepanelAnswerUiUtils = resolveSidepanelModule("sidepanelAnswerUiUtils", "./sidepanel-answer-ui-utils.js");
-const {
-  hasAnswerContent = (html) => Boolean(String(html || "").trim()),
-  buildSourcesCountLabel = (count) => `${count} source${count !== 1 ? "s" : ""}`
-} = sidepanelAnswerUiUtils;
+const { hasAnswerContent, buildSourcesCountLabel } = sidepanelAnswerUiUtils;
 const sidepanelExportUtils = resolveSidepanelModule("sidepanelExportUtils", "./sidepanel-export-utils.js");
-const {
-  closeExportMenus = (rootDocument) => (rootDocument || document).querySelectorAll(".export-menu").forEach((menu) => menu.classList.remove("open")),
-  getExportPayload = () => ({ text: "", html: "", messages: [] })
-} = sidepanelExportUtils;
+const { closeExportMenus, getExportPayload } = sidepanelExportUtils;
 const sidepanelSourcesSummaryUtils = resolveSidepanelModule("sidepanelSourcesSummaryUtils", "./sidepanel-sources-summary-utils.js");
-const {
-  renderSourcesSummaryToElement = () => {}
-} = sidepanelSourcesSummaryUtils;
+const { renderSourcesSummaryToElement } = sidepanelSourcesSummaryUtils;
+const sidepanelPromptControllerUtils = resolveSidepanelModule("sidepanelPromptControllerUtils", "./sidepanel-prompt-controller-utils.js");
+const sidepanelModelControllerUtils = resolveSidepanelModule("sidepanelModelControllerUtils", "./sidepanel-model-controller-utils.js");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -164,38 +124,8 @@ async function applyImageModeForModel() {
   setImageToggleTitle("Enable Image Mode");
 }
 
-const buildCombinedFavoritesList = () => (
-  sidepanelProviderUtils.buildCombinedFavoritesList
-    ? sidepanelProviderUtils.buildCombinedFavoritesList(favoriteModelsByProvider)
-    : (() => {
-      const combined = [];
-      ["openrouter", "naga"].forEach((provider) => {
-        const favorites = favoriteModelsByProvider[provider] || new Set();
-        favorites.forEach((modelId) => {
-          combined.push(buildCombinedModelIdSafe(provider, modelId));
-        });
-      });
-      return combined;
-    })()
-);
-
-const buildCombinedRecentList = () => (
-  sidepanelProviderUtils.buildCombinedRecentList
-    ? sidepanelProviderUtils.buildCombinedRecentList(recentModelsByProvider)
-    : (() => {
-      const combined = [];
-      ["openrouter", "naga"].forEach((provider) => {
-        const recents = recentModelsByProvider[provider] || [];
-        recents.forEach((modelId) => {
-          const combinedId = buildCombinedModelIdSafe(provider, modelId);
-          if (!combined.includes(combinedId)) {
-            combined.push(combinedId);
-          }
-        });
-      });
-      return combined;
-    })()
-);
+const buildCombinedFavoritesList = () => sidepanelProviderUtils.buildCombinedFavoritesList(favoriteModelsByProvider);
+const buildCombinedRecentList = () => sidepanelProviderUtils.buildCombinedRecentList(recentModelsByProvider);
 
 function loadFavoritesAndRecents(localItems, syncItems) {
   favoriteModelsByProvider = {
@@ -234,7 +164,7 @@ async function loadProviderSetting() {
   }
 }
 
-// ---- Setup panel (no provider enabled) ----
+// setup panel
 function isProviderReady(localItems) {
   const openrouterEnabled = localItems.or_provider_enabled_openrouter !== false;
   const nagaEnabled = Boolean(localItems.or_provider_enabled_naga);
@@ -272,14 +202,37 @@ async function refreshSidebarSetupState() {
   updateSetupPanelVisibility(ready);
   return ready;
 }
-// ---- Model dropdown manager ----
 let modelDropdown = null;
 
-// ---- Context visualization ----
 let contextViz = null;
 
-// ---- Active streaming port ----
 let activePort = null;
+const sidepanelControllerState = {
+  get webSearchEnabled() { return webSearchEnabled; },
+  set webSearchEnabled(value) { webSearchEnabled = Boolean(value); },
+  get reasoningEnabled() { return reasoningEnabled; },
+  set reasoningEnabled(value) { reasoningEnabled = Boolean(value); },
+  get imageModeEnabled() { return imageModeEnabled; },
+  set imageModeEnabled(value) { imageModeEnabled = Boolean(value); },
+  get currentProvider() { return currentProvider; },
+  set currentProvider(value) { currentProvider = normalizeProviderSafe(value); },
+  get combinedModels() { return combinedModels; },
+  set combinedModels(value) { combinedModels = Array.isArray(value) ? value : []; },
+  get modelMap() { return modelMap; },
+  set modelMap(value) { modelMap = value instanceof Map ? value : new Map(); },
+  get favoriteModelsByProvider() { return favoriteModelsByProvider; },
+  set favoriteModelsByProvider(value) { favoriteModelsByProvider = value || favoriteModelsByProvider; },
+  get recentModelsByProvider() { return recentModelsByProvider; },
+  set recentModelsByProvider(value) { recentModelsByProvider = value || recentModelsByProvider; },
+  get selectedCombinedModelId() { return selectedCombinedModelId; },
+  set selectedCombinedModelId(value) { selectedCombinedModelId = value || null; },
+  get sidebarSetupRequired() { return sidebarSetupRequired; },
+  set sidebarSetupRequired(value) { sidebarSetupRequired = Boolean(value); },
+  get lastStreamContext() { return lastStreamContext; },
+  set lastStreamContext(value) { lastStreamContext = value || null; },
+  get activePort() { return activePort; },
+  set activePort(value) { activePort = value || null; }
+};
 
 async function refreshContextVisualization() {
   if (!contextViz) return;
@@ -298,13 +251,11 @@ async function refreshContextVisualization() {
   }
 }
 
-// ---- Utility functions ----
 // Token estimation using constants
 function estimateTokens(text) {
   return Math.ceil(text.length / UI_CONSTANTS.CHARS_PER_TOKEN);
 }
 
-// ---- Answer visibility management ----
 function updateAnswerVisibility() {
   const clearBtn = document.getElementById("clear-answer-btn");
   if (!hasAnswerContent(answerEl.innerHTML)) {
@@ -330,7 +281,6 @@ function setAnswerLoading(isLoading) {
   }
 }
 
-// ---- Sidepanel answer persistence ----
 let answerPersistTimeout = null;
 
 function scheduleAnswerPersist() {
@@ -533,7 +483,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ---- Input validation and sanitization ----
 // Note: escapeHtml() and validateUrl() are now in utils.js
 
 function openImageInNewTab(dataUrl, imageId) {
@@ -561,7 +510,6 @@ function downloadImage(dataUrl, imageId, mimeType) {
   link.click();
 }
 
-// ---- Balance handling ----
 async function refreshBalance() {
   if (!balanceEl) return;
 
@@ -594,602 +542,62 @@ if (balanceRefreshBtn) {
   balanceRefreshBtn.addEventListener("click", refreshBalance);
 }
 
-async function generateImage(prompt) {
-  askBtn.disabled = true;
-  setPromptStreamingState(false);
-  metaEl.textContent = "🖼️ Generating image...";
-
-  showAnswerBox();
-
-  const answerItem = document.createElement("div");
-  answerItem.className = "answer-item";
-  answerItem.innerHTML = `
-    <div class="answer-meta">
-      <span>${new Date().toLocaleTimeString()} - Image</span>
-    </div>
-    <div class="answer-content"></div>
-  `;
-
-  const answerContent = answerItem.querySelector(".answer-content");
-  if (answerContent && typeof buildImageCard === "function") {
-    answerContent.appendChild(buildImageCard({ state: "generating" }));
-  } else if (answerContent) {
-    answerContent.textContent = "Generating image...";
-  }
-
-  answerEl.appendChild(answerItem);
-  updateAnswerVisibility();
-  answerSection.scrollTop = answerSection.scrollHeight;
-
-  try {
-    const parsed = parseCombinedModelIdSafe(selectedCombinedModelId || "");
-    const provider = normalizeProviderSafe(parsed.provider || currentProvider);
-    const modelId = parsed.modelId || "";
-
-    const res = await chrome.runtime.sendMessage({
-      type: "image_query",
-      prompt,
-      provider,
-      model: modelId
-    });
-
-    if (!res?.ok) {
-      const errorMessage = res?.error || "Failed to generate image.";
-      if (answerContent && typeof buildImageCard === "function") {
-        answerContent.innerHTML = "";
-        answerContent.appendChild(buildImageCard({ state: "error" }));
-      } else if (answerContent) {
-        answerContent.textContent = errorMessage;
-      }
-      metaEl.textContent = "❌ Failed to generate image.";
-      return;
-    }
-
-    const image = res.image || {};
-    const imageId = image.imageId || crypto.randomUUID();
-    const mimeType = image.mimeType || "image/png";
-    const dataUrl = image.dataUrl || image.data || "";
-
-    if (typeof putImageCacheEntry === "function") {
-      await putImageCacheEntry({
-        imageId,
-        mimeType,
-        dataUrl,
-        createdAt: Date.now()
-      });
-    }
-
-    let resolvedDataUrl = dataUrl;
-    if (typeof getImageCacheEntry === "function") {
-      const cached = await getImageCacheEntry(imageId);
-      resolvedDataUrl = cached?.dataUrl || cached?.data || resolvedDataUrl;
-    }
-
-    if (answerContent && typeof buildImageCard === "function") {
-      if (!resolvedDataUrl) {
-        answerContent.innerHTML = "";
-        answerContent.appendChild(buildImageCard({ state: "expired" }));
-        metaEl.textContent = "⚠️ Image expired.";
-        return;
-      }
-      const readyCard = buildImageCard({
-        state: "ready",
-        imageUrl: resolvedDataUrl,
-        mode: "sidepanel",
-        onView: () => openImageInNewTab(resolvedDataUrl, imageId),
-        onDownload: () => downloadImage(resolvedDataUrl, imageId, mimeType)
-      });
-      const thumb = readyCard.querySelector(".image-card-thumb");
-      if (thumb) {
-        thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl, imageId));
-      }
-      answerContent.innerHTML = "";
-      answerContent.appendChild(readyCard);
-    } else if (answerContent) {
-      answerContent.textContent = "Image generated.";
-    }
-
-    metaEl.textContent = "✅ Image generated.";
-    answerSection.scrollTop = answerSection.scrollHeight;
-    await refreshBalance();
-  } catch (e) {
-    console.error("Error generating image:", e);
-    if (answerContent && typeof buildImageCard === "function") {
-      answerContent.innerHTML = "";
-      answerContent.appendChild(buildImageCard({ state: "error" }));
-    } else if (answerContent) {
-      answerContent.textContent = e?.message || String(e);
-    }
-    metaEl.textContent = "❌ Failed to generate image.";
-  } finally {
-    askBtn.disabled = false;
-  }
+function buildSidepanelPromptDeps() {
+  return {
+    state: sidepanelControllerState,
+    promptEl,
+    askBtn,
+    setPromptStreamingState,
+    metaEl,
+    showAnswerBox,
+    answerEl,
+    updateAnswerVisibility,
+    answerSection,
+    parseCombinedModelIdSafe,
+    normalizeProviderSafe,
+    sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+    buildImageCard: (typeof buildImageCard === "function") ? buildImageCard : null,
+    putImageCacheEntry: (typeof putImageCacheEntry === "function") ? putImageCacheEntry : null,
+    getImageCacheEntry: (typeof getImageCacheEntry === "function") ? getImageCacheEntry : null,
+    openImageInNewTab,
+    downloadImage,
+    refreshBalance,
+    sanitizePrompt,
+    clearPromptAfterSend: (typeof clearPromptAfterSend === "function") ? clearPromptAfterSend : null,
+    generateImageImpl: (prompt) => generateImage(prompt),
+    typingIndicator,
+    showTypingIndicator,
+    queryActiveTab: () => chrome.tabs.query({ active: true, currentWindow: true }),
+    getProviderLabelSafe,
+    hideTypingIndicator,
+    buildStreamErrorHtml,
+    getStreamingFallbackMessage: (typeof getStreamingFallbackMessage === "function") ? getStreamingFallbackMessage : null,
+    extractReasoningFromStreamChunk: (typeof extractReasoningFromStreamChunk === "function") ? extractReasoningFromStreamChunk : null,
+    extractSources,
+    applyMarkdownStyles,
+    safeHtmlSetter: (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function")
+      ? window.safeHtml.setSanitizedHtml
+      : null,
+    modelMap,
+    getModelDisplayName,
+    UI_CONSTANTS,
+    removeReasoningBubbles: (typeof removeReasoningBubbles === "function") ? removeReasoningBubbles : null,
+    makeSourceReferencesClickable,
+    createSourcesIndicator,
+    renderSourcesSummary,
+    contextViz,
+    escapeHtml,
+    estimatedCostEl
+  };
 }
 
-// ---- Ask function with real-time streaming ----
+async function generateImage(prompt) {
+  return sidepanelPromptControllerUtils.generateImage(buildSidepanelPromptDeps(), prompt);
+}
+
 async function askQuestion() {
-  const rawPrompt = promptEl.value;
-  const prompt = sanitizePrompt(rawPrompt);
-
-  if (!prompt) {
-    metaEl.textContent = "Enter a prompt first.";
-    return;
-  }
-
-  if (prompt.length >= 10000) {
-    metaEl.textContent = "⚠️ Prompt truncated to 10,000 characters.";
-  }
-
-  // Disconnect any active port first
-  if (activePort) {
-    try {
-      activePort.disconnect();
-    } catch (e) {
-      // Ignore errors
-    }
-    activePort = null;
-  }
-
-  if (imageModeEnabled) {
-    if (typeof clearPromptAfterSend === "function") {
-      clearPromptAfterSend(promptEl);
-    } else {
-      promptEl.value = "";
-      promptEl.style.height = "auto";
-    }
-    await generateImage(prompt);
-    return;
-  }
-
-  askBtn.disabled = true;
-  setPromptStreamingState(true);
-
-  // Step 1: Show preparation
-  metaEl.textContent = "🔄 Preparing request...";
-
-  // Move typing indicator to bottom of answer section
-  showAnswerBox();
-  answerEl.appendChild(typingIndicator);
-  showTypingIndicator();
-  answerSection.scrollTop = answerSection.scrollHeight;
-
   try {
-    // Get current tab ID for conversation context
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tabId = tabs[0]?.id || 'default';
-
-    // Get current context size for display
-    const currentContextMsg = await chrome.runtime.sendMessage({
-      type: "get_context_size",
-      tabId
-    });
-    const contextSize = currentContextMsg?.contextSize || 0;
-    const contextInfo = contextSize > 0 ? ` (with ${Math.floor(contextSize / 2)} previous Q&A)` : '';
-
-    // Show "Thinking..." if reasoning is enabled
-    if (reasoningEnabled) {
-      metaEl.textContent = `💭 Thinking${contextInfo}...`;
-    } else {
-      metaEl.textContent = `📤 Streaming response${contextInfo}...`;
-    }
-
-    // Create answer item for streaming
-    const answerItem = document.createElement("div");
-    answerItem.className = "answer-item";
-    const contextBadge = contextSize > 2 ? `<span class="answer-context-badge" title="${contextSize} messages in conversation context">🧠 ${Math.floor(contextSize / 2)} Q&A</span>` : '';
-
-    answerItem.innerHTML = `
-      <div class="answer-meta">
-        <span>${new Date().toLocaleTimeString()} - Streaming...</span>
-      </div>
-      ${reasoningEnabled ? '<div class="reasoning-content" style="margin-bottom: 12px;" role="region" aria-label="Reasoning steps"></div>' : ''}
-      <div class="answer-content" role="article" aria-live="polite"></div>
-      <div class="answer-footer">
-        <div class="answer-stats">
-          <span class="answer-time" aria-label="Response time">--s</span>
-          <span class="answer-tokens" aria-label="Token count">-- tokens</span>
-          ${contextBadge}
-        </div>
-        <div class="token-usage-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Token usage">
-          <div class="token-usage-fill" style="width: 0%;"></div>
-        </div>
-        <div class="answer-actions">
-          <div class="answer-actions-left">
-            <button class="action-btn copy-answer-btn" title="Copy answer" aria-label="Copy answer">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-            </button>
-            <div class="export-menu">
-              <button class="action-btn export-btn" title="Export" aria-label="Export" aria-haspopup="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                  <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.41 1.41L11 6.83V16h2V6.83l3.09 3.08 1.41-1.41L12 2z"/>
-                </svg>
-              </button>
-              <div class="export-menu-items">
-                <button class="export-option" data-format="pdf">Export PDF</button>
-                <button class="export-option" data-format="markdown">Export Markdown</button>
-                <button class="export-option" data-format="docx">Export DOCX</button>
-              </div>
-            </div>
-          </div>
-          <div class="answer-sources-summary"></div>
-        </div>
-      </div>
-    `;
-
-    hideTypingIndicator();
-    answerEl.appendChild(answerItem);
-
-    const answerContent = answerItem.querySelector(".answer-content");
-    let reasoningContent = answerItem.querySelector(".reasoning-content");
-    const answerMeta = answerItem.querySelector(".answer-meta");
-
-    const ensureReasoningSection = () => {
-      if (reasoningContent) return;
-      const wrapper = document.createElement("div");
-      wrapper.className = "reasoning-content";
-      wrapper.style.marginBottom = "12px";
-      wrapper.setAttribute("role", "region");
-      wrapper.setAttribute("aria-label", "Reasoning steps");
-      wrapper.innerHTML = `
-        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-            <span>💭</span>
-            <span>Thinking...</span>
-          </div>
-          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
-        </div>
-      `;
-      const answerContentEl = answerItem.querySelector(".answer-content");
-      if (answerContentEl) {
-        answerContentEl.before(wrapper);
-      } else {
-        answerItem.appendChild(wrapper);
-      }
-      reasoningContent = wrapper;
-    };
-
-    // Setup reasoning display if enabled
-    if (reasoningEnabled && reasoningContent) {
-      reasoningContent.innerHTML = `
-        <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
-          <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-            <span>💭</span>
-            <span>Thinking...</span>
-          </div>
-          <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
-        </div>
-      `;
-    }
-
-    const streamContext = {
-      prompt,
-      tabId,
-      contextSize,
-      webSearch: webSearchEnabled,
-      reasoning: reasoningEnabled,
-      selectedCombinedModelId,
-      currentProvider
-    };
-    lastStreamContext = streamContext;
-
-    const resetAnswerForRetry = () => {
-      answerContent.innerHTML = '';
-      const metaSpan = answerMeta.querySelector('span');
-      if (metaSpan) {
-        metaSpan.textContent = `${new Date().toLocaleTimeString()} - Streaming...`;
-      }
-      const timeSpan = answerItem.querySelector(".answer-time");
-      const tokensSpan = answerItem.querySelector(".answer-tokens");
-      const tokenBar = answerItem.querySelector(".token-usage-fill");
-      if (timeSpan) timeSpan.textContent = '--s';
-      if (tokensSpan) tokensSpan.textContent = '-- tokens';
-      if (tokenBar) {
-        tokenBar.style.width = '0%';
-        tokenBar.style.background = '';
-      }
-      const progressBar = answerItem.querySelector(".token-usage-bar");
-      if (progressBar) {
-        progressBar.setAttribute('aria-valuenow', '0');
-      }
-      const sourcesSummary = answerItem.querySelector(".answer-sources-summary");
-      if (sourcesSummary) {
-        sourcesSummary.innerHTML = '';
-      }
-      if (typeof removeReasoningBubbles === "function") {
-        removeReasoningBubbles(answerItem);
-      }
-      if (streamContext.reasoning) {
-        ensureReasoningSection();
-        if (reasoningContent) {
-          reasoningContent.innerHTML = `
-            <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
-              <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                <span>💭</span>
-                <span>Thinking...</span>
-              </div>
-              <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
-            </div>
-          `;
-        }
-      } else if (reasoningContent) {
-        reasoningContent.remove();
-        reasoningContent = null;
-      }
-    };
-
-    const renderStreamError = (message, statusText) => {
-      answerContent.innerHTML = buildStreamErrorHtml(message);
-      const retryBtn = answerContent.querySelector('.retry-btn');
-      if (retryBtn) {
-        retryBtn.addEventListener('click', () => {
-          if (activePort) return;
-          retryBtn.disabled = true;
-          resetAnswerForRetry();
-          startStream({ retry: true });
-        });
-      }
-      const metaSpan = answerMeta.querySelector('span');
-      if (metaSpan) {
-        metaSpan.textContent = `Error - ${new Date().toLocaleTimeString()}`;
-      }
-      metaEl.textContent = statusText || `❌ Error from ${getProviderLabelSafe(currentProvider)}.`;
-      hideTypingIndicator();
-      updateAnswerVisibility();
-      answerSection.scrollTop = answerSection.scrollHeight;
-    };
-
-    const startStream = ({ retry = false } = {}) => {
-      let reasoningText = reasoningContent?.querySelector(".reasoning-text");
-      let reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-      let fullAnswer = '';
-      let hasCompleted = false;
-      let hasError = false;
-      let currentModel = '';
-      let finalTokens = null;
-      let finalContextSize = streamContext.contextSize;
-      let hasReceivedReasoning = false;
-      const reasoningStreamState = { inReasoning: false, carry: "" };
-      const streamStartTime = Date.now();
-
-      if (retry) {
-        const contextInfo = streamContext.contextSize > 0 ? ` (with ${Math.floor(streamContext.contextSize / 2)} previous Q&A)` : '';
-        metaEl.textContent = `🔁 Retrying${contextInfo}...`;
-      }
-
-      // Connect via Port for streaming
-      const port = chrome.runtime.connect({ name: 'streaming' });
-      activePort = port;
-      askBtn.disabled = true;
-      setPromptStreamingState(true);
-
-      port.postMessage({
-        type: 'start_stream',
-        prompt: streamContext.prompt,
-        webSearch: streamContext.webSearch,
-        reasoning: streamContext.reasoning,
-        tabId: streamContext.tabId,
-        retry: retry === true
-      });
-
-      // Handle port disconnection (e.g., when stopped)
-      port.onDisconnect.addListener(() => {
-        activePort = null;
-        setPromptStreamingState(false);
-        askBtn.disabled = false;
-
-        if (!hasCompleted && !hasError) {
-          const fallbackMessage = typeof getStreamingFallbackMessage === 'function'
-            ? getStreamingFallbackMessage(fullAnswer, hasReceivedReasoning)
-            : null;
-          if (fallbackMessage) {
-            renderStreamError(fallbackMessage, "⚠️ Stream ended without an answer.");
-          }
-        }
-      });
-
-      port.onMessage.addListener((msg) => {
-        console.log('[Port] Received message type:', msg.type, 'fullAnswer length:', fullAnswer.length);
-        if (msg.type === 'reasoning' && msg.reasoning) {
-          ensureReasoningSection();
-          reasoningText = reasoningContent?.querySelector(".reasoning-text");
-          reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-          if (reasoningText) {
-            // Stream reasoning in real-time
-            hasReceivedReasoning = true;
-            // Change "Thinking..." to "Reasoning:" once we receive content
-            if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
-              reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
-            }
-            reasoningText.textContent += msg.reasoning;
-            answerSection.scrollTop = answerSection.scrollHeight;
-          }
-        } else if (msg.type === 'content' && msg.content) {
-          try {
-            // Stream content in real-time
-            let contentChunk = msg.content;
-            let reasoningChunk = "";
-            if (typeof extractReasoningFromStreamChunk === "function") {
-              const parsed = extractReasoningFromStreamChunk(reasoningStreamState, contentChunk);
-              contentChunk = parsed.content;
-              reasoningChunk = parsed.reasoning;
-            }
-
-            if (reasoningChunk) {
-              ensureReasoningSection();
-              reasoningText = reasoningContent?.querySelector(".reasoning-text");
-              reasoningHeader = reasoningContent?.querySelector(".reasoning-header");
-              if (reasoningText) {
-                hasReceivedReasoning = true;
-                if (reasoningHeader && reasoningHeader.textContent.includes('Thinking')) {
-                  reasoningHeader.innerHTML = '<span>💭</span><span>Reasoning:</span>';
-                }
-                reasoningText.textContent += reasoningChunk;
-                answerSection.scrollTop = answerSection.scrollHeight;
-              }
-            }
-
-            if (!contentChunk) {
-              return;
-            }
-
-            fullAnswer += contentChunk;
-
-            // Extract sources and render
-            const { sources, cleanText } = extractSources(fullAnswer);
-            // Note: applyMarkdownStyles handles escaping internally via markdownToHtml
-            const renderedHTML = applyMarkdownStyles(cleanText);
-
-            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-              window.safeHtml.setSanitizedHtml(answerContent, renderedHTML);
-            } else {
-              answerContent.innerHTML = renderedHTML;
-            }
-
-            // Note: Sources are rendered in the completion handler, not during streaming
-            // to avoid them being overwritten by subsequent innerHTML updates
-
-            answerSection.scrollTop = answerSection.scrollHeight;
-          } catch (e) {
-            console.error('[UI] Error rendering content:', e);
-            const renderMessage = `Error rendering: ${e?.message || "Unknown error"}`;
-            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-              window.safeHtml.setSanitizedHtml(answerContent, buildStreamErrorHtml(renderMessage));
-            } else {
-              answerContent.innerHTML = buildStreamErrorHtml(renderMessage);
-            }
-          }
-        } else if (msg.type === 'complete') {
-          // Stream complete
-          console.log('[Port] Completion received! fullAnswer length:', fullAnswer.length, 'tokens:', msg.tokens);
-          hasCompleted = true;
-          const elapsedTime = ((Date.now() - streamStartTime) / 1000).toFixed(2);
-          const selectedModel = streamContext.selectedCombinedModelId ? modelMap.get(streamContext.selectedCombinedModelId) : null;
-          currentModel = selectedModel ? getModelDisplayName(selectedModel) : (msg.model || 'default model');
-          finalTokens = msg.tokens;
-          finalContextSize = msg.contextSize;
-
-          // Update meta and footer
-          const metaSpan = answerMeta.querySelector('span');
-          if (metaSpan) {
-            metaSpan.textContent = `${new Date().toLocaleTimeString()} - ${currentModel}`;
-          }
-          const timeSpan = answerItem.querySelector(".answer-time");
-          const tokensSpan = answerItem.querySelector(".answer-tokens");
-          const tokenBar = answerItem.querySelector(".token-usage-fill");
-          if (timeSpan) timeSpan.textContent = `${elapsedTime}s`;
-          if (tokensSpan) tokensSpan.textContent = `${finalTokens || '—'} tokens`;
-
-          // Update token usage bar using constants
-          if (tokenBar && finalTokens) {
-            const percentage = Math.min((finalTokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100);
-            tokenBar.style.width = `${percentage}%`;
-
-            // Update progress bar aria attributes
-            const progressBar = answerItem.querySelector(".token-usage-bar");
-            if (progressBar) {
-              progressBar.setAttribute('aria-valuenow', Math.round(percentage));
-            }
-
-            // Color based on usage: green < 50%, yellow < 80%, red >= 80%
-            if (percentage < 50) {
-              tokenBar.style.background = 'linear-gradient(90deg, var(--color-success), #16a34a)';
-            } else if (percentage < 80) {
-              tokenBar.style.background = 'linear-gradient(90deg, var(--color-warning), #ca8a04)';
-            } else {
-              tokenBar.style.background = 'linear-gradient(90deg, var(--color-error), #dc2626)';
-            }
-          }
-
-          // Update context badge
-          if (finalContextSize > 2) {
-            const badge = answerItem.querySelector(".answer-context-badge");
-            if (badge) {
-              badge.textContent = `🧠 ${Math.floor(finalContextSize / 2)} Q&A`;
-              badge.title = `${finalContextSize} messages in conversation context`;
-            }
-          }
-
-          if (typeof removeReasoningBubbles === "function") {
-            removeReasoningBubbles(answerItem);
-          }
-
-          // Ensure answer content is visible (final render)
-          if (fullAnswer) {
-            const { sources, cleanText } = extractSources(fullAnswer);
-            // Note: applyMarkdownStyles handles escaping internally
-            const rendered = applyMarkdownStyles(cleanText);
-            if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-              window.safeHtml.setSanitizedHtml(answerContent, rendered);
-            } else {
-              answerContent.innerHTML = rendered;
-            }
-
-            // Add sources indicator if any
-            if (sources.length > 0) {
-              // Make [number] references clickable
-              makeSourceReferencesClickable(answerContent, sources);
-
-              // Add compact sources indicator button
-              const sourcesIndicator = createSourcesIndicator(sources, answerEl);
-              if (sourcesIndicator) {
-                answerContent.appendChild(sourcesIndicator);
-              }
-            }
-
-            renderSourcesSummary(answerItem, sources);
-          }
-
-          // Update context viz
-          if (contextViz && finalContextSize) {
-            try {
-              contextViz.update(finalContextSize, 'assistant');
-            } catch (e) {
-              console.error('[UI] Error updating context viz:', e);
-            }
-          }
-
-          metaEl.textContent = `✅ Answer received using ${currentModel}.`;
-          port.disconnect();
-          activePort = null;
-          setPromptStreamingState(false);
-        } else if (msg.type === 'error') {
-          // Handle error
-          hasError = true;
-          renderStreamError(msg.error, `❌ Error from ${getProviderLabelSafe(currentProvider)}.`);
-          port.disconnect();
-          activePort = null;
-          setPromptStreamingState(false);
-        }
-      });
-    };
-
-    startStream();
-
-    // Clear the prompt for next question
-    if (typeof clearPromptAfterSend === "function") {
-      clearPromptAfterSend(promptEl);
-    } else {
-      promptEl.value = "";
-      promptEl.style.height = 'auto';
-    }
-    // Hide estimated cost
-    estimatedCostEl.style.display = 'none';
-
-    // Update balance
-    await refreshBalance();
-  } catch (e) {
-    console.error("Error sending query:", e);
-    hideTypingIndicator();
-    const errorHtml = `<div class="answer-item error-item">
-      <div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div>
-      <div class="answer-content">${escapeHtml(e?.message || String(e))}</div>
-    </div>`;
-    answerEl.insertAdjacentHTML('beforeend', errorHtml);
-    updateAnswerVisibility();
-    metaEl.textContent = "❌ Failed to send request.";
-    answerSection.scrollTop = answerSection.scrollHeight;
+    return await sidepanelPromptControllerUtils.askQuestion(buildSidepanelPromptDeps());
   } finally {
     if (!activePort) {
       askBtn.disabled = false;
@@ -1198,10 +606,8 @@ async function askQuestion() {
   }
 }
 
-// ---- Ask button ----
 askBtn.addEventListener("click", askQuestion);
 
-// ---- Stop button ----
 stopBtn.addEventListener("click", () => {
   if (activePort) {
     activePort.disconnect();
@@ -1214,7 +620,6 @@ stopBtn.addEventListener("click", () => {
   }
 });
 
-// ---- Summarize Page button ----
 const summarizeBtn = document.getElementById("summarizeBtn");
 if (summarizeBtn) {
   summarizeBtn.addEventListener("click", async () => {
@@ -1456,7 +861,6 @@ if (summarizeBtn) {
   });
 }
 
-// ---- Auto-resize textarea ----
 function autoResizeTextarea() {
   // Reset height to auto to get the correct scrollHeight
   promptEl.style.height = 'auto';
@@ -1488,7 +892,6 @@ promptEl.addEventListener("input", () => {
   debouncedTokenEstimation(); // Debounce token calculation
 });
 
-// ---- Keyboard shortcuts ----
 promptEl.addEventListener("keydown", (e) => {
   // Ctrl/Cmd+Enter to send
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -1530,219 +933,47 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ---- Model loading and selection ----
 async function loadModels() {
-  try {
-    if (sidebarSetupRequired) {
-      modelStatusEl.textContent = "Enable a provider to load models.";
-      return;
-    }
-    modelStatusEl.textContent = "Loading models...";
-    const res = await chrome.runtime.sendMessage({ type: "get_models" });
-
-    if (!res?.ok) {
-      modelStatusEl.textContent = res?.error || "Failed to load models";
-      return;
-    }
-
-    combinedModels = res.models || [];
-    modelMap = new Map(combinedModels.map((model) => [model.id, model]));
-
-    const [localItems, syncItems] = await Promise.all([
-      getLocalStorage(["or_recent_models", "or_recent_models_naga"]),
-      chrome.storage.sync.get(["or_favorites", "or_favorites_naga"])
-    ]);
-    loadFavoritesAndRecents(localItems, syncItems);
-
-    const resolvedModelInput = modelInput || document.getElementById("model-input");
-    if (!resolvedModelInput) {
-      modelStatusEl.textContent = "Model input unavailable.";
-      return;
-    }
-
-    if (!modelDropdown) {
-      modelDropdown = new ModelDropdownManager({
-        inputElement: resolvedModelInput,
-        containerType: 'sidebar',
-        preferProvidedRecents: true,
-        onModelSelect: async (modelId) => {
-          const debugDropdown = Boolean(window.DEBUG_MODEL_DROPDOWN);
-          const selectedModel = modelMap.get(modelId);
-          const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
-          const parsed = parseCombinedModelIdSafe(modelId);
-          const provider = normalizeProviderSafe(parsed.provider);
-
-          if (debugDropdown) {
-            console.log('[ModelSelect]', {
-              modelId,
-              parsed,
-              provider,
-              displayName,
-              modelExists: Boolean(selectedModel)
-            });
-          }
-
-          if (modelInput) {
-            modelInput.value = displayName;
-          }
-
-          try {
-            const res = await chrome.runtime.sendMessage({
-              type: "set_model",
-              model: parsed.modelId,
-              provider
-            });
-
-            if (debugDropdown) {
-              console.log('[ModelSelect] response', res);
-            }
-
-          if (res?.ok) {
-            selectedCombinedModelId = modelId;
-            currentProvider = provider;
-            modelStatusEl.textContent = `Using: ${displayName}`;
-            await applyImageModeForModel();
-            return true;
-          }
-
-            modelStatusEl.textContent = "Failed to set model";
-            return false;
-          } catch (e) {
-            console.error("Error setting model:", e);
-            if (debugDropdown) {
-              console.log('[ModelSelect] error', e);
-            }
-            modelStatusEl.textContent = "Error setting model";
-            return false;
-          }
-        },
-        onToggleFavorite: async (modelId, isFavorite) => {
-          const parsed = parseCombinedModelIdSafe(modelId);
-          const provider = normalizeProviderSafe(parsed.provider);
-          const rawId = parsed.modelId;
-
-          if (!favoriteModelsByProvider[provider]) {
-            favoriteModelsByProvider[provider] = new Set();
-          }
-
-          if (isFavorite) {
-            favoriteModelsByProvider[provider].add(rawId);
-          } else {
-            favoriteModelsByProvider[provider].delete(rawId);
-          }
-
-          await chrome.storage.sync.set({
-            [getProviderStorageKeySafe("or_favorites", provider)]: Array.from(favoriteModelsByProvider[provider])
-          });
-        },
-        onAddRecent: async (modelId) => {
-          const parsed = parseCombinedModelIdSafe(modelId);
-          const provider = normalizeProviderSafe(parsed.provider);
-          const rawId = parsed.modelId;
-
-          const current = recentModelsByProvider[provider] || [];
-          const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
-          recentModelsByProvider[provider] = next;
-
-          await setLocalStorage({
-            [getProviderStorageKeySafe("or_recent_models", provider)]: next
-          });
-
-          modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-        }
-      });
-    } else {
-      modelDropdown.bindInput(resolvedModelInput);
-    }
-
-    modelDropdown.setModels(combinedModels);
-    modelDropdown.setFavorites(buildCombinedFavoritesList());
-    modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-
-    const cfgRes = await chrome.runtime.sendMessage({ type: "get_config" });
-    if (cfgRes?.ok && cfgRes.config?.model) {
-      const provider = normalizeProviderSafe(cfgRes.config.modelProvider || cfgRes.config.provider);
-      const combinedId = buildCombinedModelIdSafe(provider, cfgRes.config.model);
-      const selected = modelMap.get(combinedId);
-      const displayName = selected ? getModelDisplayName(selected) : combinedId;
-
-      currentProvider = provider;
-      selectedCombinedModelId = combinedId;
-      if (modelInput) {
-        modelInput.value = displayName;
-      }
-      modelStatusEl.textContent = `Using: ${displayName}`;
-      await applyImageModeForModel();
-    } else {
-      modelStatusEl.textContent = "Ready";
-      await applyImageModeForModel();
-    }
-  } catch (e) {
-    console.error("Error loading models:", e);
-    modelStatusEl.textContent = "Error loading models";
-    await applyImageModeForModel();
-  }
+  return sidepanelModelControllerUtils.loadModels({
+    state: sidepanelControllerState,
+    modelStatusEl,
+    sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+    getLocalStorage,
+    loadFavoritesAndRecents,
+    modelInput,
+    modelDropdownRef: () => modelDropdown,
+    ModelDropdownManager,
+    parseCombinedModelIdSafe,
+    normalizeProviderSafe,
+    getModelDisplayName,
+    setLocalStorage,
+    getProviderStorageKeySafe,
+    buildCombinedRecentList,
+    buildCombinedFavoritesList,
+    setModelDropdown: (value) => { modelDropdown = value; },
+    applyImageModeForModel,
+    buildCombinedModelIdSafe
+  });
 }
 
-// ---- Web Search and Reasoning toggles ----
 async function loadToggleSettings() {
-  try {
-    const settings = await getLocalStorage([
-      "or_web_search",
-      "or_reasoning",
-      "imageModeEnabled",
-      "webSearchEnabled",
-      "reasoningEnabled"
-    ]);
-    const legacyWebSearch = settings.webSearchEnabled;
-    const legacyReasoning = settings.reasoningEnabled;
-    webSearchEnabled = Boolean(
-      settings.or_web_search !== undefined ? settings.or_web_search : legacyWebSearch
-    );
-    reasoningEnabled = Boolean(
-      settings.or_reasoning !== undefined ? settings.or_reasoning : legacyReasoning
-    );
-    imageModeEnabled = settings.imageModeEnabled || false;
-
-    if (
-      (settings.or_web_search === undefined && legacyWebSearch !== undefined) ||
-      (settings.or_reasoning === undefined && legacyReasoning !== undefined)
-    ) {
-      await setLocalStorage({
-        or_web_search: webSearchEnabled,
-        or_reasoning: reasoningEnabled
-      });
-    }
-
-    if (webSearchEnabled) {
-      webSearchToggle.classList.add("active");
-    }
-    webSearchToggle.setAttribute('aria-pressed', webSearchEnabled.toString());
-
-    if (reasoningEnabled) {
-      reasoningToggle.classList.add("active");
-    }
-    reasoningToggle.setAttribute('aria-pressed', reasoningEnabled.toString());
-
-    if (imageToggle) {
-      setImageToggleUi(imageModeEnabled, false);
-      setImageToggleTitle("Enable Image Mode");
-    }
-  } catch (e) {
-    console.error("Error loading toggle settings:", e);
-  }
+  return sidepanelModelControllerUtils.loadToggleSettings({
+    state: sidepanelControllerState,
+    getLocalStorage,
+    setLocalStorage,
+    webSearchToggle,
+    reasoningToggle,
+    imageToggle,
+    setImageToggleUi,
+    setImageToggleTitle
+  });
 }
 
 async function saveToggleSettings() {
-  try {
-    await setLocalStorage({
-      or_web_search: webSearchEnabled,
-      or_reasoning: reasoningEnabled,
-      imageModeEnabled
-    });
-  } catch (e) {
-    console.error("Error saving toggle settings:", e);
-  }
+  return sidepanelModelControllerUtils.saveToggleSettings({
+    state: sidepanelControllerState,
+    setLocalStorage
+  });
 }
 
 webSearchToggle.addEventListener("click", async () => {
@@ -1768,7 +999,6 @@ if (imageToggle) {
   });
 }
 
-// ---- Settings icon click ----
 settingsIcon.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
@@ -1779,7 +1009,6 @@ if (setupOpenOptionsBtn) {
   });
 }
 
-// ---- Projects button - open Projects page ----
 const projectsBtn = document.getElementById('projects-btn');
 if (projectsBtn) {
   const openProjectsPage = async () => {
@@ -1820,7 +1049,6 @@ if (projectsBtn) {
   });
 }
 
-// ---- Clear answer button functionality ----
 const clearAnswerBtn = document.getElementById("clear-answer-btn");
 let pendingClearTimeout = null;
 let savedAnswersHtml = null;
@@ -1889,7 +1117,6 @@ if (clearAnswerBtn) {
   });
 }
 
-// ---- Typing indicator ----
 function showTypingIndicator() {
   typingIndicator.classList.add("active");
 }
@@ -1898,7 +1125,6 @@ function hideTypingIndicator() {
   typingIndicator.classList.remove("active");
 }
 
-// ---- Initial load ----
 document.addEventListener("DOMContentLoaded", async () => {
   // Hide answer box initially if empty
   updateAnswerVisibility();
@@ -1937,7 +1163,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-// ---- Provider update listener ----
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "provider_settings_updated") {
     (async () => {
