@@ -98,53 +98,55 @@ function setupKeyVisibilityToggles() {
 }
 
 // ---- Provider helpers ----
-function normalizeProvider(providerId) {
-  if (typeof normalizeProviderId === "function") {
-    return normalizeProviderId(providerId);
-  }
-  return providerId === "naga" ? "naga" : "openrouter";
-}
-
-function getProviderLabelSafe(providerId) {
-  if (typeof getProviderLabel === "function") {
-    return getProviderLabel(providerId);
-  }
-  return normalizeProvider(providerId) === "naga" ? "NagaAI" : "OpenRouter";
-}
-
-function getProviderStorageKeySafe(baseKey, providerId) {
-  if (typeof getProviderStorageKey === "function") {
-    return getProviderStorageKey(baseKey, providerId);
-  }
-  return normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
-}
-
-function buildCombinedModelIdSafe(providerId, modelId) {
-  if (typeof buildCombinedModelId === "function") {
-    return buildCombinedModelId(providerId, modelId);
-  }
-  return `${normalizeProvider(providerId)}:${modelId}`;
-}
-
-function parseCombinedModelIdSafe(combinedId) {
-  if (typeof parseCombinedModelId === "function") {
-    return parseCombinedModelId(combinedId);
-  }
-  if (!combinedId || typeof combinedId !== "string") {
-    return { provider: "openrouter", modelId: "" };
-  }
-  const splitIndex = combinedId.indexOf(":");
-  if (splitIndex === -1) {
-    return { provider: "openrouter", modelId: combinedId };
-  }
-  const provider = normalizeProvider(combinedId.slice(0, splitIndex));
-  const modelId = combinedId.slice(splitIndex + 1);
-  return { provider, modelId };
-}
-
-function getModelDisplayName(model) {
-  return model?.displayName || model?.name || model?.id || "";
-}
+const providerUiUtils = (typeof window !== "undefined" && window.providerUiUtils) || {};
+const normalizeProvider = providerUiUtils.normalizeProviderSafe
+  || ((providerId) => (providerId === "naga" ? "naga" : "openrouter"));
+const getProviderLabelSafe = providerUiUtils.getProviderLabelSafe
+  || ((providerId) => (normalizeProvider(providerId) === "naga" ? "NagaAI" : "OpenRouter"));
+const getProviderStorageKeySafe = providerUiUtils.getProviderStorageKeySafe
+  || ((baseKey, providerId) => (normalizeProvider(providerId) === "naga" ? `${baseKey}_naga` : baseKey));
+const buildCombinedModelIdSafe = providerUiUtils.buildCombinedModelIdSafe
+  || ((providerId, modelId) => `${normalizeProvider(providerId)}:${modelId}`);
+const parseCombinedModelIdSafe = providerUiUtils.parseCombinedModelIdSafe
+  || ((combinedId) => {
+    if (!combinedId || typeof combinedId !== "string") {
+      return { provider: "openrouter", modelId: "" };
+    }
+    const splitIndex = combinedId.indexOf(":");
+    if (splitIndex === -1) {
+      return { provider: "openrouter", modelId: combinedId };
+    }
+    const provider = normalizeProvider(combinedId.slice(0, splitIndex));
+    const modelId = combinedId.slice(splitIndex + 1);
+    return { provider, modelId };
+  });
+const getModelDisplayName = providerUiUtils.getModelDisplayName
+  || ((model) => model?.displayName || model?.name || model?.id || "");
+const combineFavoritesByProvider = providerUiUtils.buildCombinedFavoritesList
+  || ((favoritesByProvider) => {
+    const combined = [];
+    ["openrouter", "naga"].forEach((provider) => {
+      const favorites = favoritesByProvider[provider] || new Set();
+      favorites.forEach((modelId) => {
+        combined.push(buildCombinedModelIdSafe(provider, modelId));
+      });
+    });
+    return combined;
+  });
+const combineRecentsByProvider = providerUiUtils.buildCombinedRecentList
+  || ((recentsByProvider) => {
+    const combined = [];
+    ["openrouter", "naga"].forEach((provider) => {
+      const recents = recentsByProvider[provider] || [];
+      recents.forEach((modelId) => {
+        const combinedId = buildCombinedModelIdSafe(provider, modelId);
+        if (!combined.includes(combinedId)) {
+          combined.push(combinedId);
+        }
+      });
+    });
+    return combined;
+  });
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -217,28 +219,11 @@ function initModelDropdown() {
 }
 
 function buildCombinedFavoritesList() {
-  const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const favorites = favoriteModelsByProvider[provider] || new Set();
-    favorites.forEach((modelId) => {
-      combined.push(buildCombinedModelIdSafe(provider, modelId));
-    });
-  });
-  return combined;
+  return combineFavoritesByProvider(favoriteModelsByProvider);
 }
 
 function buildCombinedRecentList() {
-  const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const recents = recentModelsByProvider[provider] || [];
-    recents.forEach((modelId) => {
-      const combinedId = buildCombinedModelIdSafe(provider, modelId);
-      if (!combined.includes(combinedId)) {
-        combined.push(combinedId);
-      }
-    });
-  });
-  return combined;
+  return combineRecentsByProvider(recentModelsByProvider);
 }
 
 function loadFavoritesAndRecents(localItems, syncItems) {

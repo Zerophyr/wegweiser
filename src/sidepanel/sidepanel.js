@@ -89,38 +89,12 @@ let selectedCombinedModelId = null;
 let sidebarSetupRequired = false;
 let lastStreamContext = null;
 
-function normalizeProviderSafe(providerId) {
-  if (typeof normalizeProviderId === "function") {
-    return normalizeProviderId(providerId);
-  }
-  return providerId === "naga" ? "naga" : "openrouter";
-}
-
-function getProviderLabelSafe(providerId) {
-  if (typeof getProviderLabel === "function") {
-    return getProviderLabel(providerId);
-  }
-  return normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter";
-}
-
-function getProviderStorageKeySafe(baseKey, providerId) {
-  if (typeof getProviderStorageKey === "function") {
-    return getProviderStorageKey(baseKey, providerId);
-  }
-  return normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey;
-}
-
-function buildCombinedModelIdSafe(providerId, modelId) {
-  if (typeof buildCombinedModelId === "function") {
-    return buildCombinedModelId(providerId, modelId);
-  }
-  return `${normalizeProviderSafe(providerId)}:${modelId}`;
-}
-
-function parseCombinedModelIdSafe(combinedId) {
-  if (typeof parseCombinedModelId === "function") {
-    return parseCombinedModelId(combinedId);
-  }
+const sidepanelProviderUtils = (typeof window !== "undefined" && window.sidepanelProviderUtils) || {};
+const normalizeProviderSafe = sidepanelProviderUtils.normalizeProviderSafe || ((providerId) => providerId === "naga" ? "naga" : "openrouter");
+const getProviderLabelSafe = sidepanelProviderUtils.getProviderLabelSafe || ((providerId) => normalizeProviderSafe(providerId) === "naga" ? "NagaAI" : "OpenRouter");
+const getProviderStorageKeySafe = sidepanelProviderUtils.getProviderStorageKeySafe || ((baseKey, providerId) => normalizeProviderSafe(providerId) === "naga" ? `${baseKey}_naga` : baseKey);
+const buildCombinedModelIdSafe = sidepanelProviderUtils.buildCombinedModelIdSafe || ((providerId, modelId) => `${normalizeProviderSafe(providerId)}:${modelId}`);
+const parseCombinedModelIdSafe = sidepanelProviderUtils.parseCombinedModelIdSafe || ((combinedId) => {
   if (!combinedId || typeof combinedId !== "string") {
     return { provider: "openrouter", modelId: "" };
   }
@@ -131,11 +105,8 @@ function parseCombinedModelIdSafe(combinedId) {
   const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
   const modelId = combinedId.slice(splitIndex + 1);
   return { provider, modelId };
-}
-
-function getModelDisplayName(model) {
-  return model?.displayName || model?.name || model?.id || "";
-}
+});
+const getModelDisplayName = sidepanelProviderUtils.getModelDisplayName || ((model) => model?.displayName || model?.name || model?.id || "");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -155,30 +126,38 @@ async function applyImageModeForModel() {
   setImageToggleTitle("Enable Image Mode");
 }
 
-function buildCombinedFavoritesList() {
-  const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const favorites = favoriteModelsByProvider[provider] || new Set();
-    favorites.forEach((modelId) => {
-      combined.push(buildCombinedModelIdSafe(provider, modelId));
-    });
-  });
-  return combined;
-}
+const buildCombinedFavoritesList = () => (
+  sidepanelProviderUtils.buildCombinedFavoritesList
+    ? sidepanelProviderUtils.buildCombinedFavoritesList(favoriteModelsByProvider)
+    : (() => {
+      const combined = [];
+      ["openrouter", "naga"].forEach((provider) => {
+        const favorites = favoriteModelsByProvider[provider] || new Set();
+        favorites.forEach((modelId) => {
+          combined.push(buildCombinedModelIdSafe(provider, modelId));
+        });
+      });
+      return combined;
+    })()
+);
 
-function buildCombinedRecentList() {
-  const combined = [];
-  ["openrouter", "naga"].forEach((provider) => {
-    const recents = recentModelsByProvider[provider] || [];
-    recents.forEach((modelId) => {
-      const combinedId = buildCombinedModelIdSafe(provider, modelId);
-      if (!combined.includes(combinedId)) {
-        combined.push(combinedId);
-      }
-    });
-  });
-  return combined;
-}
+const buildCombinedRecentList = () => (
+  sidepanelProviderUtils.buildCombinedRecentList
+    ? sidepanelProviderUtils.buildCombinedRecentList(recentModelsByProvider)
+    : (() => {
+      const combined = [];
+      ["openrouter", "naga"].forEach((provider) => {
+        const recents = recentModelsByProvider[provider] || [];
+        recents.forEach((modelId) => {
+          const combinedId = buildCombinedModelIdSafe(provider, modelId);
+          if (!combined.includes(combinedId)) {
+            combined.push(combinedId);
+          }
+        });
+      });
+      return combined;
+    })()
+);
 
 function loadFavoritesAndRecents(localItems, syncItems) {
   favoriteModelsByProvider = {

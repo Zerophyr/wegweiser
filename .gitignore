@@ -58,3 +58,4 @@ docs/
 .local-backup-docs/
 .local-backup-meta/
 description.md
+audit.md

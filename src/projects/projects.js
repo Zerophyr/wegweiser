@@ -41,78 +41,55 @@ function normalizeImageCacheLimitMb(value) {
   return Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, snapped));
 }
 
-function normalizeProviderSafe(providerId) {
-  if (typeof normalizeProviderId === 'function') {
-    return normalizeProviderId(providerId);
-  }
-  return providerId === 'naga' ? 'naga' : 'openrouter';
-}
-
-function getProviderLabelSafe(providerId) {
-  if (typeof getProviderLabel === 'function') {
-    return getProviderLabel(providerId);
-  }
-  return normalizeProviderSafe(providerId) === 'naga' ? 'NagaAI' : 'OpenRouter';
-}
-
-function getProviderStorageKeySafe(baseKey, providerId) {
-  if (typeof getProviderStorageKey === 'function') {
-    return getProviderStorageKey(baseKey, providerId);
-  }
-  return normalizeProviderSafe(providerId) === 'naga' ? `${baseKey}_naga` : baseKey;
-}
-
-function buildCombinedModelIdSafe(providerId, modelId) {
-  if (typeof buildCombinedModelId === 'function') {
-    return buildCombinedModelId(providerId, modelId);
-  }
-  return `${normalizeProviderSafe(providerId)}:${modelId}`;
-}
-
-function parseCombinedModelIdSafe(combinedId) {
-  if (typeof parseCombinedModelId === 'function') {
-    return parseCombinedModelId(combinedId);
-  }
-  if (!combinedId || typeof combinedId !== 'string') {
-    return { provider: 'openrouter', modelId: '' };
-  }
-  const splitIndex = combinedId.indexOf(':');
-  if (splitIndex === -1) {
-    return { provider: 'openrouter', modelId: combinedId };
-  }
-  const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
-  const modelId = combinedId.slice(splitIndex + 1);
-  return { provider, modelId };
-}
-
-function getModelDisplayName(model) {
-  return model?.displayName || model?.name || model?.id || '';
-}
-
-function buildCombinedFavoritesList(favoritesByProvider) {
-  const combined = [];
-  ['openrouter', 'naga'].forEach((provider) => {
-    const favorites = favoritesByProvider[provider] || new Set();
-    favorites.forEach((modelId) => {
-      combined.push(buildCombinedModelIdSafe(provider, modelId));
-    });
+const providerUiUtils = (typeof window !== 'undefined' && window.providerUiUtils) || {};
+const normalizeProviderSafe = providerUiUtils.normalizeProviderSafe
+  || ((providerId) => (providerId === 'naga' ? 'naga' : 'openrouter'));
+const getProviderLabelSafe = providerUiUtils.getProviderLabelSafe
+  || ((providerId) => (normalizeProviderSafe(providerId) === 'naga' ? 'NagaAI' : 'OpenRouter'));
+const getProviderStorageKeySafe = providerUiUtils.getProviderStorageKeySafe
+  || ((baseKey, providerId) => (normalizeProviderSafe(providerId) === 'naga' ? `${baseKey}_naga` : baseKey));
+const buildCombinedModelIdSafe = providerUiUtils.buildCombinedModelIdSafe
+  || ((providerId, modelId) => `${normalizeProviderSafe(providerId)}:${modelId}`);
+const parseCombinedModelIdSafe = providerUiUtils.parseCombinedModelIdSafe
+  || ((combinedId) => {
+    if (!combinedId || typeof combinedId !== 'string') {
+      return { provider: 'openrouter', modelId: '' };
+    }
+    const splitIndex = combinedId.indexOf(':');
+    if (splitIndex === -1) {
+      return { provider: 'openrouter', modelId: combinedId };
+    }
+    const provider = normalizeProviderSafe(combinedId.slice(0, splitIndex));
+    const modelId = combinedId.slice(splitIndex + 1);
+    return { provider, modelId };
   });
-  return combined;
-}
-
-function buildCombinedRecentList(recentsByProvider) {
-  const combined = [];
-  ['openrouter', 'naga'].forEach((provider) => {
-    const recents = recentsByProvider[provider] || [];
-    recents.forEach((modelId) => {
-      const combinedId = buildCombinedModelIdSafe(provider, modelId);
-      if (!combined.includes(combinedId)) {
-        combined.push(combinedId);
-      }
+const getModelDisplayName = providerUiUtils.getModelDisplayName
+  || ((model) => model?.displayName || model?.name || model?.id || '');
+const buildCombinedFavoritesList = providerUiUtils.buildCombinedFavoritesList
+  || ((favoritesByProvider) => {
+    const combined = [];
+    ['openrouter', 'naga'].forEach((provider) => {
+      const favorites = favoritesByProvider[provider] || new Set();
+      favorites.forEach((modelId) => {
+        combined.push(buildCombinedModelIdSafe(provider, modelId));
+      });
     });
+    return combined;
   });
-  return combined;
-}
+const buildCombinedRecentList = providerUiUtils.buildCombinedRecentList
+  || ((recentsByProvider) => {
+    const combined = [];
+    ['openrouter', 'naga'].forEach((provider) => {
+      const recents = recentsByProvider[provider] || [];
+      recents.forEach((modelId) => {
+        const combinedId = buildCombinedModelIdSafe(provider, modelId);
+        if (!combined.includes(combinedId)) {
+          combined.push(combinedId);
+        }
+      });
+    });
+    return combined;
+  });
 
 function getProjectModelLabel(Project) {
   if (!Project || !Project.model) return 'Default';
@@ -219,11 +196,9 @@ function generateThreadTitle(firstMessage) {
   return firstMessage.substring(0, 50).trim() + '...';
 }
 
-function getLiveWindowSize(summary) {
-  return summary ? 8 : 12;
-}
-
-function splitMessagesForSummary(messages, liveWindowSize) {
+const projectsContextUtils = (typeof window !== 'undefined' && window.projectsContextUtils) || {};
+const getLiveWindowSize = projectsContextUtils.getLiveWindowSize || ((summary) => summary ? 8 : 12);
+const splitMessagesForSummary = projectsContextUtils.splitMessagesForSummary || ((messages, liveWindowSize) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   if (safeMessages.length <= liveWindowSize) {
     return { historyToSummarize: [], liveMessages: safeMessages };
@@ -233,41 +208,35 @@ function splitMessagesForSummary(messages, liveWindowSize) {
     historyToSummarize: safeMessages.slice(0, cutoffIndex),
     liveMessages: safeMessages.slice(cutoffIndex)
   };
-}
-
-function shouldSkipSummarization(prompt) {
+});
+const shouldSkipSummarization = projectsContextUtils.shouldSkipSummarization || ((prompt) => {
   if (typeof prompt !== 'string') return false;
   const estimatedTokens = Math.ceil(prompt.length / 4);
   return estimatedTokens > 2000;
-}
-
-function getSummaryMinLength(historyCount) {
+});
+const getSummaryMinLength = projectsContextUtils.getSummaryMinLength || ((historyCount) => {
   const safeCount = Number.isFinite(historyCount) ? historyCount : Number(historyCount) || 0;
   const scaled = safeCount * 20;
   return Math.max(80, Math.min(200, scaled));
-}
-
-function appendArchivedMessages(currentArchive, newMessages) {
+});
+const appendArchivedMessages = projectsContextUtils.appendArchivedMessages || ((currentArchive, newMessages) => {
   const safeCurrent = Array.isArray(currentArchive) ? currentArchive : [];
   const safeNew = Array.isArray(newMessages) ? newMessages : [];
   return [...safeCurrent, ...safeNew];
-}
-
-function buildProjectsContextData(thread) {
+});
+const buildProjectsContextData = projectsContextUtils.buildProjectsContextData || ((thread) => {
   const summary = typeof thread?.summary === 'string' ? thread.summary : '';
   const liveMessages = Array.isArray(thread?.messages) ? thread.messages : [];
   const archivedMessages = Array.isArray(thread?.archivedMessages) ? thread.archivedMessages : [];
   return { summary, liveMessages, archivedMessages };
-}
-
-function buildContextBadgeLabel(contextSize) {
+});
+const buildContextBadgeLabel = projectsContextUtils.buildContextBadgeLabel || ((contextSize) => {
   if (!contextSize || contextSize <= 2) {
     return '';
   }
   return `${Math.floor(contextSize / 2)} Q&A`;
-}
-
-function getContextUsageCount(thread, Project) {
+});
+const getContextUsageCount = projectsContextUtils.getContextUsageCount || ((thread, Project) => {
   const data = buildProjectsContextData(thread);
   let count = data.liveMessages.length;
   if (data.summary) {
@@ -277,7 +246,59 @@ function getContextUsageCount(thread, Project) {
     count += 1;
   }
   return count;
-}
+});
+const projectsStreamUtils = (typeof window !== 'undefined' && window.projectsStreamUtils) || {};
+const buildAssistantMessage = projectsStreamUtils.buildAssistantMessage || ((content, meta) => ({
+  role: 'assistant',
+  content,
+  meta
+}));
+const buildStreamMessages = projectsStreamUtils.buildStreamMessages || ((messages, prompt, systemInstruction, summary) => {
+  const baseMessages = Array.isArray(messages) ? [...messages] : [];
+  if (baseMessages.length > 0 && typeof prompt === 'string') {
+    const lastMessage = baseMessages[baseMessages.length - 1];
+    if (lastMessage?.role === 'user' && lastMessage.content === prompt) {
+      baseMessages.pop();
+    }
+  }
+  const finalMessages = [];
+  if (systemInstruction) {
+    const isOngoing = baseMessages.length > 0;
+    const content = isOngoing
+      ? `[Ongoing conversation. Follow these standing instructions without re-introducing yourself:]\n${systemInstruction}`
+      : systemInstruction;
+    finalMessages.push({ role: 'system', content });
+  }
+  if (summary) {
+    finalMessages.push({ role: 'system', content: `Summary so far:\n${summary}` });
+  }
+  finalMessages.push(...baseMessages);
+  return finalMessages;
+});
+const getSourcesData = projectsStreamUtils.getSourcesData || ((content) => {
+  if (typeof extractSources === 'function') {
+    return extractSources(content);
+  }
+  return { sources: [], cleanText: content };
+});
+const getTypingIndicatorHtml = projectsStreamUtils.getTypingIndicatorHtml || (() => `
+    <div class="typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `);
+const getStreamErrorHtml = projectsStreamUtils.getStreamErrorHtml || ((message) => {
+  const safeMessage = escapeHtml(message || 'Unknown error');
+  return `
+    <div class="error-content">
+      <div class="error-text">${safeMessage}</div>
+      <div class="error-actions">
+        <button class="retry-btn" type="button">Retry</button>
+      </div>
+    </div>
+  `;
+});
 
 function updateProjectsContextButton(thread, Project) {
   if (!elements.ProjectsContextBtn) return;
@@ -2225,45 +2246,6 @@ function bindEvents() {
 
 // ============ CHAT FUNCTIONALITY ============
 
-function buildAssistantMessage(content, meta) {
-  return {
-    role: 'assistant',
-    content,
-    meta
-  };
-}
-
-function buildStreamMessages(messages, prompt, systemInstruction, summary) {
-  const baseMessages = Array.isArray(messages) ? [...messages] : [];
-  if (baseMessages.length > 0 && typeof prompt === 'string') {
-    const lastMessage = baseMessages[baseMessages.length - 1];
-    if (lastMessage?.role === 'user' && lastMessage.content === prompt) {
-      baseMessages.pop();
-    }
-  }
-
-  const finalMessages = [];
-  if (systemInstruction) {
-    const isOngoing = baseMessages.length > 0;
-    const content = isOngoing
-      ? `[Ongoing conversation. Follow these standing instructions without re-introducing yourself:]\n${systemInstruction}`
-      : systemInstruction;
-    finalMessages.push({ role: 'system', content });
-  }
-  if (summary) {
-    finalMessages.push({ role: 'system', content: `Summary so far:\n${summary}` });
-  }
-  finalMessages.push(...baseMessages);
-  return finalMessages;
-}
-
-function getSourcesData(content) {
-  if (typeof extractSources === 'function') {
-    return extractSources(content);
-  }
-  return { sources: [], cleanText: content };
-}
-
 function createStreamingAssistantMessage() {
   const tokenStyle = typeof getTokenBarStyle === 'function'
     ? getTokenBarStyle(null)
@@ -2375,28 +2357,6 @@ function updateAssistantFooter(ui, meta) {
   if (ui.tokenBarEl) {
     ui.tokenBarEl.setAttribute('aria-valuenow', tokenStyle.percent);
   }
-}
-
-function getTypingIndicatorHtml() {
-  return `
-    <div class="typing-indicator">
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-    </div>
-  `;
-}
-
-function getStreamErrorHtml(message) {
-  const safeMessage = escapeHtml(message || 'Unknown error');
-  return `
-    <div class="error-content">
-      <div class="error-text">${safeMessage}</div>
-      <div class="error-actions">
-        <button class="retry-btn" type="button">Retry</button>
-      </div>
-    </div>
-  `;
 }
 
 function resetStreamingUi(ui) {

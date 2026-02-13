@@ -8,8 +8,7 @@ import {
   MODELS_CACHE_SCHEMA_VERSION,
   DEFAULTS,
   ERROR_MESSAGES,
-  API_CONFIG,
-  PROVIDERS
+  API_CONFIG
 } from '/src/shared/constants.js';
 import '/src/shared/crypto-store.js';
 import '/src/shared/encrypted-storage.js';
@@ -20,6 +19,13 @@ import {
   buildModelDisplayName,
   resolveNagaVendorLabel
 } from '/src/shared/model-utils.js';
+import {
+  normalizeProviderId,
+  getProviderConfig,
+  getModelsCacheKeys,
+  buildAuthHeaders,
+  buildBalanceHeaders
+} from '/src/background/provider-utils.js';
 
 const {
   deriveModelCapabilities = () => ({
@@ -133,52 +139,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // ---- Config (API key + model) ----
-function normalizeProviderId(providerId) {
-  if (providerId === "openrouter" || providerId === "naga") {
-    return providerId;
-  }
-  return "openrouter";
-}
-
-function getProviderConfig(providerId) {
-  const provider = normalizeProviderId(providerId);
-  return PROVIDERS[provider] || PROVIDERS.openrouter;
-}
-
-function getModelsCacheKeys(providerId) {
-  const provider = normalizeProviderId(providerId);
-  if (provider === "naga") {
-    return {
-      modelsKey: STORAGE_KEYS.MODELS_CACHE_NAGA,
-      timeKey: STORAGE_KEYS.MODELS_CACHE_TIME_NAGA,
-      versionKey: STORAGE_KEYS.MODELS_CACHE_VERSION_NAGA
-    };
-  }
-  return {
-    modelsKey: STORAGE_KEYS.MODELS_CACHE,
-    timeKey: STORAGE_KEYS.MODELS_CACHE_TIME,
-    versionKey: STORAGE_KEYS.MODELS_CACHE_VERSION
-  };
-}
-
-function buildAuthHeaders(apiKey, providerConfig) {
-  return {
-    "Authorization": `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-    ...(providerConfig.headers || {})
-  };
-}
-
-function buildBalanceHeaders(apiKey, providerConfig, provisioningKey) {
-  if (providerConfig.id !== "naga") {
-    return buildAuthHeaders(apiKey, providerConfig);
-  }
-  return {
-    "Authorization": `Bearer ${provisioningKey}`,
-    "Content-Type": "application/json",
-    ...(providerConfig.headers || {})
-  };
-}
 
 async function getApiKeyForProvider(providerId) {
   const provider = normalizeProviderId(providerId);

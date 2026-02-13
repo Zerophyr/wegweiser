@@ -86,18 +86,23 @@ _(Coming soon)_
 
 ```
 Wegweiser-extension/
+├── .github/                # CI workflows
+├── docs/                   # Plans and technical docs
+├── scripts/                # Build/release utilities
 ├── src/
-│   ├── background/         # Service worker
+│   ├── background/         # Service worker + provider/API orchestration
 │   ├── sidepanel/          # Sidebar UI
 │   ├── projects/           # Projects UI
-│   ├── image-viewer/        # Image viewer tab for generated images
 │   ├── options/            # Options page
-│   ├── modules/            # UI modules (markdown, toast, models, themes)
-│   ├── lib/                # Vendor libs (DOMPurify)
-│   └── shared/             # Shared helpers + constants
-│       └── image-store.js   # IndexedDB-backed image storage
+│   ├── image-viewer/       # Image viewer tab for generated images
+│   ├── modules/            # Shared UI modules (markdown, models, streaming, provider utils)
+│   ├── shared/             # Shared storage/security utilities
+│   └── lib/                # Vendor libs (DOMPurify)
+├── tests/                  # Jest test suite
 ├── icons/                  # Extension icons
+├── privacy-policy.html
 ├── manifest.json
+├── package.json
 └── README.md
 ```
 
@@ -106,6 +111,7 @@ Wegweiser-extension/
 - **Local API Key Storage** - API keys stored locally only (not synced)
 - **Encrypted at Rest** - Settings and chat data are encrypted with a device-local key (no passphrase)
 - **Encrypted Chat Storage** - Chats live in IndexedDB, encrypted per record
+- **Key Marker Clarification** - Storage key markers (for example `v1:`) are compatibility metadata, not a security boundary
 - **Masked Keys** - API/provisioning keys are hidden by default with a visibility toggle
 - **Content Security Policy** - Strict CSP prevents injection attacks
 - **Input Validation** - All user input sanitized
