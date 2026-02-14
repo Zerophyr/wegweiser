@@ -80,6 +80,15 @@ function updateImageCacheLimitLabel(value) {
   imageCacheLimitValue.textContent = `${value} MB`;
 }
 
+function setHtmlSafely(element, html) {
+  if (!element) return;
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.textContent = typeof html === "string" ? html : "";
+}
+
 function setupKeyVisibilityToggles() {
   if (typeof bindVisibilityToggles !== "function") return;
   bindVisibilityToggles(document);
@@ -125,6 +134,8 @@ const {
     return combined;
   }
 } = providerUiUtils;
+const optionsModelControllerUtils = (typeof window !== "undefined" && window.optionsModelControllerUtils) || {};
+const optionsHistoryDetailControllerUtils = (typeof window !== "undefined" && window.optionsHistoryDetailControllerUtils) || {};
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -214,35 +225,45 @@ function loadFavoritesAndRecents(localItems, syncItems) {
   };
 }
 
+const optionsModelController = optionsModelControllerUtils.createOptionsModelController
+  ? optionsModelControllerUtils.createOptionsModelController({
+      getLocalStorage,
+      buildCombinedModelIdSafe,
+      getModelDisplayName,
+      normalizeProvider,
+      setSelectedCombinedModelId: (value) => { selectedCombinedModelId = value; },
+      nextRequestId: () => { modelsLoadRequestId += 1; return modelsLoadRequestId; },
+      getRequestId: () => modelsLoadRequestId,
+      isModelInputFocused: () => document.activeElement === modelInput,
+      getModelsStatusText: () => modelsStatusEl?.textContent || "",
+      setModelsStatus: (textValue, colorValue) => {
+        if (modelsStatusEl) {
+          modelsStatusEl.textContent = textValue;
+          modelsStatusEl.style.color = colorValue || "";
+        }
+      },
+      setModelsLoadInFlight: (value) => { modelsLoadInFlight = Boolean(value); },
+      getModelsLoadInFlight: () => modelsLoadInFlight,
+      sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+      getModelDropdown: () => modelDropdown,
+      initModelDropdown,
+      buildCombinedFavoritesList,
+      buildCombinedRecentList,
+      getSelectedCombinedModelId: () => selectedCombinedModelId,
+      getModelMap: () => modelMap,
+      setModelMap: (value) => { modelMap = value instanceof Map ? value : new Map(); },
+      setCombinedModels: (value) => { combinedModels = Array.isArray(value) ? value : []; },
+      getCombinedModels: () => combinedModels,
+      setModelInputValue: (value) => { if (modelInput) modelInput.value = value || ""; },
+      setModelSelectValue: (value) => { if (modelSelect) modelSelect.value = value || ""; },
+      logError: (...args) => console.error(...args),
+      notifyProviderSettingsUpdated
+    })
+  : null;
 
-async function loadCachedModelsFromStorage() {
-  const cache = await getLocalStorage([
-    "or_models_cache"
-  ]);
-
-  const toCombined = (models, provider) => (Array.isArray(models) ? models : []).map((model) => {
-    const rawId = model.rawId || model.id;
-    return {
-      id: buildCombinedModelIdSafe(provider, rawId),
-      rawId,
-      provider,
-      displayName: getModelDisplayName(model),
-      name: model.name || model.displayName || rawId
-    };
-  });
-
-  return [
-    ...toCombined(cache.or_models_cache, "openrouter")
-  ];
-}
-
-function loadSelectedModel(localItems) {
-  const modelProvider = normalizeProvider(localItems.or_model_provider || localItems.or_provider);
-  const rawModelId = localItems.or_model || "";
-  selectedCombinedModelId = rawModelId
-    ? buildCombinedModelIdSafe(modelProvider, rawModelId)
-    : null;
-}
+let loadCachedModelsFromStorage = optionsModelController?.loadCachedModelsFromStorage || (async () => []);
+let loadSelectedModel = optionsModelController?.loadSelectedModel || (() => {});
+let loadModels = optionsModelController?.loadModels || (async () => {});
 
 async function notifyProviderSettingsUpdated(providerId) {
   try {
@@ -352,7 +373,7 @@ function renderPromptHistory(history) {
       </div>
     `);
 
-    div.innerHTML = buildPreview(item, ts, escapeHtml);
+    setHtmlSafely(div, buildPreview(item, ts, escapeHtml));
 
     div.dataset.itemId = item.id;
 
@@ -385,115 +406,21 @@ function renderPromptHistory(history) {
 
 // Show history detail in right column
 function showHistoryDetail(item) {
-  const previewColumn = document.getElementById("history-preview-column");
-  const detailContent = document.getElementById("history-detail-content");
-
-  if (!previewColumn || !detailContent) return;
-
-  const ts = new Date(item.createdAt).toLocaleString();
-  const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
-  const buildDetail = historyViewUtils.buildHistoryDetailHtml || ((entry, timestamp, escapeFn) => `
-    <div style="margin-bottom: 20px;">
-      <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 12px;">${timestamp}</div>
-      <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Prompt</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeFn(entry.prompt)}</div>
-      <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Answer</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeFn(entry.answer || "No answer available")}</div>
-      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <button class="detail-copy-prompt-btn" style="padding: 8px 16px; background: var(--color-primary); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Prompt</button>
-        <button class="detail-copy-answer-btn" style="padding: 8px 16px; background: var(--color-accent); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Answer</button>
-        <button class="detail-delete-btn" style="padding: 8px 16px; background: var(--color-error); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Delete</button>
-      </div>
-    </div>
-  `);
-
-  detailContent.innerHTML = buildDetail(item, ts, escapeHtml);
-
-  // Show the preview column
-  previewColumn.classList.add("active");
-
-  // Add event listeners for buttons
-  const copyPromptBtn = detailContent.querySelector(".detail-copy-prompt-btn");
-  const copyAnswerBtn = detailContent.querySelector(".detail-copy-answer-btn");
-  const deleteBtn = detailContent.querySelector(".detail-delete-btn");
-
-  if (copyPromptBtn) {
-    copyPromptBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(item.prompt);
-        copyPromptBtn.textContent = "Copied!";
-        setTimeout(() => {
-          copyPromptBtn.textContent = "Copy Prompt";
-        }, 2000);
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
-    });
-  }
-
-  if (copyAnswerBtn) {
-    copyAnswerBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(item.answer || "");
-        copyAnswerBtn.textContent = "Copied!";
-        setTimeout(() => {
-          copyAnswerBtn.textContent = "Copy Answer";
-        }, 2000);
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
-    });
-  }
-
-  if (deleteBtn) {
-    deleteBtn.addEventListener("click", async () => {
-      // Commit any previous pending delete first
-      if (pendingDeleteItem) {
-        clearTimeout(pendingDeleteItem.timeout);
-        await commitDeleteHistoryItem(pendingDeleteItem.item.id);
-        pendingDeleteItem = null;
-      }
-
-      // Store item for potential undo
-      const itemToDelete = item;
-
-      // Remove from UI immediately
-      const itemEl = document.querySelector(`.history-item[data-item-id="${item.id}"]`);
-      if (itemEl) {
-        itemEl.remove();
-      }
-
-      // Close detail panel
-      previewColumn.classList.remove("active");
-
-      // Show undo toast
-      showToast('Prompt deleted', 'info', {
-        duration: 5000,
-        action: {
-          label: 'Undo',
-          onClick: async () => {
-            // Cancel the pending delete
-            if (pendingDeleteItem) {
-              clearTimeout(pendingDeleteItem.timeout);
-              pendingDeleteItem = null;
-            }
-            // Reload history to restore item in UI
-            await loadPromptHistory();
-            toast.success('Prompt restored');
-          }
-        }
-      });
-
-      // Schedule actual deletion after 5 seconds
-      pendingDeleteItem = {
-        item: itemToDelete,
-        timeout: setTimeout(async () => {
-          await commitDeleteHistoryItem(itemToDelete.id);
-          pendingDeleteItem = null;
-        }, 5000)
-      };
-    });
-  }
+  return optionsHistoryDetailControllerUtils.showOptionsHistoryDetail
+    ? optionsHistoryDetailControllerUtils.showOptionsHistoryDetail(item, {
+        setHtmlSafely,
+        escapeHtml,
+        getCurrentHistory: () => currentHistory,
+        setCurrentHistory: (value) => { currentHistory = value; },
+        getPendingDeleteItem: () => pendingDeleteItem,
+        setPendingDeleteItem: (value) => { pendingDeleteItem = value; },
+        getLocalStorage,
+        setLocalStorage,
+        loadPromptHistory,
+        showToast,
+        toastApi: toast
+      })
+    : null;
 }
 
 // Close detail panel
@@ -528,121 +455,6 @@ async function commitDeleteHistoryItem(id) {
 }
 
 // ---- Load models from OpenRouter API ----
-async function loadModels(options = {}) {
-  const { silent = false } = options;
-  const requestId = ++modelsLoadRequestId;
-  const focusedBeforeLoad = document.activeElement === modelInput;
-  const hasActiveModelStatus = (modelsStatusEl.textContent || "").startsWith("Using:");
-
-  if (!silent && !hasActiveModelStatus) {
-    modelsStatusEl.textContent = "Loading models…";
-  }
-
-  modelsLoadInFlight = true;
-
-  try {
-    const res = await chrome.runtime.sendMessage({ type: "get_models" });
-
-    if (requestId !== modelsLoadRequestId) {
-      return;
-    }
-
-    if (!res?.ok) {
-      throw new Error(res?.error || "Failed to load models");
-    }
-
-    const nextModels = (res.models || []).map((model) => ({
-      id: model.id,
-      rawId: model.rawId || model.id,
-      provider: model.provider,
-      displayName: getModelDisplayName(model),
-      name: model.name || model.displayName || model.id
-    }));
-
-    combinedModels = nextModels;
-    modelMap = new Map(combinedModels.map((model) => [model.id, model]));
-
-    if (!modelDropdown) {
-      initModelDropdown();
-    }
-    modelDropdown.setModels(combinedModels);
-    modelDropdown.setFavorites(buildCombinedFavoritesList());
-    modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-
-    if (selectedCombinedModelId && modelInput && !focusedBeforeLoad) {
-      const selected = modelMap.get(selectedCombinedModelId);
-      modelInput.value = selected ? getModelDisplayName(selected) : selectedCombinedModelId;
-      modelSelect.value = selectedCombinedModelId;
-    }
-
-    if (!combinedModels.length) {
-      modelsStatusEl.textContent = res.reason === "no_enabled_providers"
-        ? "Set your OpenRouter API key to load models."
-        : "No models available.";
-      modelsStatusEl.style.color = "var(--color-text-muted)";
-    } else {
-      modelsStatusEl.textContent = `✓ Loaded ${combinedModels.length} models.`;
-      modelsStatusEl.style.color = "var(--color-success)";
-    }
-  } catch (e) {
-    if (requestId !== modelsLoadRequestId) {
-      return;
-    }
-
-    console.error("Failed to load models:", e);
-    const hasCachedModels = Array.isArray(combinedModels) && combinedModels.length > 0;
-
-    if (hasCachedModels && modelDropdown) {
-      modelDropdown.setModels(combinedModels);
-      modelDropdown.setFavorites(buildCombinedFavoritesList());
-      modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-      if (!silent) {
-        modelsStatusEl.textContent = "Using cached models (refresh failed).";
-        modelsStatusEl.style.color = "var(--color-warning)";
-      }
-      return;
-    }
-
-    const message = String(e?.message || "").toLowerCase();
-    if (message.includes("failed to fetch")) {
-      try {
-        const cachedCombinedModels = await loadCachedModelsFromStorage();
-        if (cachedCombinedModels.length) {
-          combinedModels = cachedCombinedModels;
-          modelMap = new Map(combinedModels.map((model) => [model.id, model]));
-          if (!modelDropdown) {
-            initModelDropdown();
-          }
-          modelDropdown.setModels(combinedModels);
-          modelDropdown.setFavorites(buildCombinedFavoritesList());
-          modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-          if (!silent) {
-            modelsStatusEl.textContent = "Using cached models (OpenRouter unavailable).";
-            modelsStatusEl.style.color = "var(--color-warning)";
-          }
-          return;
-        }
-      } catch (_) {
-        // ignore cache fallback errors
-      }
-    }
-
-    if (!silent) {
-      if (message.includes("no api key")) {
-        modelsStatusEl.textContent = "Set at least one API key to load models.";
-      } else if (message.includes("failed to fetch")) {
-        modelsStatusEl.textContent = "Could not reach OpenRouter. Check network status.";
-      } else {
-        modelsStatusEl.textContent = `Error: ${e.message}`;
-      }
-      modelsStatusEl.style.color = "var(--color-error)";
-    }
-  } finally {
-    if (requestId === modelsLoadRequestId) {
-      modelsLoadInFlight = false;
-    }
-  }
-}
 
 // Auto-load models when page opens if API key exists
 Promise.all([
@@ -704,14 +516,7 @@ async function saveProviderKey(provider, value) {
   await setLocalStorage({ [key]: value });
 }
 
-async function updateProviderModelsAfterChange() {
-  if (!modelsLoadInFlight) {
-    modelsStatusEl.textContent = "Refreshing models…";
-    modelsStatusEl.style.color = "var(--color-text-muted)";
-  }
-  await loadModels();
-  await notifyProviderSettingsUpdated("all");
-}
+let updateProviderModelsAfterChange = optionsModelController?.updateProviderModelsAfterChange || (async () => {});
 
 function wireProviderKeyInput(provider, inputEl) {
   if (!inputEl) return;

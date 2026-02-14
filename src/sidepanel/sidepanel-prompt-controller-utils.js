@@ -1,5 +1,23 @@
 // sidepanel-prompt-controller-utils.js - prompt/image generation orchestration
 
+function setSafeHtml(element, html, safeHtmlSetter) {
+  if (!element) return;
+  if (typeof safeHtmlSetter === "function") {
+    safeHtmlSetter(element, html);
+    return;
+  }
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html);
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
+function clearElementContent(element) {
+  if (!element) return;
+  element.textContent = "";
+}
+
 async function generateImage(deps, prompt) {
   const {
     state,
@@ -61,7 +79,7 @@ async function generateImage(deps, prompt) {
     if (!res?.ok) {
       const errorMessage = res?.error || "Failed to generate image.";
       if (answerContent && typeof buildImageCard === "function") {
-        answerContent.innerHTML = "";
+        clearElementContent(answerContent);
         answerContent.appendChild(buildImageCard({ state: "error" }));
       } else if (answerContent) {
         answerContent.textContent = errorMessage;
@@ -87,7 +105,7 @@ async function generateImage(deps, prompt) {
 
     if (answerContent && typeof buildImageCard === "function") {
       if (!resolvedDataUrl) {
-        answerContent.innerHTML = "";
+        clearElementContent(answerContent);
         answerContent.appendChild(buildImageCard({ state: "expired" }));
         metaEl.textContent = "⚠️ Image expired.";
         return;
@@ -103,7 +121,7 @@ async function generateImage(deps, prompt) {
       if (thumb) {
         thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl, imageId));
       }
-      answerContent.innerHTML = "";
+      clearElementContent(answerContent);
       answerContent.appendChild(readyCard);
     } else if (answerContent) {
       answerContent.textContent = "Image generated.";
@@ -115,7 +133,7 @@ async function generateImage(deps, prompt) {
   } catch (e) {
     console.error("Error generating image:", e);
     if (answerContent && typeof buildImageCard === "function") {
-      answerContent.innerHTML = "";
+      clearElementContent(answerContent);
       answerContent.appendChild(buildImageCard({ state: "error" }));
     } else if (answerContent) {
       answerContent.textContent = e?.message || String(e);
@@ -289,7 +307,7 @@ async function askQuestion(deps) {
     state.lastStreamContext = streamContext;
 
     const resetAnswerForRetry = () => {
-      answerContent.innerHTML = "";
+      clearElementContent(answerContent);
       const metaSpan = answerMeta.querySelector("span");
       if (metaSpan) metaSpan.textContent = `${new Date().toLocaleTimeString()} - Streaming...`;
       const timeSpan = answerItem.querySelector(".answer-time");
@@ -299,12 +317,12 @@ async function askQuestion(deps) {
       if (tokensSpan) tokensSpan.textContent = "-- tokens";
       if (tokenBar) tokenBar.style.width = "0%";
       const sourcesSummary = answerItem.querySelector(".answer-sources-summary");
-      if (sourcesSummary) sourcesSummary.innerHTML = "";
+      if (sourcesSummary) sourcesSummary.textContent = "";
       if (typeof removeReasoningBubbles === "function") removeReasoningBubbles(answerItem);
     };
 
     const renderStreamError = (message, statusText) => {
-      answerContent.innerHTML = buildStreamErrorHtml(message);
+      setSafeHtml(answerContent, buildStreamErrorHtml(message), safeHtmlSetter);
       const retryBtn = answerContent.querySelector(".retry-btn");
       if (retryBtn) {
         retryBtn.addEventListener("click", () => {
@@ -389,12 +407,12 @@ async function askQuestion(deps) {
             if (safeHtmlSetter) {
               safeHtmlSetter(answerContent, renderedHTML);
             } else {
-              answerContent.innerHTML = renderedHTML;
+              setSafeHtml(answerContent, renderedHTML, safeHtmlSetter);
             }
             answerSection.scrollTop = answerSection.scrollHeight;
           } catch (e) {
             const renderMessage = `Error rendering: ${e?.message || "Unknown error"}`;
-            answerContent.innerHTML = buildStreamErrorHtml(renderMessage);
+            setSafeHtml(answerContent, buildStreamErrorHtml(renderMessage), safeHtmlSetter);
           }
           return;
         }
@@ -426,7 +444,7 @@ async function askQuestion(deps) {
           if (fullAnswer) {
             const { sources, cleanText } = extractSources(fullAnswer);
             const rendered = applyMarkdownStyles(cleanText);
-            if (safeHtmlSetter) safeHtmlSetter(answerContent, rendered); else answerContent.innerHTML = rendered;
+            setSafeHtml(answerContent, rendered, safeHtmlSetter);
             if (sources.length > 0) {
               makeSourceReferencesClickable(answerContent, sources);
               const sourcesIndicator = createSourcesIndicator(sources, answerEl);
@@ -468,7 +486,11 @@ async function askQuestion(deps) {
     console.error("Error sending query:", e);
     hideTypingIndicator();
     const errorHtml = `<div class="answer-item error-item"><div class="answer-meta">Error - ${new Date().toLocaleTimeString()}</div><div class="answer-content">${escapeHtml(e?.message || String(e))}</div></div>`;
-    answerEl.insertAdjacentHTML("beforeend", errorHtml);
+    if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.appendSanitizedHtml === "function") {
+      window.safeHtml.appendSanitizedHtml(answerEl, errorHtml);
+    } else {
+      answerEl.insertAdjacentHTML("beforeend", errorHtml);
+    }
     updateAnswerVisibility();
     metaEl.textContent = "❌ Failed to send request.";
     answerSection.scrollTop = answerSection.scrollHeight;

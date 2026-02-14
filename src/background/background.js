@@ -34,6 +34,7 @@ import '/src/background/background-stream-runtime-utils.js';
 import '/src/background/background-stream-chunk-utils.js';
 import { registerBackgroundMessageRouter } from '/src/background/background-message-router-utils.js';
 import { registerStreamingPortListener } from '/src/background/background-provider-stream-controller-utils.js';
+import { createStreamOpenRouterResponse } from '/src/background/background-stream-orchestrator-utils.js';
 
 const {
   extractOpenRouterImageUrl = () => null,
@@ -854,294 +855,26 @@ async function getProviderBalance() {
 }
 
 // ---- Streaming Port Connection ----
+const streamOpenRouterResponse = createStreamOpenRouterResponse({
+  loadConfig,
+  normalizeProviderId,
+  getApiKeyForProvider,
+  errorMessages: ERROR_MESSAGES,
+  ensureContextLoaded,
+  getProviderConfig,
+  createSafePortSender,
+  conversationContexts,
+  defaults: DEFAULTS,
+  persistContextForTab,
+  buildStreamRequestBody,
+  apiConfig: API_CONFIG,
+  debugLogger,
+  buildAuthHeaders,
+  splitSseLines,
+  parseSseDataLine,
+  getStreamDeltaStats,
+  getReasoningText,
+  addHistoryEntry
+});
+
 registerStreamingPortListener(chrome, { streamOpenRouterResponse });
-
-// Streaming version of callOpenRouter that sends real-time updates via Port
-async function streamOpenRouterResponse(prompt, webSearch, reasoning, tabId, port, isDisconnectedFn, customMessages = null, customModel = null, customProvider = null, retry = false) {
-  const cfg = await loadConfig();
-  const providerId = normalizeProviderId(customProvider || cfg.modelProvider);
-  const apiKey = await getApiKeyForProvider(providerId);
-  if (!apiKey) {
-    throw new Error(ERROR_MESSAGES.NO_API_KEY);
-  }
-  await ensureContextLoaded();
-  const providerConfig = getProviderConfig(providerId);
-  const streamStartedAt = Date.now();
-
-  const safeSendMessage = createSafePortSender(port, isDisconnectedFn, console);
-
-  // Use custom messages if provided (for Projects), otherwise use conversation context
-  let context;
-  const isProjectsMode = customMessages !== null;
-
-  if (isProjectsMode) {
-    // Projects mode: use provided messages array
-    context = [...customMessages];
-    // Add the new user message unless retry would duplicate it
-    const last = context[context.length - 1];
-    const shouldAppend = !retry || !(last && last.role === "user" && last.content === prompt);
-    if (shouldAppend) {
-      context.push({ role: "user", content: prompt });
-    }
-  } else {
-    // Sidebar mode: use per-tab context
-    context = conversationContexts.get(tabId) || [];
-    const last = context[context.length - 1];
-    const shouldAppend = !retry || !(last && last.role === "user" && last.content === prompt);
-    if (shouldAppend) {
-      context.push({ role: "user", content: prompt });
-    }
-
-    // Trim context if needed
-    if (context.length > DEFAULTS.MAX_CONTEXT_MESSAGES) {
-      context.splice(0, context.length - DEFAULTS.MAX_CONTEXT_MESSAGES);
-    }
-    conversationContexts.set(tabId, context);
-    await persistContextForTab(tabId);
-  }
-
-  // Use custom model if provided, otherwise use config model
-  let modelName = customModel || cfg.model || DEFAULTS.MODEL;
-  if (providerConfig.supportsWebSearch && webSearch && !modelName.endsWith(':online')) {
-    modelName = `${modelName}:online`;
-  }
-
-  const requestBody = buildStreamRequestBody({
-    modelName,
-    context,
-    providerId: providerConfig.id,
-    webSearch,
-    reasoning
-  });
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
-
-  debugLogger.log({
-    type: "stream_start",
-    provider: providerConfig.id,
-    model: modelName,
-    tabId: tabId || null,
-    projectsMode: isProjectsMode,
-    promptChars: typeof prompt === "string" ? prompt.length : 0,
-    messageCount: Array.isArray(context) ? context.length : 0,
-    webSearch: Boolean(webSearch),
-    reasoning: Boolean(reasoning),
-    startedAt: new Date(streamStartedAt).toISOString()
-  });
-
-  let res;
-  try {
-    res = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: buildAuthHeaders(apiKey, providerConfig),
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
-    });
-  } catch (e) {
-    debugLogger.log({
-      type: "stream_error",
-      stage: "fetch",
-      message: e?.message || String(e),
-      elapsedMs: Date.now() - streamStartedAt
-    });
-    throw e;
-  }
-
-  clearTimeout(timeoutId);
-
-  debugLogger.log({
-    type: "stream_response",
-    status: res.status,
-    ok: res.ok,
-    contentType: res.headers.get("content-type") || null,
-    elapsedMs: Date.now() - streamStartedAt
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    debugLogger.log({
-      type: "stream_error",
-      stage: "response",
-      status: res.status,
-      message: data?.error?.message || ERROR_MESSAGES.API_ERROR,
-      elapsedMs: Date.now() - streamStartedAt
-    });
-    throw new Error(data?.error?.message || ERROR_MESSAGES.API_ERROR);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let fullContent = '';
-  let tokens = null;
-  let firstChunkLogged = false;
-
-  console.log('[Streaming] Starting real-time stream...');
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      console.log('[Streaming] Reader reported done, exiting loop');
-      debugLogger.log({
-        type: "stream_reader_done",
-        elapsedMs: Date.now() - streamStartedAt,
-        contentLength: fullContent.length
-      });
-      break;
-    }
-
-    // Check if port was disconnected
-    if (isDisconnectedFn && isDisconnectedFn()) {
-      console.log('[Streaming] Port disconnected, stopping stream');
-      debugLogger.log({
-        type: "stream_port_disconnected",
-        elapsedMs: Date.now() - streamStartedAt
-      });
-      break;
-    }
-
-    if (debugLogger.isEnabled() && !firstChunkLogged) {
-      firstChunkLogged = true;
-      debugLogger.log({
-        type: "stream_first_chunk",
-        elapsedMs: Date.now() - streamStartedAt
-      });
-    }
-
-    const split = splitSseLines(buffer, decoder.decode(value, { stream: true }));
-    const lines = split.lines;
-    buffer = split.buffer;
-
-    for (const line of lines) {
-      if (line.trim() === '') continue;
-      const parsed = parseSseDataLine(line);
-      if (parsed.done) {
-        console.log('[Streaming] Received [DONE] signal');
-        debugLogger.log({
-          type: "stream_done_signal",
-          elapsedMs: Date.now() - streamStartedAt
-        });
-        continue;
-      }
-      if (!parsed.chunk && !parsed.error) continue;
-      if (parsed.error) {
-        console.error('[Streaming] Error parsing chunk:', parsed.error);
-        debugLogger.log({
-          type: "stream_parse_error",
-          message: parsed.error?.message || String(parsed.error),
-          elapsedMs: Date.now() - streamStartedAt
-        });
-        continue;
-      }
-
-      try {
-        const chunk = parsed.chunk;
-        const delta = chunk?.choices?.[0]?.delta;
-
-        if (debugLogger.isEnabled()) {
-          const stats = getStreamDeltaStats(delta, chunk);
-          debugLogger.log({
-            type: "stream_chunk",
-            deltaKeys: delta ? Object.keys(delta) : [],
-            contentLength: stats.contentLength,
-            reasoningLength: stats.reasoningLength,
-            hasUsage: stats.hasUsage,
-            totalTokens: stats.totalTokens,
-            elapsedMs: Date.now() - streamStartedAt
-          });
-        }
-
-        // Debug: Log the full delta structure to understand web search response format
-        if (delta && Object.keys(delta).length > 0) {
-          console.log('[Streaming] Delta keys:', Object.keys(delta), 'delta:', JSON.stringify(delta).slice(0, 200));
-        }
-
-        // Stream content chunks
-        if (delta?.content) {
-          fullContent += delta.content;
-          const sent = safeSendMessage({
-            type: 'content',
-            content: delta.content
-          });
-          if (!sent) break; // Stop if port disconnected
-        }
-
-        // Stream reasoning chunks
-        // Note: delta.reasoning and delta.reasoning_details contain the same content
-        // We only need to send one of them to avoid duplicates
-        const reasoningText = getReasoningText(delta);
-        if (reasoningText) {
-          const sent = safeSendMessage({
-            type: 'reasoning',
-            reasoning: reasoningText
-          });
-          if (!sent) break; // Stop if port disconnected
-        }
-
-        // Extract usage
-        if (chunk.usage) {
-          tokens = chunk.usage.total_tokens;
-        }
-      } catch (e) {
-        console.error('[Streaming] Error parsing chunk:', e);
-        debugLogger.log({
-          type: "stream_parse_error",
-          message: e?.message || String(e),
-          elapsedMs: Date.now() - streamStartedAt
-        });
-      }
-    }
-  }
-
-  console.log('[Streaming] Stream complete, fullContent length:', fullContent.length);
-
-  // Handle case where no content was received (e.g., only reasoning, or stream error)
-  if (!fullContent || fullContent.length === 0) {
-    console.warn('[Streaming] Warning: Stream completed with no content');
-    debugLogger.log({
-      type: "stream_no_content",
-      elapsedMs: Date.now() - streamStartedAt,
-      tokens
-    });
-    safeSendMessage({
-      type: 'error',
-      error: 'No response content received from the model. The model may have only produced reasoning without a final answer. Please try again.'
-    });
-    return;
-  }
-
-  // Only save to sidebar context if not using Projects mode
-  if (!isProjectsMode) {
-    // Add assistant response to context
-    context.push({ role: "assistant", content: fullContent });
-
-    // Trim context again
-    if (context.length > DEFAULTS.MAX_CONTEXT_MESSAGES) {
-      context.splice(0, context.length - DEFAULTS.MAX_CONTEXT_MESSAGES);
-    }
-
-    // Save updated context back to Map
-    conversationContexts.set(tabId, context);
-    await persistContextForTab(tabId);
-
-    // Save to history
-    await addHistoryEntry(prompt, fullContent);
-  }
-
-  // Send completion message (only if port still connected)
-  const completeSent = safeSendMessage({
-    type: 'complete',
-    tokens,
-    contextSize: context.length,
-    model: customModel || cfg.model
-  });
-  debugLogger.log({
-    type: "stream_complete",
-    elapsedMs: Date.now() - streamStartedAt,
-    contentLength: fullContent.length,
-    tokens
-  });
-  console.log('[Streaming] Completion message sent:', completeSent);
-}
-

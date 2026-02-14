@@ -1,27 +1,12 @@
 // chat-store.js - encrypted IndexedDB-backed chat storage
-
 (function () {
-  const cryptoStore = (typeof require !== "undefined")
-    ? require("./crypto-store.js")
-    : (typeof globalThis !== "undefined" ? globalThis : {});
-  const encryptJson = cryptoStore.encryptJson;
-  const decryptJson = cryptoStore.decryptJson;
-  const backends = (typeof require !== "undefined")
-    ? require("./chat-store-backends.js")
-    : (typeof globalThis !== "undefined" ? (globalThis.chatStoreBackends || {}) : {});
+  const root = (typeof globalThis !== "undefined") ? globalThis : {};
+  const cryptoStore = (typeof require !== "undefined") ? require("./crypto-store.js") : root;
+  const backends = (typeof require !== "undefined") ? require("./chat-store-backends.js") : (root.chatStoreBackends || {});
+  const { encryptJson, decryptJson } = cryptoStore;
   const {
-    STORE_NAMES = {
-      PROJECTS: "projects",
-      THREADS: "threads",
-      MESSAGES: "messages",
-      SUMMARIES: "summaries",
-      ARCHIVES: "archives"
-    },
     estimateRecordSize = () => 0,
-    createEmptyStats = () => ({
-      bytesUsed: 0,
-      counts: { projects: 0, threads: 0, messages: 0, summaries: 0, archives: 0 }
-    }),
+    createEmptyStats = () => ({ bytesUsed: 0, counts: { projects: 0, threads: 0, messages: 0, summaries: 0, archives: 0 } }),
     createMemoryChatStore = () => ({
       projects: new Map(),
       threads: new Map(),
@@ -32,318 +17,275 @@
     }),
     createIndexedDbChatStore = () => null
   } = backends;
+  let cachedStore = null;
 
-let cachedStore = null;
+  function createStoreAdapter() {
+    const memoryStore = createMemoryChatStore();
+    if (typeof indexedDB === "undefined" || typeof createIndexedDbChatStore !== "function") {
+      return memoryStore;
+    }
+    const indexedDbStore = createIndexedDbChatStore(indexedDB);
+    return (indexedDbStore && typeof indexedDbStore === "object") ? indexedDbStore : memoryStore;
+  }
 
-function createStoreAdapter() {
-  const memoryStore = createMemoryChatStore();
-  if (typeof indexedDB === "undefined") {
-    return memoryStore;
+  function getDefaultStore() {
+    if (!cachedStore || typeof cachedStore !== "object") {
+      cachedStore = createStoreAdapter();
+    }
+    return cachedStore;
   }
-  if (typeof createIndexedDbChatStore !== "function") {
-    return memoryStore;
-  }
-  const indexedDbStore = createIndexedDbChatStore(indexedDB);
-  return (indexedDbStore && typeof indexedDbStore === "object")
-    ? indexedDbStore
-    : memoryStore;
-}
 
-function getDefaultStore() {
-  if (!cachedStore || typeof cachedStore !== "object") {
-    cachedStore = createStoreAdapter();
+  function adapterOf(store) {
+    return store || getDefaultStore();
   }
-  return cachedStore;
-}
 
-async function putThread(thread, store) {
-  const adapter = store || getDefaultStore();
-  if (!thread || !thread.id) return null;
-  const encrypted = await encryptJson(thread);
-  const record = {
-    id: thread.id,
-    projectId: thread.projectId || null,
-    data: encrypted.data,
-    iv: encrypted.iv,
-    alg: encrypted.alg,
-    v: encrypted.v
-  };
-  if (typeof adapter.putThread === "function") {
-    await adapter.putThread(record);
-  } else {
-    adapter.threads.set(thread.id, record);
+  async function encodePayload(payload) {
+    const encrypted = await encryptJson(payload);
+    return {
+      data: encrypted.data,
+      iv: encrypted.iv,
+      alg: encrypted.alg,
+      v: encrypted.v
+    };
   }
-  return thread;
-}
 
-async function getThread(threadId, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  const record = typeof adapter.getThread === "function"
-    ? await adapter.getThread(threadId)
-    : (adapter.threads.get(threadId) || null);
-  if (!record) return null;
-  return decryptJson(record);
-}
+  async function decodeRecord(record) {
+    if (!record) return null;
+    return decryptJson(record);
+  }
 
-async function putMessage(message, store) {
-  const adapter = store || getDefaultStore();
-  if (!message || !message.id || !message.threadId) return null;
-  const createdAt = message.createdAt || message.meta?.createdAt || Date.now();
-  const encrypted = await encryptJson(message);
-  const record = {
-    id: message.id,
-    threadId: message.threadId,
-    role: message.role || null,
-    createdAt,
-    data: encrypted.data,
-    iv: encrypted.iv,
-    alg: encrypted.alg,
-    v: encrypted.v
-  };
-  if (typeof adapter.putMessage === "function") {
-    await adapter.putMessage(record);
-  } else {
-    const list = adapter.messages.get(message.threadId) || [];
-    list.push(record);
-    adapter.messages.set(message.threadId, list);
+  async function decodeList(records) {
+    const output = [];
+    for (const record of (records || [])) {
+      const decrypted = await decodeRecord(record);
+      if (decrypted) output.push(decrypted);
+    }
+    return output;
   }
-  return message;
-}
 
-async function getMessages(threadId, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return [];
-  const list = typeof adapter.getMessages === "function"
-    ? await adapter.getMessages(threadId)
-    : (adapter.messages.get(threadId) || []);
-  const result = [];
-  for (const record of list) {
-    const decrypted = await decryptJson(record);
-    if (decrypted) result.push(decrypted);
+  async function putThread(thread, store) {
+    const adapter = adapterOf(store);
+    if (!thread?.id) return null;
+    const record = {
+      id: thread.id,
+      projectId: thread.projectId || null,
+      ...(await encodePayload(thread))
+    };
+    if (typeof adapter.putThread === "function") {
+      await adapter.putThread(record);
+    } else {
+      adapter.threads.set(thread.id, record);
+    }
+    return thread;
   }
-  result.sort((a, b) => {
-    const aTime = typeof a?.createdAt === "number" ? a.createdAt : 0;
-    const bTime = typeof b?.createdAt === "number" ? b.createdAt : 0;
-    return aTime - bTime;
-  });
-  return result;
-}
 
-async function setSummary(threadId, summary, summaryUpdatedAt, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  const payload = {
-    threadId,
-    summary: summary || "",
-    summaryUpdatedAt: summaryUpdatedAt || null
-  };
-  const encrypted = await encryptJson(payload);
-  const record = {
-    id: threadId,
-    threadId,
-    updatedAt: summaryUpdatedAt || null,
-    data: encrypted.data,
-    iv: encrypted.iv,
-    alg: encrypted.alg,
-    v: encrypted.v
-  };
-  if (typeof adapter.putSummary === "function") {
-    await adapter.putSummary(record);
-  } else {
-    adapter.summaries.set(threadId, record);
+  async function getThread(threadId, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
+    const record = (typeof adapter.getThread === "function")
+      ? await adapter.getThread(threadId)
+      : (adapter.threads.get(threadId) || null);
+    return decodeRecord(record);
   }
-  return payload;
-}
 
-async function getSummary(threadId, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  const record = typeof adapter.getSummary === "function"
-    ? await adapter.getSummary(threadId)
-    : (adapter.summaries.get(threadId) || null);
-  if (!record) return null;
-  return decryptJson(record);
-}
+  async function putMessage(message, store) {
+    const adapter = adapterOf(store);
+    if (!message?.id || !message?.threadId) return null;
 
-async function setArchivedMessages(threadId, archivedMessages, archivedUpdatedAt, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  const payload = {
-    threadId,
-    archivedMessages: Array.isArray(archivedMessages) ? archivedMessages : [],
-    archivedUpdatedAt: archivedUpdatedAt || null
-  };
-  const encrypted = await encryptJson(payload);
-  const record = {
-    id: threadId,
-    threadId,
-    updatedAt: archivedUpdatedAt || null,
-    data: encrypted.data,
-    iv: encrypted.iv,
-    alg: encrypted.alg,
-    v: encrypted.v
-  };
-  if (typeof adapter.putArchive === "function") {
-    await adapter.putArchive(record);
-  } else {
-    adapter.archives.set(threadId, record);
-  }
-  return payload;
-}
+    const createdAt = message.createdAt || message.meta?.createdAt || Date.now();
+    const record = {
+      id: message.id,
+      threadId: message.threadId,
+      role: message.role || null,
+      createdAt,
+      ...(await encodePayload(message))
+    };
 
-async function getArchivedMessages(threadId, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  const record = typeof adapter.getArchive === "function"
-    ? await adapter.getArchive(threadId)
-    : (adapter.archives.get(threadId) || null);
-  if (!record) return null;
-  return decryptJson(record);
-}
+    if (typeof adapter.putMessage === "function") {
+      await adapter.putMessage(record);
+    } else {
+      const list = adapter.messages.get(message.threadId) || [];
+      list.push(record);
+      adapter.messages.set(message.threadId, list);
+    }
+    return message;
+  }
 
-async function putProject(project, store) {
-  const adapter = store || getDefaultStore();
-  if (!project || !project.id) return null;
-  const encrypted = await encryptJson(project);
-  const record = {
-    id: project.id,
-    updatedAt: project.updatedAt || null,
-    data: encrypted.data,
-    iv: encrypted.iv,
-    alg: encrypted.alg,
-    v: encrypted.v
-  };
-  if (typeof adapter.putProject === "function") {
-    await adapter.putProject(record);
-  } else {
-    adapter.projects.set(project.id, record);
+  async function getMessages(threadId, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return [];
+    const list = (typeof adapter.getMessages === "function")
+      ? await adapter.getMessages(threadId)
+      : (adapter.messages.get(threadId) || []);
+    const result = await decodeList(list);
+    result.sort((a, b) => (Number(a?.createdAt) || 0) - (Number(b?.createdAt) || 0));
+    return result;
   }
-  return project;
-}
 
-async function getProject(projectId, store) {
-  const adapter = store || getDefaultStore();
-  if (!projectId) return null;
-  const record = typeof adapter.getProject === "function"
-    ? await adapter.getProject(projectId)
-    : (adapter.projects.get(projectId) || null);
-  if (!record) return null;
-  return decryptJson(record);
-}
+  async function setSummary(threadId, summary, summaryUpdatedAt, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
 
-async function deleteProject(projectId, store) {
-  const adapter = store || getDefaultStore();
-  if (!projectId) return null;
-  if (typeof adapter.deleteProject === "function") {
-    await adapter.deleteProject(projectId);
-  } else {
-    adapter.projects.delete(projectId);
-  }
-  return true;
-}
+    const payload = { threadId, summary: summary || "", summaryUpdatedAt: summaryUpdatedAt || null };
+    const record = {
+      id: threadId,
+      threadId,
+      updatedAt: payload.summaryUpdatedAt,
+      ...(await encodePayload(payload))
+    };
 
-async function getProjects(store) {
-  const adapter = store || getDefaultStore();
-  const list = typeof adapter.getProjects === "function"
-    ? await adapter.getProjects()
-    : Array.from(adapter.projects.values());
-  const result = [];
-  for (const record of list || []) {
-    const decrypted = await decryptJson(record);
-    if (decrypted) result.push(decrypted);
+    if (typeof adapter.putSummary === "function") {
+      await adapter.putSummary(record);
+    } else {
+      adapter.summaries.set(threadId, record);
+    }
+    return payload;
   }
-  return result;
-}
 
-async function getThreads(store) {
-  const adapter = store || getDefaultStore();
-  const list = typeof adapter.getThreads === "function"
-    ? await adapter.getThreads()
-    : Array.from(adapter.threads.values());
-  const result = [];
-  for (const record of list || []) {
-    const decrypted = await decryptJson(record);
-    if (decrypted) result.push(decrypted);
+  async function getSummary(threadId, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
+    const record = (typeof adapter.getSummary === "function")
+      ? await adapter.getSummary(threadId)
+      : (adapter.summaries.get(threadId) || null);
+    return decodeRecord(record);
   }
-  return result;
-}
 
-async function getThreadsByProject(projectId, store) {
-  const adapter = store || getDefaultStore();
-  if (!projectId) return [];
-  const list = typeof adapter.getThreadsByProject === "function"
-    ? await adapter.getThreadsByProject(projectId)
-    : Array.from(adapter.threads.values()).filter((record) => record?.projectId === projectId);
-  const result = [];
-  for (const record of list || []) {
-    const decrypted = await decryptJson(record);
-    if (decrypted) result.push(decrypted);
-  }
-  return result;
-}
+  async function setArchivedMessages(threadId, archivedMessages, archivedUpdatedAt, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
 
-async function deleteThread(threadId, store) {
-  const adapter = store || getDefaultStore();
-  if (!threadId) return null;
-  if (typeof adapter.deleteThread === "function") {
-    await adapter.deleteThread(threadId);
-  } else {
-    adapter.threads.delete(threadId);
-  }
-  if (typeof adapter.deleteMessages === "function") {
-    await adapter.deleteMessages(threadId);
-  } else {
-    adapter.messages.delete(threadId);
-  }
-  if (typeof adapter.deleteSummary === "function") {
-    await adapter.deleteSummary(threadId);
-  } else {
-    adapter.summaries.delete(threadId);
-  }
-  if (typeof adapter.deleteArchive === "function") {
-    await adapter.deleteArchive(threadId);
-  } else {
-    adapter.archives.delete(threadId);
-  }
-  return true;
-}
+    const payload = {
+      threadId,
+      archivedMessages: Array.isArray(archivedMessages) ? archivedMessages : [],
+      archivedUpdatedAt: archivedUpdatedAt || null
+    };
+    const record = {
+      id: threadId,
+      threadId,
+      updatedAt: payload.archivedUpdatedAt,
+      ...(await encodePayload(payload))
+    };
 
-async function getChatStoreStats(store) {
-  const adapter = store || getDefaultStore();
-  if (typeof adapter?.stats === "function") {
-    return adapter.stats();
+    if (typeof adapter.putArchive === "function") {
+      await adapter.putArchive(record);
+    } else {
+      adapter.archives.set(threadId, record);
+    }
+    return payload;
   }
-  if (!adapter) return createEmptyStats();
-  const stats = createEmptyStats();
-  if (adapter.projects instanceof Map) {
-    stats.counts.projects = adapter.projects.size;
-    adapter.projects.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
-  }
-  if (adapter.threads instanceof Map) {
-    stats.counts.threads = adapter.threads.size;
-    adapter.threads.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
-  }
-  if (adapter.summaries instanceof Map) {
-    stats.counts.summaries = adapter.summaries.size;
-    adapter.summaries.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
-  }
-  if (adapter.archives instanceof Map) {
-    stats.counts.archives = adapter.archives.size;
-    adapter.archives.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
-  }
-  if (adapter.messages instanceof Map) {
-    adapter.messages.forEach((list) => {
-      const items = Array.isArray(list) ? list : [];
-      stats.counts.messages += items.length;
-      items.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
-    });
-  }
-  return stats;
-}
 
-if (typeof window !== "undefined") {
-  window.chatStore = {
+  async function getArchivedMessages(threadId, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
+    const record = (typeof adapter.getArchive === "function")
+      ? await adapter.getArchive(threadId)
+      : (adapter.archives.get(threadId) || null);
+    return decodeRecord(record);
+  }
+
+  async function putProject(project, store) {
+    const adapter = adapterOf(store);
+    if (!project?.id) return null;
+    const record = {
+      id: project.id,
+      updatedAt: project.updatedAt || null,
+      ...(await encodePayload(project))
+    };
+    if (typeof adapter.putProject === "function") {
+      await adapter.putProject(record);
+    } else {
+      adapter.projects.set(project.id, record);
+    }
+    return project;
+  }
+
+  async function getProject(projectId, store) {
+    const adapter = adapterOf(store);
+    if (!projectId) return null;
+    const record = (typeof adapter.getProject === "function")
+      ? await adapter.getProject(projectId)
+      : (adapter.projects.get(projectId) || null);
+    return decodeRecord(record);
+  }
+
+  async function deleteProject(projectId, store) {
+    const adapter = adapterOf(store);
+    if (!projectId) return null;
+    if (typeof adapter.deleteProject === "function") await adapter.deleteProject(projectId);
+    else adapter.projects.delete(projectId);
+    return true;
+  }
+
+  async function getProjects(store) {
+    const adapter = adapterOf(store);
+    const list = (typeof adapter.getProjects === "function") ? await adapter.getProjects() : Array.from(adapter.projects.values());
+    return decodeList(list || []);
+  }
+
+  async function getThreads(store) {
+    const adapter = adapterOf(store);
+    const list = (typeof adapter.getThreads === "function") ? await adapter.getThreads() : Array.from(adapter.threads.values());
+    return decodeList(list || []);
+  }
+
+  async function getThreadsByProject(projectId, store) {
+    const adapter = adapterOf(store);
+    if (!projectId) return [];
+    const list = (typeof adapter.getThreadsByProject === "function")
+      ? await adapter.getThreadsByProject(projectId)
+      : Array.from(adapter.threads.values()).filter((record) => record?.projectId === projectId);
+    return decodeList(list || []);
+  }
+
+  async function deleteThread(threadId, store) {
+    const adapter = adapterOf(store);
+    if (!threadId) return null;
+
+    if (typeof adapter.deleteThread === "function") await adapter.deleteThread(threadId);
+    else adapter.threads.delete(threadId);
+
+    if (typeof adapter.deleteMessages === "function") await adapter.deleteMessages(threadId);
+    else adapter.messages.delete(threadId);
+
+    if (typeof adapter.deleteSummary === "function") await adapter.deleteSummary(threadId);
+    else adapter.summaries.delete(threadId);
+
+    if (typeof adapter.deleteArchive === "function") await adapter.deleteArchive(threadId);
+    else adapter.archives.delete(threadId);
+
+    return true;
+  }
+
+  async function getChatStoreStats(store) {
+    const adapter = adapterOf(store);
+    if (typeof adapter?.stats === "function") return adapter.stats();
+    if (!adapter) return createEmptyStats();
+
+    const stats = createEmptyStats();
+    const sumMap = (map, key) => {
+      if (!(map instanceof Map)) return;
+      stats.counts[key] = map.size;
+      map.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+    };
+
+    sumMap(adapter.projects, "projects");
+    sumMap(adapter.threads, "threads");
+    sumMap(adapter.summaries, "summaries");
+    sumMap(adapter.archives, "archives");
+
+    if (adapter.messages instanceof Map) {
+      adapter.messages.forEach((list) => {
+        const items = Array.isArray(list) ? list : [];
+        stats.counts.messages += items.length;
+        items.forEach((record) => { stats.bytesUsed += estimateRecordSize(record); });
+      });
+    }
+
+    return stats;
+  }
+
+  const api = {
     createMemoryChatStore,
     createIndexedDbChatStore,
     putProject,
@@ -363,29 +305,16 @@ if (typeof window !== "undefined") {
     getArchivedMessages,
     getStats: getChatStoreStats
   };
-  window.getChatStoreStats = getChatStoreStats;
-}
 
-if (typeof module !== "undefined") {
-  module.exports = {
-    createMemoryChatStore,
-    createIndexedDbChatStore,
-    putProject,
-    getProject,
-    getProjects,
-    deleteProject,
-    getThreads,
-    putThread,
-    getThread,
-    getThreadsByProject,
-    deleteThread,
-    putMessage,
-    getMessages,
-    setSummary,
-    getSummary,
-    setArchivedMessages,
-    getArchivedMessages,
-    getChatStoreStats
-  };
-}
+  if (typeof window !== "undefined") {
+    window.chatStore = api;
+    window.getChatStoreStats = getChatStoreStats;
+  }
+
+  if (typeof module !== "undefined") {
+    module.exports = {
+      ...api,
+      getChatStoreStats
+    };
+  }
 })();

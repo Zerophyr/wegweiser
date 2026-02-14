@@ -92,7 +92,7 @@ Wegweiser-extension/
 │   ├── background/         # Service worker + provider/API orchestration + background-* helpers
 │   ├── sidepanel/          # Sidebar UI + sidepanel-* helpers
 │   ├── projects/           # Projects UI + projects-* helper modules
-│   ├── options/            # Options page + options-* history helpers
+│   ├── options/            # Options page + options-* controllers/history helpers
 │   ├── image-viewer/       # Image viewer tab for generated images
 │   ├── modules/            # Shared UI modules (markdown, models, streaming, provider utils)
 │   ├── shared/             # Shared storage/security utilities

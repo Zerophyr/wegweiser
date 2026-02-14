@@ -5,7 +5,7 @@ const path = require("path");
 describe("projects button behavior", () => {
   test("opens or focuses Projects before closing the sidepanel", () => {
     const content = fs.readFileSync(
-      path.join(__dirname, "../src/sidepanel/sidepanel.js"),
+      path.join(__dirname, "../src/sidepanel/sidepanel-events-controller-utils.js"),
       "utf8"
     );
 
@@ -13,11 +13,9 @@ describe("projects button behavior", () => {
     expect(start).toBeGreaterThan(-1);
     const snippet = content.slice(start, start + 2500);
 
-    const createIndex = snippet.indexOf("chrome.tabs.create");
-    const updateIndex = snippet.indexOf("chrome.tabs.update");
-    const closeIndex = snippet.indexOf("close_sidepanel");
+    const openIndex = Math.max(snippet.indexOf("focusExistingTab"), snippet.indexOf("openNewTab"));
+    const closeIndex = snippet.indexOf("closeSidepanel");
 
-    const openIndex = Math.max(createIndex, updateIndex);
     expect(openIndex).toBeGreaterThan(-1);
     expect(closeIndex).toBeGreaterThan(openIndex);
   });
