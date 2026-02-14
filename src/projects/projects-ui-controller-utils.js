@@ -1,5 +1,14 @@
 // projects-ui-controller-utils.js - provider/context/model UI helpers for Projects
 
+function setSafeHtml(element, html) {
+  if (!element) return;
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 const IMAGE_CACHE_LIMIT_DEFAULT = 512;
 const IMAGE_CACHE_LIMIT_MIN = 128;
 const IMAGE_CACHE_LIMIT_MAX = 2048;
@@ -109,13 +118,13 @@ function openProjectsContextModal(thread, project, deps) {
   overlay.className = "projects-context-overlay";
   const modal = document.createElement("div");
   modal.className = "projects-context-modal";
-  modal.innerHTML = deps.buildProjectsContextModalHtml({
+  setSafeHtml(modal, deps.buildProjectsContextModalHtml({
     thread,
     project,
     maxContextMessages: deps.maxContextMessages,
     truncateText: deps.truncateText,
     escapeHtml: deps.escapeHtml
-  });
+  }));
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   const closeBtn = modal.querySelector(".projects-context-close");

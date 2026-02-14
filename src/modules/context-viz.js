@@ -1,6 +1,15 @@
 // Context Memory Visualization Component
 // Displays conversation context as an interactive timeline
 
+function setSafeHtml(element, html) {
+  if (!element) return;
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 class ContextVisualization {
   constructor(container) {
     this.container = container;
@@ -22,7 +31,7 @@ class ContextVisualization {
     const html = this.buildTimeline(contextSize, numQA, latestRole);
 
     // Update container
-    this.container.innerHTML = html;
+    setSafeHtml(this.container, html);
 
     // Add click handler to show details
     this.attachClickHandler();
@@ -127,7 +136,7 @@ class ContextVisualization {
       justify-content: space-between;
       align-items: center;
     `;
-    header.innerHTML = `
+    setSafeHtml(header, `
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 20px;">🧠</span>
         <span style="font-size: 14px; font-weight: 600; color: var(--color-text);">Conversation Timeline</span>
@@ -145,7 +154,7 @@ class ContextVisualization {
 
     // Build timeline
     const timeline = this.buildTimelineContent(messages);
-    content.innerHTML = timeline;
+    setSafeHtml(content, timeline);
 
     modal.appendChild(header);
     modal.appendChild(content);

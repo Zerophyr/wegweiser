@@ -1,8 +1,17 @@
 // projects-events-controller-utils.js - Event and bootstrap orchestration for Projects UI
 
+function setSafeHtml(element, html) {
+  if (!element) return;
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 function setupEmojiPicker(deps) {
   const { elements, buildEmojiButtonsHtml, PROJECT_EMOJIS, shouldCloseEmojiGridOnDocumentClick } = deps;
-  elements.emojiGridInner.innerHTML = buildEmojiButtonsHtml(PROJECT_EMOJIS);
+  setSafeHtml(elements.emojiGridInner, buildEmojiButtonsHtml(PROJECT_EMOJIS));
 
   elements.iconPreview.addEventListener("click", (e) => {
     e.stopPropagation();

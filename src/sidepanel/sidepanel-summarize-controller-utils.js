@@ -1,12 +1,26 @@
 // sidepanel-summarize-controller-utils.js - summarize-page orchestration
 
+function setSafeHtml(element, html) {
+  if (!element) return;
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 function appendErrorHtml(answerEl, errorHtml) {
   if (!answerEl) return;
   if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.appendSanitizedHtml === "function") {
     window.safeHtml.appendSanitizedHtml(answerEl, errorHtml);
     return;
   }
-  answerEl.insertAdjacentHTML("beforeend", errorHtml);
+  const wrapper = document.createElement("div");
+  setSafeHtml(wrapper, errorHtml);
+  const node = wrapper.firstElementChild;
+  if (node) {
+    answerEl.appendChild(node);
+  }
 }
 
 function registerSummarizeHandler(deps) {
@@ -138,7 +152,7 @@ function registerSummarizeHandler(deps) {
         const summaryModel = getSelectedModel() || getDefaultModel(res.model || "default model");
         const tokenPercent = estimateTokenBarPercentage(res.tokens);
 
-        answerItem.innerHTML = `
+        setSafeHtml(answerItem, `
           <div class="answer-meta">
             <span>📄 Page Summary - ${new Date().toLocaleTimeString()} - ${escapeHtml(summaryModel)}</span>
           </div>
@@ -175,7 +189,7 @@ function registerSummarizeHandler(deps) {
               <div class="answer-sources-summary"></div>
             </div>
           </div>
-        `;
+        `);
         answerEl.appendChild(answerItem);
 
         const answerContent = answerItem.querySelector(".answer-content");

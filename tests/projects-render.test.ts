@@ -26,7 +26,7 @@ describe("projects UI", () => {
       "utf8"
     );
     expect(chunkUtils).toMatch(/renderAssistantContent\?\.\(state\.assistantBubble,\s*state\.fullContent\)/);
-    expect(runtimeUtils).toMatch(/setSanitizedHtml\(assistantBubble,\s*rendered\)/);
-    expect(runtimeUtils).toMatch(/setSanitizedHtml\(ui\.content,\s*errorHtml\)/);
+    expect(runtimeUtils).toMatch(/setSafeHtml\(assistantBubble,\s*rendered,\s*deps\.setSanitizedHtml\)/);
+    expect(runtimeUtils).toMatch(/setSafeHtml\(ui\.content,\s*errorHtml,\s*deps\.setSanitizedHtml\)/);
   });
 });

@@ -118,6 +118,8 @@ const sidepanelPromptControllerModule = resolveSidepanelModuleSafe("sidepanelPro
 const sidepanelModelControllerModule = resolveSidepanelModuleSafe("sidepanelModelControllerUtils", "./sidepanel-model-controller-utils.js");
 const sidepanelEventsControllerModule = resolveSidepanelModuleSafe("sidepanelEventsControllerUtils", "./sidepanel-events-controller-utils.js");
 const sidepanelSummarizeControllerModule = resolveSidepanelModuleSafe("sidepanelSummarizeControllerUtils", "./sidepanel-summarize-controller-utils.js");
+const sidepanelStreamControllerModule = resolveSidepanelModuleSafe("sidepanelStreamControllerUtils", "./sidepanel-stream-controller-utils.js");
+const sidepanelRuntimeEventsControllerModule = resolveSidepanelModuleSafe("sidepanelRuntimeEventsControllerUtils", "./sidepanel-runtime-events-controller-utils.js");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -537,15 +539,14 @@ async function askQuestion() {
 askBtn.addEventListener("click", askQuestion);
 
 stopBtn.addEventListener("click", () => {
-  if (activePort) {
-    activePort.disconnect();
-    activePort = null;
-    setPromptStreamingState(false);
-    askBtn.disabled = false;
-    metaEl.textContent = "⚠️ Generation stopped by user.";
-    hideTypingIndicator();
-    showToast('Generation stopped', 'info');
-  }
+  sidepanelStreamControllerModule.stopActiveStream?.({
+    state: sidepanelControllerState,
+    setPromptStreamingState,
+    askBtn,
+    metaEl,
+    hideTypingIndicator,
+    showToast
+  });
 });
 
 const summarizeBtn = document.getElementById("summarizeBtn");
@@ -787,24 +788,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "provider_settings_updated") {
-    (async () => {
-      const providerReady = await refreshSidebarSetupState();
-      await loadProviderSetting();
-      if (providerReady) {
-        await loadModels();
-        await refreshBalance();
-      } else if (balanceEl) {
-        balanceEl.textContent = "–";
-      }
-    })();
-  }
-  if (msg?.type === "models_updated") {
-    loadModels();
-  }
-  if (msg?.type === "favorites_updated") {
-    refreshFavoritesOnly();
-  }
+sidepanelRuntimeEventsControllerModule.registerSidepanelRuntimeMessageHandlers?.({
+  runtime: chrome.runtime,
+  refreshSidebarSetupState,
+  loadProviderSetting,
+  loadModels,
+  refreshBalance,
+  refreshFavoritesOnly,
+  balanceEl
 });
 })();

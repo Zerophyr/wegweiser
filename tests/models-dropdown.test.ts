@@ -437,11 +437,11 @@ describe("ModelDropdownManager storage keys", () => {
     const fs = require("fs");
     const path = require("path");
     const sidepanel = fs.readFileSync(
-      path.join(__dirname, "../src/sidepanel/sidepanel.js"),
+      path.join(__dirname, "../src/sidepanel/sidepanel-runtime-events-controller-utils.js"),
       "utf8"
     );
     const projects = fs.readFileSync(
-      path.join(__dirname, "../src/projects/projects.js"),
+      path.join(__dirname, "../src/projects/projects-runtime-events-controller-utils.js"),
       "utf8"
     );
     expect(sidepanel).toMatch(/models_updated/);

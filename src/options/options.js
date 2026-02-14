@@ -136,6 +136,8 @@ const {
 } = providerUiUtils;
 const optionsModelControllerUtils = (typeof window !== "undefined" && window.optionsModelControllerUtils) || {};
 const optionsHistoryDetailControllerUtils = (typeof window !== "undefined" && window.optionsHistoryDetailControllerUtils) || {};
+const optionsHistoryControllerUtils = (typeof window !== "undefined" && window.optionsHistoryControllerUtils) || {};
+const optionsRuntimeEventsControllerUtils = (typeof window !== "undefined" && window.optionsRuntimeEventsControllerUtils) || {};
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -355,7 +357,7 @@ function renderPromptHistory(history) {
     return;
   }
 
-  promptHistoryEl.innerHTML = "";
+  promptHistoryEl.replaceChildren();
 
   for (const item of history) {
     const div = document.createElement("div");
@@ -607,67 +609,23 @@ function exportHistoryCSV() {
 }
 
 async function clearAllHistory() {
-  if (currentHistory.length === 0) {
-    toast.info("History is already empty");
-    return;
-  }
-
-  // Commit any pending single delete first
-  if (pendingDeleteItem) {
-    clearTimeout(pendingDeleteItem.timeout);
-    await commitDeleteHistoryItem(pendingDeleteItem.item.id);
-    pendingDeleteItem = null;
-  }
-
-  // Cancel any previous pending clear all
-  if (pendingClearAllHistory) {
-    clearTimeout(pendingClearAllHistory.timeout);
-  }
-
-  // Store current history for potential undo
-  const itemsToDelete = [...currentHistory];
-  const itemCount = itemsToDelete.length;
-
-  // Clear UI immediately
-  promptHistoryEl.innerHTML = "";
-
-  // Close detail panel if open
-  const previewColumn = document.getElementById("history-preview-column");
-  if (previewColumn) {
-    previewColumn.classList.remove("active");
-  }
-
-  // Show undo toast
-  showToast(`${itemCount} items deleted`, 'info', {
-    duration: 5000,
-    action: {
-      label: 'Undo',
-      onClick: async () => {
-        // Cancel the pending clear
-        if (pendingClearAllHistory) {
-          clearTimeout(pendingClearAllHistory.timeout);
-          pendingClearAllHistory = null;
-        }
-        // Restore history in UI
-        await loadPromptHistory();
-        toast.success('History restored');
-      }
-    }
+  if (typeof optionsHistoryControllerUtils.clearAllHistory !== "function") return;
+  await optionsHistoryControllerUtils.clearAllHistory({
+    getCurrentHistory: () => currentHistory,
+    setCurrentHistory: (value) => { currentHistory = Array.isArray(value) ? value : []; },
+    getPendingDeleteItem: () => pendingDeleteItem,
+    setPendingDeleteItem: (value) => { pendingDeleteItem = value; },
+    getPendingClearAllHistory: () => pendingClearAllHistory,
+    setPendingClearAllHistory: (value) => { pendingClearAllHistory = value; },
+    commitDeleteHistoryItem,
+    promptHistoryEl,
+    getPreviewColumn: () => document.getElementById("history-preview-column"),
+    loadPromptHistory,
+    setLocalStorage,
+    showToast,
+    toast,
+    logError: (...args) => console.error(...args)
   });
-
-  // Schedule actual deletion after 5 seconds
-  pendingClearAllHistory = {
-    items: itemsToDelete,
-    timeout: setTimeout(async () => {
-      try {
-        await setLocalStorage({ or_history: [] });
-        currentHistory = [];
-      } catch (e) {
-        console.error("Error clearing history:", e);
-      }
-      pendingClearAllHistory = null;
-    }, 5000)
-  };
 }
 
 // Export history button handlers
@@ -788,14 +746,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupKeyVisibilityToggles();
 });
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "models_updated") {
-    const now = Date.now();
-    if (modelsLoadInFlight || (now - lastSilentModelsLoadAt) < 1500) {
-      return;
-    }
-    lastSilentModelsLoadAt = now;
-    loadModels({ silent: true });
-  }
+optionsRuntimeEventsControllerUtils.registerOptionsRuntimeMessageHandlers?.({
+  runtime: chrome.runtime,
+  getModelsLoadInFlight: () => modelsLoadInFlight,
+  getLastSilentModelsLoadAt: () => lastSilentModelsLoadAt,
+  setLastSilentModelsLoadAt: (value) => { lastSilentModelsLoadAt = Number(value) || 0; },
+  minReloadIntervalMs: 1500,
+  loadModels
 });
 })();

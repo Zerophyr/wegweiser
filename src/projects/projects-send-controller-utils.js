@@ -1,5 +1,18 @@
 // projects-send-controller-utils.js - send/stream/retry orchestration for Projects
 
+function setSafeHtml(element, html, safeHtmlSetter) {
+  if (!element) return;
+  if (typeof safeHtmlSetter === "function") {
+    safeHtmlSetter(element, html || "");
+    return;
+  }
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 function renderStreamError(deps, ui, message, retryContext) {
   if (typeof deps.renderStreamError === "function") {
     deps.renderStreamError(ui, message, retryContext);
@@ -17,7 +30,7 @@ function renderStreamError(deps, ui, message, retryContext) {
   }
   if (!ui || !ui.content) return;
   if (typeof deps.getStreamErrorHtml === "function") {
-    ui.content.innerHTML = deps.getStreamErrorHtml(message);
+    setSafeHtml(ui.content, deps.getStreamErrorHtml(message), deps.safeHtmlSetter);
     return;
   }
   ui.content.textContent = String(message || "Unknown error");

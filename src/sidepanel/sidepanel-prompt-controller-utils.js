@@ -46,12 +46,12 @@ async function generateImage(deps, prompt) {
 
   const answerItem = document.createElement("div");
   answerItem.className = "answer-item";
-  answerItem.innerHTML = `
+  setSafeHtml(answerItem, `
     <div class="answer-meta">
       <span>${new Date().toLocaleTimeString()} - Image</span>
     </div>
     <div class="answer-content"></div>
-  `;
+  `);
 
   const answerContent = answerItem.querySelector(".answer-content");
   if (answerContent && typeof buildImageCard === "function") {
@@ -232,7 +232,7 @@ async function askQuestion(deps) {
     const contextBadge = contextSize > 2
       ? `<span class="answer-context-badge" title="${contextSize} messages in conversation context">🧠 ${Math.floor(contextSize / 2)} Q&A</span>`
       : "";
-    answerItem.innerHTML = `
+    setSafeHtml(answerItem, `
       <div class="answer-meta">
         <span>${new Date().toLocaleTimeString()} - Streaming...</span>
       </div>
@@ -270,7 +270,7 @@ async function askQuestion(deps) {
           <div class="answer-sources-summary"></div>
         </div>
       </div>
-    `;
+    `, safeHtmlSetter);
 
     hideTypingIndicator();
     answerEl.appendChild(answerItem);
@@ -286,11 +286,11 @@ async function askQuestion(deps) {
       wrapper.style.marginBottom = "12px";
       wrapper.setAttribute("role", "region");
       wrapper.setAttribute("aria-label", "Reasoning steps");
-      wrapper.innerHTML = `
+      setSafeHtml(wrapper, `
         <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
           <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;"><span>💭</span><span>Thinking...</span></div>
           <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
-        </div>`;
+        </div>`, safeHtmlSetter);
       answerContent.before(wrapper);
       reasoningContent = wrapper;
     };
@@ -385,7 +385,13 @@ async function askQuestion(deps) {
           if (reasoningText) {
             hasReceivedReasoning = true;
             if (reasoningHeader && reasoningHeader.textContent.includes("Thinking")) {
-              reasoningHeader.innerHTML = "<span>💭</span><span>Reasoning:</span>";
+              reasoningHeader.replaceChildren();
+              const icon = document.createElement("span");
+              icon.textContent = "💭";
+              const label = document.createElement("span");
+              label.textContent = "Reasoning:";
+              reasoningHeader.appendChild(icon);
+              reasoningHeader.appendChild(label);
             }
             reasoningText.textContent += msg.reasoning;
             answerSection.scrollTop = answerSection.scrollHeight;
@@ -489,7 +495,12 @@ async function askQuestion(deps) {
     if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.appendSanitizedHtml === "function") {
       window.safeHtml.appendSanitizedHtml(answerEl, errorHtml);
     } else {
-      answerEl.insertAdjacentHTML("beforeend", errorHtml);
+      const wrapper = document.createElement("div");
+      setSafeHtml(wrapper, errorHtml, safeHtmlSetter);
+      const errorNode = wrapper.firstElementChild;
+      if (errorNode) {
+        answerEl.appendChild(errorNode);
+      }
     }
     updateAnswerVisibility();
     metaEl.textContent = "❌ Failed to send request.";

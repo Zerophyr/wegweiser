@@ -729,7 +729,7 @@ class ModelDropdownManager {
     favModels.sort(sortByLabel);
 
     // Build HTML
-    dropdown.innerHTML = '';
+    dropdown.replaceChildren();
 
     // Close button header
     const closeHeader = document.createElement('div');
@@ -738,13 +738,18 @@ class ModelDropdownManager {
     const closeSize = this.config.containerType === 'sidebar' ? '24px' : '28px';
 
     closeHeader.style.cssText = `padding: ${padding}; background: var(--color-bg); border-bottom: 1px solid var(--color-primary); position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center;`;
-    closeHeader.innerHTML = `
-      <span style="font-size: ${fontSize}; font-weight: 600; color: var(--color-text);">Select Model</span>
-      <button id="model-dropdown-close" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: ${parseInt(closeSize) + 6}px; padding: 0; width: ${closeSize}; height: ${closeSize}; display: flex; align-items: center; justify-content: center;">×</button>
-    `;
+    const title = document.createElement('span');
+    title.textContent = 'Select Model';
+    title.style.cssText = `font-size: ${fontSize}; font-weight: 600; color: var(--color-text);`;
+    const closeButton = document.createElement('button');
+    closeButton.id = 'model-dropdown-close';
+    closeButton.type = 'button';
+    closeButton.textContent = '×';
+    closeButton.style.cssText = `background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: ${parseInt(closeSize) + 6}px; padding: 0; width: ${closeSize}; height: ${closeSize}; display: flex; align-items: center; justify-content: center;`;
+    closeHeader.appendChild(title);
+    closeHeader.appendChild(closeButton);
     dropdown.appendChild(closeHeader);
 
-    const closeButton = closeHeader.querySelector('#model-dropdown-close');
     if (closeButton) {
       closeButton.addEventListener('click', (e) => {
         e.stopPropagation();

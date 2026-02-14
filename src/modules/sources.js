@@ -1,5 +1,14 @@
 // sources.js - Source citation and display system
 
+function setSafeHtml(element, html) {
+  if (!element) return;
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+    window.safeHtml.setSanitizedHtml(element, html || '');
+    return;
+  }
+  element.innerHTML = typeof html === 'string' ? html : '';
+}
+
 /**
  * Extract source references like [1], [2] from text and map to URLs
  * @param {string} text - Text to extract sources from
@@ -170,11 +179,7 @@ function makeSourceReferencesClickable(answerContent, sources) {
     newHtml = newHtml.replace(refPattern, replacement);
   });
 
-  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
-    window.safeHtml.setSanitizedHtml(answerContent, newHtml);
-  } else {
-    answerContent.innerHTML = newHtml;
-  }
+  setSafeHtml(answerContent, newHtml);
 
   // Add click handlers to the references
   const chips = answerContent.querySelectorAll('.source-chip');
@@ -342,7 +347,7 @@ function showSourcesModal(sources, uniqueDomains, highlightId = null) {
   `;
 
   const closeBtn = document.createElement('button');
-  closeBtn.innerHTML = '×';
+  closeBtn.textContent = '×';
   closeBtn.style.cssText = `
     background: transparent;
     border: none;

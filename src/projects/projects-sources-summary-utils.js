@@ -3,7 +3,7 @@
 function renderProjectsSourcesSummary(messageDiv, sources, getUniqueDomainsFn) {
   const summary = messageDiv?.querySelector?.(".chat-sources-summary");
   if (!summary) return;
-  summary.innerHTML = "";
+  summary.replaceChildren();
 
   if (!Array.isArray(sources) || sources.length === 0 || typeof getUniqueDomainsFn !== "function") {
     return;
@@ -43,3 +43,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = projectsSourcesSummaryUtils;
 }
+

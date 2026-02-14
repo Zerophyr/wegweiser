@@ -2,7 +2,7 @@
 
 function renderSourcesSummaryToElement(summaryEl, sources, getUniqueDomainsFn, buildSourcesCountLabelFn) {
   if (!summaryEl) return;
-  summaryEl.innerHTML = "";
+  summaryEl.replaceChildren();
 
   if (!Array.isArray(sources) || sources.length === 0 || typeof getUniqueDomainsFn !== "function") {
     return;
@@ -46,3 +46,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = sidepanelSourcesSummaryUtils;
 }
+

@@ -1,13 +1,22 @@
 // projects-stream-runtime-utils.js - runtime stream error/retry helpers for Projects UI
 
+function setSafeHtml(element, html, safeHtmlSetter) {
+  if (!element) return;
+  if (typeof safeHtmlSetter === "function") {
+    safeHtmlSetter(element, html || "");
+    return;
+  }
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  element.innerHTML = typeof html === "string" ? html : "";
+}
+
 function renderStreamError(ui, message, retryContext, deps) {
   if (!ui || !ui.content || !deps) return;
   const errorHtml = deps.getStreamErrorHtml(message);
-  if (typeof deps.setSanitizedHtml === "function") {
-    deps.setSanitizedHtml(ui.content, errorHtml);
-  } else {
-    ui.content.innerHTML = errorHtml;
-  }
+  setSafeHtml(ui.content, errorHtml, deps.setSanitizedHtml);
 
   const retryBtn = ui.content.querySelector(".retry-btn");
   if (!retryBtn) return;
@@ -76,7 +85,7 @@ function createReasoningAppender(messageDiv, assistantBubble) {
     const wrapper = document.createElement("div");
     wrapper.className = "chat-reasoning-bubble";
     wrapper.style.marginBottom = "12px";
-    wrapper.innerHTML = `
+    setSafeHtml(wrapper, `
       <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
         <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
           <span>&#128173;</span>
@@ -84,7 +93,7 @@ function createReasoningAppender(messageDiv, assistantBubble) {
         </div>
         <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
       </div>
-    `;
+    `);
     const contentEl = assistantBubble || bubble.querySelector(".chat-content");
     if (contentEl) {
       bubble.insertBefore(wrapper, contentEl);
@@ -110,11 +119,7 @@ function renderAssistantContent(assistantBubble, text, deps = {}) {
   const rendered = typeof deps.applyMarkdownStyles === "function"
     ? deps.applyMarkdownStyles(text)
     : String(text || "");
-  if (typeof deps.setSanitizedHtml === "function") {
-    deps.setSanitizedHtml(assistantBubble, rendered);
-  } else {
-    assistantBubble.innerHTML = rendered;
-  }
+  setSafeHtml(assistantBubble, rendered, deps.setSanitizedHtml);
 }
 
 function buildStreamMeta(msg, project, elapsedSec, deps = {}) {

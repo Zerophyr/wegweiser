@@ -102,6 +102,7 @@ const { createProjectRecord, applyProjectUpdate, createThreadRecord, applyThread
 const projectsStorageControllerUtils = resolveProjectsModule('projectsStorageControllerUtils', './projects-storage-controller-utils.js');
 const projectsModalControllerUtils = resolveProjectsModule('projectsModalControllerUtils', './projects-modal-controller-utils.js');
 const projectsEventsControllerUtils = resolveProjectsModule('projectsEventsControllerUtils', './projects-events-controller-utils.js');
+const projectsRuntimeEventsControllerUtils = resolveProjectsModule('projectsRuntimeEventsControllerUtils', './projects-runtime-events-controller-utils.js');
 const projectsSendControllerUtils = resolveProjectsModule('projectsSendControllerUtils', './projects-send-controller-utils.js');
 const projectsModelControllerUtils = resolveProjectsModule('projectsModelControllerUtils', './projects-model-controller-utils.js');
 const projectsStorageUsageControllerUtils = resolveProjectsModule('projectsStorageUsageControllerUtils', './projects-storage-usage-controller-utils.js');
@@ -868,20 +869,12 @@ async function init() {
 }
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
-// ---- Provider update listener ----
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === 'provider_settings_updated') {
-    (async () => {
-      await loadProviderSetting();
-      await loadModels();
-      if (typeof showToast === 'function') {
-        const providerLabel = getProviderLabelSafe(msg.provider);
-        showToast(`Provider updated. Update Project models to use ${providerLabel}.`, 'info');
-      }
-    })();
-  }
-  if (msg?.type === 'models_updated') {
-    loadModels();
-  }
+// ---- Provider/model runtime listeners ----
+projectsRuntimeEventsControllerUtils.registerProjectsRuntimeMessageHandlers?.({
+  runtime: chrome.runtime,
+  loadProviderSetting,
+  loadModels,
+  getProviderLabelSafe,
+  showToast: (typeof showToast === 'function') ? showToast : null
 });
 })();
