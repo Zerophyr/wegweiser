@@ -143,6 +143,35 @@ const optionsNotifyUtils = (typeof window !== "undefined" && window.optionsNotif
 const notifyProviderSettingsUpdated = (providerId) => optionsNotifyUtils.notifyProviderSettingsUpdated
   ? optionsNotifyUtils.notifyProviderSettingsUpdated(chrome.runtime, providerId, console)
   : Promise.resolve();
+const notifyModelsUpdated = () => optionsNotifyUtils.notifyModelsUpdated
+  ? optionsNotifyUtils.notifyModelsUpdated(chrome.runtime, console)
+  : Promise.resolve();
+
+async function persistSelectedModelSelection(combinedModelId) {
+  const parsed = parseCombinedModelIdSafe(combinedModelId);
+  const provider = normalizeProvider(parsed.provider);
+  const rawModelId = parsed.modelId;
+  if (!rawModelId) return false;
+
+  await setLocalStorage({
+    or_model: rawModelId,
+    or_model_provider: provider,
+    or_provider: provider
+  });
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: "set_model",
+      model: rawModelId,
+      provider
+    });
+  } catch (e) {
+    console.warn("Failed to push selected model to background:", e);
+  }
+
+  await notifyModelsUpdated();
+  return true;
+}
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -159,17 +188,35 @@ function initModelDropdown() {
       const selectedModel = modelMap.get(modelId);
       const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
 
-      // Update the input field
       if (modelInput) {
         modelInput.value = displayName;
       }
-
-      // Update hidden select for form compatibility
       if (modelSelect) {
         modelSelect.value = modelId;
       }
 
-      return true; // Return true to indicate success
+      try {
+        const applied = await persistSelectedModelSelection(modelId);
+        if (!applied) return false;
+        if (statusEl) {
+          statusEl.textContent = "Model updated.";
+          statusEl.style.color = "var(--color-success)";
+          setTimeout(() => {
+            if (statusEl.textContent === "Model updated.") {
+              statusEl.textContent = "";
+              statusEl.style.color = "";
+            }
+          }, 1500);
+        }
+        return true;
+      } catch (e) {
+        console.error("Failed to persist selected model:", e);
+        if (statusEl) {
+          statusEl.textContent = "Failed to update model.";
+          statusEl.style.color = "var(--color-error)";
+        }
+        return false;
+      }
     },
     onToggleFavorite: async (modelId, isFavorite) => {
       const parsed = parseCombinedModelIdSafe(modelId);

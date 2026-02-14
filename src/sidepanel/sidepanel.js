@@ -176,6 +176,58 @@ async function loadProviderSetting() {
   }
 }
 
+async function syncSelectedModelFromConfig() {
+  try {
+    const stored = await getLocalStorage(["or_model", "or_model_provider", "or_provider"]);
+    let modelId = stored?.or_model || "";
+    let provider = normalizeProviderSafeFromProvider(stored?.or_model_provider || stored?.or_provider);
+
+    if (!modelId) {
+      const cfgRes = await chrome.runtime.sendMessage({ type: "get_config" });
+      if (!cfgRes?.ok || !cfgRes.config?.model) return;
+      modelId = cfgRes.config.model;
+      provider = normalizeProviderSafeFromProvider(cfgRes.config.modelProvider || cfgRes.config.provider);
+    }
+
+    const combinedId = buildCombinedModelIdSafeFromProvider(provider, modelId);
+    if (selectedCombinedModelId === combinedId) return;
+
+    selectedCombinedModelId = combinedId;
+    currentProvider = provider;
+
+    const selected = modelMap.get(combinedId);
+    const displayName = selected ? getModelDisplayNameFromProvider(selected) : modelId;
+
+    if (modelInput) modelInput.value = displayName;
+    if (modelStatusEl) modelStatusEl.textContent = `Using: ${displayName}`;
+    await applyImageModeForModel();
+  } catch (e) {
+    console.warn("Failed to sync selected model from config:", e);
+  }
+}
+
+function registerStorageModelSyncListener() {
+  if (!chrome?.storage?.onChanged?.addListener) return;
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes) return;
+    if (!changes.or_model && !changes.or_model_provider && !changes.or_provider) return;
+    syncSelectedModelFromConfig();
+  });
+}
+
+function registerVisibilityModelSync() {
+  window.addEventListener("focus", () => {
+    syncSelectedModelFromConfig();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      syncSelectedModelFromConfig();
+    }
+  });
+}
+
 // setup panel
 function isProviderReady(localItems) {
   const openrouterKey = typeof localItems.or_api_key === "string" ? localItems.or_api_key.trim() : "";
@@ -757,6 +809,9 @@ function hideTypingIndicator() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  registerStorageModelSyncListener();
+  registerVisibilityModelSync();
+
   // Hide answer box initially if empty
   updateAnswerVisibility();
   await restorePersistedAnswers();

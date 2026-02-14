@@ -29,7 +29,8 @@ class ModelDropdownManager {
       clearOnTypeArmed: false,
       lastSelectedValue: '',
       pointerDownInDropdown: false,
-      skipFocusOnDock: false
+      skipFocusOnDock: false,
+      selectedDuringOpen: false
     };
 
     this.dropdownElement = null;
@@ -125,7 +126,7 @@ class ModelDropdownManager {
         this.state.isOpening = true;
         this.state.justOpened = true;
         // Show all models (empty filter) when opening dropdown
-        this.show('');
+        this.show('', { captureSelectionValue: true });
         // Select all text so user can start typing to filter
         input.select();
         // Keep justOpened flag longer to prevent immediate closing
@@ -145,7 +146,7 @@ class ModelDropdownManager {
       if (this.state.visible) return;
       this.state.isOpening = true;
       this.state.justOpened = true;
-      this.show('');
+      this.show('', { captureSelectionValue: true });
       input.select();
       setTimeout(() => {
         this.state.isOpening = false;
@@ -164,7 +165,7 @@ class ModelDropdownManager {
         this.state.isOpening = true;
         this.state.justOpened = true;
         // Show all models (empty filter) when opening dropdown
-        this.show('');
+        this.show('', { captureSelectionValue: true });
         // Select all text so user can start typing to filter
         input.select();
         // Keep justOpened flag longer to prevent immediate closing
@@ -183,12 +184,13 @@ class ModelDropdownManager {
         return;
       }
       // Open dropdown if not visible when user starts typing
+      // Open dropdown with typed filter but keep the selected model as restore target
       if (!this.state.visible) {
-        this.state.visible = true;
-        this.dropdownElement.style.display = 'block';
+        this.show(e.target.value, { captureSelectionValue: false });
+        return;
       }
       // Show filtered results based on what user typed
-      this.show(e.target.value);
+      this.show(e.target.value, { captureSelectionValue: false });
     };
     input.addEventListener('input', handlers.onInputInput);
 
@@ -572,6 +574,7 @@ class ModelDropdownManager {
       }
       this.debugLog('selectModel:result', { modelId, success });
       if (success !== false) {
+        this.state.selectedDuringOpen = true;
         // Add to recently used
         this.addToRecentlyUsed(modelId);
         if (this.config.inputElement) {
@@ -663,8 +666,21 @@ class ModelDropdownManager {
     this.state.recentlyUsedModels = recentList.slice(0, Math.max(0, max));
   }
 
-  show(filterTerm = '') {
+  show(filterTerm = '', options = {}) {
+    const captureSelectionValue = options.captureSelectionValue !== false;
     this.state.justClosed = false;
+    if (!this.state.visible) {
+      this.state.selectedDuringOpen = false;
+      if (captureSelectionValue && this.config.inputElement) {
+        this.state.lastSelectedValue = this.config.inputElement.value || this.state.lastSelectedValue || '';
+      }
+      this.state.clearOnTypeArmed = Boolean(
+        this.config.clearInputOnType &&
+        this.config.inputElement &&
+        this.state.lastSelectedValue &&
+        this.config.inputElement.value === this.state.lastSelectedValue
+      );
+    }
     this.state.filterTerm = filterTerm;
     this.state.selectedIndex = -1;
     this.render();
@@ -675,6 +691,14 @@ class ModelDropdownManager {
   }
 
   hide() {
+    if (this.config.inputElement && !this.state.selectedDuringOpen) {
+      const restoreValue = this.state.lastSelectedValue || '';
+      if (this.config.inputElement.value !== restoreValue) {
+        this.state.ignoreNextInput = true;
+        this.config.inputElement.value = restoreValue;
+      }
+    }
+
     if (this.dropdownElement) {
       this.dropdownElement.style.display = 'none';
     }

@@ -50,7 +50,7 @@ async function loadModels(deps) {
     state.modelMap = new Map(state.combinedModels.map((model) => [model.id, model]));
 
     const [localItems, syncItems] = await Promise.all([
-      getLocalStorage(["or_recent_models"]),
+      getLocalStorage(["or_recent_models", "or_model", "or_model_provider", "or_provider"]),
       chrome.storage.sync.get(["or_favorites"])
     ]);
     loadFavoritesAndRecents(localItems, syncItems);
@@ -126,12 +126,27 @@ async function loadModels(deps) {
     dropdown.setFavorites(buildCombinedFavoritesList());
     dropdown.setRecentlyUsed(buildCombinedRecentList());
 
+    const storedModelId = localItems?.or_model;
+    const storedProvider = normalizeProviderSafe(localItems?.or_model_provider || localItems?.or_provider);
+
+    if (storedModelId) {
+      const combinedId = deps.buildCombinedModelIdSafe(storedProvider, storedModelId);
+      const selected = state.modelMap.get(combinedId);
+      const displayName = selected ? getModelDisplayName(selected) : storedModelId;
+      state.currentProvider = storedProvider;
+      state.selectedCombinedModelId = combinedId;
+      if (modelInput) modelInput.value = displayName;
+      modelStatusEl.textContent = `Using: ${displayName}`;
+      await applyImageModeForModel();
+      return;
+    }
+
     const cfgRes = await sendRuntimeMessage({ type: "get_config" });
     if (cfgRes?.ok && cfgRes.config?.model) {
       const provider = normalizeProviderSafe(cfgRes.config.modelProvider || cfgRes.config.provider);
       const combinedId = deps.buildCombinedModelIdSafe(provider, cfgRes.config.model);
       const selected = state.modelMap.get(combinedId);
-      const displayName = selected ? getModelDisplayName(selected) : combinedId;
+      const displayName = selected ? getModelDisplayName(selected) : cfgRes.config.model;
       state.currentProvider = provider;
       state.selectedCombinedModelId = combinedId;
       if (modelInput) modelInput.value = displayName;

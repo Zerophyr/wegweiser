@@ -61,7 +61,7 @@ describe("sidepanel-model-controller-utils", () => {
       state,
       modelStatusEl,
       sendRuntimeMessage,
-      getLocalStorage: jest.fn().mockResolvedValue({ or_recent_models: [], or_recent_models_naga: [] }),
+      getLocalStorage: jest.fn().mockResolvedValue({ or_recent_models: [], or_model: "model-a", or_model_provider: "openrouter" }),
       loadFavoritesAndRecents: jest.fn(),
       modelInput: { value: "" },
       modelDropdownRef: () => dropdown,
@@ -85,6 +85,82 @@ describe("sidepanel-model-controller-utils", () => {
     expect(modelStatusEl.textContent).toBe("Using: Model A");
   });
 
+
+  test("loadModels prefers selected model from local storage over stale config", async () => {
+    const state = {
+      sidebarSetupRequired: false,
+      combinedModels: [],
+      modelMap: new Map(),
+      favoriteModelsByProvider: { openrouter: new Set() },
+      recentModelsByProvider: { openrouter: [] },
+      currentProvider: "openrouter",
+      selectedCombinedModelId: null
+    };
+
+    const modelInput = { value: "" };
+    const modelStatusEl = { textContent: "" };
+    const dropdown = {
+      bindInput: jest.fn(),
+      setModels: jest.fn(),
+      setFavorites: jest.fn(),
+      setRecentlyUsed: jest.fn()
+    };
+
+    const sendRuntimeMessage = jest.fn(async (payload: { type: string }) => {
+      if (payload.type === "get_models") {
+        return {
+          ok: true,
+          models: [
+            { id: "openrouter:new-model", name: "New Model", displayName: "New Model" },
+            { id: "openrouter:old-model", name: "Old Model", displayName: "Old Model" }
+          ]
+        };
+      }
+      if (payload.type === "get_config") {
+        return {
+          ok: true,
+          config: {
+            provider: "openrouter",
+            modelProvider: "openrouter",
+            model: "old-model"
+          }
+        };
+      }
+      return { ok: true };
+    });
+
+    await loadModels({
+      state,
+      modelStatusEl,
+      sendRuntimeMessage,
+      getLocalStorage: jest.fn().mockResolvedValue({
+        or_recent_models: [],
+        or_model: "new-model",
+        or_model_provider: "openrouter"
+      }),
+      loadFavoritesAndRecents: jest.fn(),
+      modelInput,
+      modelDropdownRef: () => dropdown,
+      ModelDropdownManager: function MockDropdownManager() {},
+      parseCombinedModelIdSafe: (combinedId: string) => {
+        const [provider, modelId] = combinedId.split(":");
+        return { provider, modelId };
+      },
+      normalizeProviderSafe: (provider: string) => provider || "openrouter",
+      getModelDisplayName: (model: { displayName?: string; name?: string; id?: string }) => model.displayName || model.name || model.id,
+      setLocalStorage: jest.fn(),
+      getProviderStorageKeySafe: (key: string) => key,
+      buildCombinedRecentList: () => [],
+      buildCombinedFavoritesList: () => [],
+      setModelDropdown: jest.fn(),
+      applyImageModeForModel: jest.fn(),
+      buildCombinedModelIdSafe: (provider: string, model: string) => `${provider}:${model}`
+    });
+
+    expect(modelInput.value).toBe("New Model");
+    expect(modelStatusEl.textContent).toBe("Using: New Model");
+    expect(state.selectedCombinedModelId).toBe("openrouter:new-model");
+  });
 
 
   test("loadModels retries once when first model response is empty", async () => {
@@ -130,7 +206,7 @@ describe("sidepanel-model-controller-utils", () => {
       state,
       modelStatusEl,
       sendRuntimeMessage,
-      getLocalStorage: jest.fn().mockResolvedValue({ or_recent_models: [], or_recent_models_naga: [] }),
+      getLocalStorage: jest.fn().mockResolvedValue({ or_recent_models: [] }),
       loadFavoritesAndRecents: jest.fn(),
       modelInput: { value: "" },
       modelDropdownRef: () => dropdown,

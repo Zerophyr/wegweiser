@@ -492,6 +492,66 @@ describe("ModelDropdownManager storage keys", () => {
     expect(focusSpy).not.toHaveBeenCalled();
   });
 
+
+
+  test("opening with selected model auto-clears on first typed search key", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    input.value = "openai/gpt-4o";
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      clearInputOnType: true,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.show("", { captureSelectionValue: true });
+
+    dropdown.handleKeyDown({
+      key: "g",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      preventDefault: jest.fn()
+    });
+
+    expect(input.value).toBe("");
+  });
+
+  test("reverts typed filter to selected model value when closed without selection", () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    input.value = "openai/gpt-4o";
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn()
+    });
+
+    dropdown.show("", { captureSelectionValue: true });
+    input.value = "temporary search";
+
+    dropdown.hide();
+
+    expect(input.value).toBe("openai/gpt-4o");
+  });
+
+  test("keeps typed filter when a model was selected during open session", async () => {
+    const input = document.getElementById("model-input") as HTMLInputElement;
+    input.value = "openai/gpt-4o";
+
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      onModelSelect: jest.fn(async () => {
+        input.value = "openai/gpt-5";
+        return true;
+      })
+    });
+
+    dropdown.show("", { captureSelectionValue: true });
+    await dropdown.selectModel("openrouter:openai/gpt-5");
+
+    expect(input.value).toBe("openai/gpt-5");
+  });
+
   test("render tolerates non-array recentlyUsedModels", () => {
     const input = document.getElementById("model-input");
     const dropdown = new ModelDropdownManager({

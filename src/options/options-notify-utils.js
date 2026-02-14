@@ -14,8 +14,20 @@ async function notifyProviderSettingsUpdated(runtime, providerId = "all", logger
   }
 }
 
+async function notifyModelsUpdated(runtime, logger = console) {
+  if (!runtime || typeof runtime.sendMessage !== "function") return;
+  try {
+    await runtime.sendMessage({ type: "models_updated" });
+  } catch (e) {
+    if (logger && typeof logger.warn === "function") {
+      logger.warn("Failed to notify models update:", e);
+    }
+  }
+}
+
 const optionsNotifyUtils = {
-  notifyProviderSettingsUpdated
+  notifyProviderSettingsUpdated,
+  notifyModelsUpdated
 };
 
 if (typeof window !== "undefined") {
