@@ -291,7 +291,7 @@ async function renderThreadList() {
   );
   // Add click handlers using event delegation
   document.querySelectorAll('.thread-item').forEach(item => {
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', async (e) => {
       const target = e.target;
       const action = resolveThreadItemClickAction(target, item);
       if (action.type === 'toggle-menu') {
@@ -309,7 +309,10 @@ async function renderThreadList() {
       } else if (action.type === 'ignore') {
         e.stopPropagation();
       } else if (action.type === 'open') {
-        openThread(action.threadId);
+        const threadId = action.threadId || item?.dataset?.threadId || null;
+        if (threadId) {
+          await openThread(threadId);
+        }
       }
     });
   });
@@ -481,6 +484,7 @@ async function exportThread(threadId, format) {
 }
 const openThread = (threadId) => projectsThreadControllerUtils.openProjectThread(threadId, {
   getThread,
+  loadThreads,
   showToast,
   setCurrentThreadId: (value) => { currentThreadId = value; },
   getProject,
@@ -488,6 +492,9 @@ const openThread = (threadId) => projectsThreadControllerUtils.openProjectThread
   setCurrentProjectData: (value) => { currentProjectData = value; },
   applyProjectChatSettings: (project) => applyProjectChatSettingsToElements(project, elements, applyProjectImageMode),
   updateChatModelIndicator,
+  applyChatPanelStateToElements,
+  buildActiveChatPanelState,
+  elements,
   renderChatMessages,
   renderThreadList
 });

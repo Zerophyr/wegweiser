@@ -142,7 +142,7 @@ class ContextVisualization {
         <span style="font-size: 14px; font-weight: 600; color: var(--color-text);">Conversation Timeline</span>
       </div>
       <button class="context-timeline-close" style="background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: 24px;">×</button>
-    `;
+    `);
 
     // Timeline content
     const content = document.createElement('div');

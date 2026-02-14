@@ -1,9 +1,16 @@
 // projects-thread-controller-utils.js - thread open/create/menu orchestration
 
 async function openProjectThread(threadId, deps) {
-  const thread = await deps.getThread(threadId);
+  let thread = await deps.getThread(threadId);
+  if (!thread && typeof deps.loadThreads === "function") {
+    const currentProjectId = deps.getCurrentProjectId?.();
+    const threads = await deps.loadThreads(currentProjectId);
+    thread = (threads || []).find((entry) => entry?.id === threadId) || null;
+  }
   if (!thread) {
-    deps.showToast("Thread not found", "error");
+    if (typeof deps.showToast === "function") {
+      deps.showToast("Thread not found", "error");
+    }
     return;
   }
 
@@ -14,6 +21,10 @@ async function openProjectThread(threadId, deps) {
     deps.setCurrentProjectData(project);
     deps.applyProjectChatSettings(project);
     deps.updateChatModelIndicator(project);
+  }
+
+  if (typeof deps.applyChatPanelStateToElements === "function" && typeof deps.buildActiveChatPanelState === "function") {
+    deps.applyChatPanelStateToElements(deps.elements, deps.buildActiveChatPanelState());
   }
 
   deps.renderChatMessages(thread.messages, thread);
