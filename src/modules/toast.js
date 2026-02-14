@@ -1,5 +1,15 @@
 // toast.js - Toast notification system
 
+
+function setToastHtml(toastEl, html) {
+  if (!toastEl) return;
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+    window.safeHtml.setSanitizedHtml(toastEl, html || '');
+    return;
+  }
+  toastEl.innerHTML = typeof html === 'string' ? html : '';
+}
+
 /**
  * Toast notification utility for visual feedback
  * @param {string} message - The message to display
@@ -78,7 +88,8 @@ function showToast(message, type = 'info', durationOrOptions = 3000) {
     ">${escapeToastHtml(action.label)}</button>
   ` : '';
 
-  toast.innerHTML = `
+  const icon = icons[type] || icons.info;
+  const toastHtml = `
     <div style="
       background: ${color.bg};
       border-left: 4px solid ${color.border};
@@ -97,7 +108,7 @@ function showToast(message, type = 'info', durationOrOptions = 3000) {
       font-size: 14px;
       font-weight: 500;
     ">
-      <span style="font-size: 18px; font-weight: bold;">${icons[type]}</span>
+      <span style="font-size: 18px; font-weight: bold;">${icon}</span>
       <span style="flex: 1;">${escapeToastHtml(message)}</span>
       ${actionHtml}
       <button class="toast-close" style="
@@ -113,6 +124,7 @@ function showToast(message, type = 'info', durationOrOptions = 3000) {
       ">×</button>
     </div>
   `;
+  setToastHtml(toast, toastHtml);
 
   // Add keyframe animation if not exists
   if (!document.getElementById('toast-animations')) {

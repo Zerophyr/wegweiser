@@ -198,6 +198,18 @@ async function sendMessage(deps) {
 
 async function streamMessage(deps, content, project, thread, streamingUi, startTime, options) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const resolveOnce = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const rejectOnce = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
     let streamPort = deps.createPort();
     deps.setStreamPort(streamPort);
 
@@ -258,7 +270,7 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
         }
         streamPort = deps.disconnectStreamPort(streamPort);
         deps.setStreamPort(streamPort);
-        resolve();
+        resolveOnce();
       } else if (msg.type === "error") {
         renderStreamError(deps, streamingUi, msg.error, options.retryContext || deps.lastStreamContext());
         if (streamingUi?.metaText) {
@@ -269,15 +281,13 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
         }
         streamPort = deps.disconnectStreamPort(streamPort);
         deps.setStreamPort(streamPort);
-        reject(new Error(msg.error));
+        rejectOnce(new Error(msg.error));
       }
     });
 
     streamPort.onDisconnect.addListener(() => {
       deps.setStreamPort(null);
-      if (deps.getIsStreaming()) {
-        resolve();
-      }
+      resolveOnce();
     });
 
     const messages = deps.buildStreamMessages(thread.messages, content, project.customInstructions, thread.summary);
@@ -297,6 +307,11 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
 
 function stopStreaming(deps) {
   const port = deps.getStreamPort();
+  const isStreaming = typeof deps.getIsStreaming === "function" ? deps.getIsStreaming() : Boolean(port);
+  if (!port && !isStreaming) {
+    return false;
+  }
+
   if (port) {
     port.disconnect();
     deps.setStreamPort(null);
@@ -304,6 +319,7 @@ function stopStreaming(deps) {
   deps.setIsStreaming(false);
   deps.setSendStreamingState(deps.elements.sendBtn, deps.setChatStreamingState, false);
   deps.showToast("Generation stopped", "info");
+  return true;
 }
 
 const projectsSendControllerUtils = {

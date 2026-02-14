@@ -61,10 +61,31 @@ function hashText(text) {
   return Math.abs(hash);
 }
 
+function parseSafeHtmlFragment(html) {
+  const safeHtml = sanitizeWithConfiguredPolicy(html || '');
+  if (typeof DOMParser !== 'undefined') {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${safeHtml}</div>`, 'text/html');
+    return doc.body.firstElementChild;
+  }
+
+  if (typeof document !== 'undefined') {
+    const fallback = document.createElement('div');
+    if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
+      window.safeHtml.setSanitizedHtml(fallback, safeHtml);
+    } else {
+      fallback.innerHTML = safeHtml;
+    }
+    return fallback;
+  }
+
+  return null;
+}
+
 function applyTopicClasses(html) {
   if (typeof document === 'undefined') return html;
-  const wrapper = document.createElement('div');
-  wrapper.innerHTML = html;
+  const wrapper = parseSafeHtmlFragment(html);
+  if (!wrapper) return html;
 
   wrapper.querySelectorAll('h1, h2, h3').forEach((heading) => {
     const text = heading.textContent || '';
@@ -202,7 +223,12 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
   if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
     window.safeHtml.setSanitizedHtml(element, html);
   } else {
-    element.innerHTML = html;
+    const wrapper = parseSafeHtmlFragment(html);
+    if (wrapper && typeof element.replaceChildren === 'function') {
+      element.replaceChildren(...Array.from(wrapper.childNodes));
+    } else {
+      element.textContent = html;
+    }
   }
 
   // Add CSS for markdown elements if not exists

@@ -14,19 +14,30 @@ function buildImageCard(options = {}) {
   body.className = "image-card-body";
 
   if (state === "generating") {
-    body.innerHTML = `
-      <div class="image-card-spinner" aria-label="Generating image"></div>
-      <div class="image-card-status">Generating image...</div>
-      <div class="image-card-hint">Expires in ~3 hours</div>
-    `;
+    const spinner = document.createElement("div");
+    spinner.className = "image-card-spinner";
+    spinner.setAttribute("aria-label", "Generating image");
+    body.appendChild(spinner);
+
+    const status = document.createElement("div");
+    status.className = "image-card-status";
+    status.textContent = "Generating image...";
+    body.appendChild(status);
+
+    const hint = document.createElement("div");
+    hint.className = "image-card-hint";
+    hint.textContent = "Expires in ~3 hours";
+    body.appendChild(hint);
   } else if (state === "expired") {
-    body.innerHTML = `
-      <div class="image-card-status">Image expired</div>
-    `;
+    const status = document.createElement("div");
+    status.className = "image-card-status";
+    status.textContent = "Image expired";
+    body.appendChild(status);
   } else if (state === "error") {
-    body.innerHTML = `
-      <div class="image-card-status">Image failed to generate</div>
-    `;
+    const status = document.createElement("div");
+    status.className = "image-card-status";
+    status.textContent = "Image failed to generate";
+    body.appendChild(status);
   } else {
     const img = document.createElement("img");
     img.className = "image-card-thumb";
@@ -43,10 +54,13 @@ function buildImageCard(options = {}) {
 
     const disclaimer = document.createElement("div");
     disclaimer.className = "image-card-disclaimer";
-    disclaimer.innerHTML = `
-      <span class="image-card-disclaimer-icon">!</span>
-      <span>AUTO-DELETE IN 3 HOURS — Download now to keep it.</span>
-    `;
+    const disclaimerIcon = document.createElement("span");
+    disclaimerIcon.className = "image-card-disclaimer-icon";
+    disclaimerIcon.textContent = "!";
+    const disclaimerText = document.createElement("span");
+    disclaimerText.textContent = "AUTO-DELETE IN 3 HOURS — Download now to keep it.";
+    disclaimer.appendChild(disclaimerIcon);
+    disclaimer.appendChild(disclaimerText);
     body.appendChild(disclaimer);
   }
 

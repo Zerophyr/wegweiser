@@ -5,6 +5,9 @@ function stopActiveStream(deps) {
     return false;
   }
 
+  deps.state.streamStopRequested = true;
+  deps.state.streamStoppedByUser = true;
+
   try {
     deps.state.activePort.disconnect();
   } catch (_) {

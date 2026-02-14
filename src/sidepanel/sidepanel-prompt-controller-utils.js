@@ -348,6 +348,9 @@ async function askQuestion(deps) {
       const reasoningStreamState = { inReasoning: false, carry: "" };
       const streamStartTime = Date.now();
 
+      state.streamStopRequested = false;
+      state.streamStoppedByUser = false;
+
       if (retry) {
         metaEl.textContent = `🔁 Retrying${streamContext.contextSize > 0 ? ` (with ${Math.floor(streamContext.contextSize / 2)} previous Q&A)` : ""}...`;
       }
@@ -366,10 +369,13 @@ async function askQuestion(deps) {
       });
 
       port.onDisconnect.addListener(() => {
+        const stoppedByUser = Boolean(state.streamStoppedByUser || state.streamStopRequested);
+        state.streamStopRequested = false;
+        state.streamStoppedByUser = false;
         state.activePort = null;
         setPromptStreamingState(false);
         askBtn.disabled = false;
-        if (!hasCompleted && !hasError) {
+        if (!hasCompleted && !hasError && !stoppedByUser) {
           const fallbackMessage = typeof getStreamingFallbackMessage === "function"
             ? getStreamingFallbackMessage(fullAnswer, hasReceivedReasoning)
             : null;
@@ -463,6 +469,8 @@ async function askQuestion(deps) {
             try { contextViz.update(finalContextSize, "assistant"); } catch (_) {}
           }
           metaEl.textContent = `✅ Answer received using ${currentModel}.`;
+          state.streamStopRequested = false;
+          state.streamStoppedByUser = false;
           port.disconnect();
           state.activePort = null;
           setPromptStreamingState(false);
@@ -472,6 +480,8 @@ async function askQuestion(deps) {
         if (msg.type === "error") {
           hasError = true;
           renderStreamError(msg.error, `❌ Error from ${getProviderLabelSafe(state.currentProvider)}.`);
+          state.streamStopRequested = false;
+          state.streamStoppedByUser = false;
           port.disconnect();
           state.activePort = null;
           setPromptStreamingState(false);

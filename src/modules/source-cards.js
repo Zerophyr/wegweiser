@@ -48,14 +48,35 @@ function getSourceForChip(chip) {
 function buildCard(source) {
   const card = document.createElement('div');
   card.className = 'source-card';
-  card.innerHTML = `
-    <div class="source-card-header">
-      <img class="source-card-favicon" src="https://www.google.com/s2/favicons?domain=${source.url}&sz=32" alt="${source.domain || source.title}">
-      <div class="source-card-domain">${source.domain || source.title}</div>
-    </div>
-    <div class="source-card-title">${source.title}</div>
-    <div class="source-card-url">${source.url}</div>
-  `;
+
+  const header = document.createElement('div');
+  header.className = 'source-card-header';
+
+  const favicon = document.createElement('img');
+  favicon.className = 'source-card-favicon';
+  const faviconDomain = encodeURIComponent(String(source?.url || ''));
+  favicon.src = `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=32`;
+  const label = source?.domain || source?.title || source?.url || 'Source';
+  favicon.alt = String(label);
+
+  const domain = document.createElement('div');
+  domain.className = 'source-card-domain';
+  domain.textContent = String(label);
+
+  header.appendChild(favicon);
+  header.appendChild(domain);
+
+  const title = document.createElement('div');
+  title.className = 'source-card-title';
+  title.textContent = String(source?.title || source?.url || 'Untitled source');
+
+  const url = document.createElement('div');
+  url.className = 'source-card-url';
+  url.textContent = String(source?.url || '');
+
+  card.appendChild(header);
+  card.appendChild(title);
+  card.appendChild(url);
   return card;
 }
 
@@ -103,3 +124,13 @@ document.addEventListener('mouseout', (event) => {
   if (!chip) return;
   scheduleHide();
 });
+
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    buildCard,
+    getSourceForChip,
+    positionCard,
+    clamp
+  };
+}

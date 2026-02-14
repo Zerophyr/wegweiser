@@ -138,6 +138,11 @@ const optionsModelControllerUtils = (typeof window !== "undefined" && window.opt
 const optionsHistoryDetailControllerUtils = (typeof window !== "undefined" && window.optionsHistoryDetailControllerUtils) || {};
 const optionsHistoryControllerUtils = (typeof window !== "undefined" && window.optionsHistoryControllerUtils) || {};
 const optionsRuntimeEventsControllerUtils = (typeof window !== "undefined" && window.optionsRuntimeEventsControllerUtils) || {};
+const optionsNotifyUtils = (typeof window !== "undefined" && window.optionsNotifyUtils) || {};
+
+const notifyProviderSettingsUpdated = (providerId) => optionsNotifyUtils.notifyProviderSettingsUpdated
+  ? optionsNotifyUtils.notifyProviderSettingsUpdated(chrome.runtime, providerId, console)
+  : Promise.resolve();
 
 function initModelDropdown() {
   if (modelDropdown) {
@@ -266,17 +271,6 @@ const optionsModelController = optionsModelControllerUtils.createOptionsModelCon
 let loadCachedModelsFromStorage = optionsModelController?.loadCachedModelsFromStorage || (async () => []);
 let loadSelectedModel = optionsModelController?.loadSelectedModel || (() => {});
 let loadModels = optionsModelController?.loadModels || (async () => {});
-
-async function notifyProviderSettingsUpdated(providerId) {
-  try {
-    await chrome.runtime.sendMessage({
-      type: "provider_settings_updated",
-      provider: providerId
-    });
-  } catch (e) {
-    console.warn("Failed to notify provider update:", e);
-  }
-}
 
 function updateEnableStatus(provider, enabled) {
   const statusEl = enableOpenrouterStatus;

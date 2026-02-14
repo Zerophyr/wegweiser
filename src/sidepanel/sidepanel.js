@@ -211,6 +211,8 @@ let modelDropdown = null;
 let contextViz = null;
 
 let activePort = null;
+let streamStopRequested = false;
+let streamStoppedByUser = false;
 const sidepanelControllerState = {
   get webSearchEnabled() { return webSearchEnabled; },
   set webSearchEnabled(value) { webSearchEnabled = Boolean(value); },
@@ -235,7 +237,11 @@ const sidepanelControllerState = {
   get lastStreamContext() { return lastStreamContext; },
   set lastStreamContext(value) { lastStreamContext = value || null; },
   get activePort() { return activePort; },
-  set activePort(value) { activePort = value || null; }
+  set activePort(value) { activePort = value || null; },
+  get streamStopRequested() { return streamStopRequested; },
+  set streamStopRequested(value) { streamStopRequested = Boolean(value); },
+  get streamStoppedByUser() { return streamStoppedByUser; },
+  set streamStoppedByUser(value) { streamStoppedByUser = Boolean(value); }
 };
 
 async function refreshContextVisualization() {

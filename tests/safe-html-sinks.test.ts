@@ -28,4 +28,31 @@ describe("safe html sinks", () => {
     expect(content).toMatch(/setHtmlSafely\(/);
     expect(content).toMatch(/promptHistoryEl\.replaceChildren\(\)/);
   });
+
+  test("toast routes rendering through helper instead of direct toast innerHTML", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "toast.js"), "utf8");
+    expect(content).toMatch(/function setToastHtml\(/);
+    expect(content).toMatch(/setToastHtml\(toast, toastHtml\)/);
+    expect(content).not.toMatch(/toast\.innerHTML\s*=/);
+  });
+
+  test("image cards avoid innerHTML for state and disclaimer rendering", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "image-cards.js"), "utf8");
+    expect(content).not.toMatch(/body\.innerHTML\s*=/);
+    expect(content).not.toMatch(/disclaimer\.innerHTML\s*=/);
+  });
+
+  test("source cards avoid direct card.innerHTML template writes", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "source-cards.js"), "utf8");
+    expect(content).not.toMatch(/card\.innerHTML\s*=/);
+    expect(content).toMatch(/title\.textContent\s*=/);
+    expect(content).toMatch(/domain\.textContent\s*=/);
+  });
+
+  test("markdown avoids direct wrapper and element innerHTML assignment for rendering", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "markdown.js"), "utf8");
+    expect(content).not.toMatch(/wrapper\.innerHTML\s*=\s*html/);
+    expect(content).not.toMatch(/element\.innerHTML\s*=\s*html/);
+  });
+
 });
