@@ -1,0 +1,49 @@
+name: Security History Scan
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  history-secrets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz -o gitleaks.tgz
+          tar -xzf gitleaks.tgz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Run history secret scan (report-only)
+        id: history_scan
+        continue-on-error: true
+        run: |
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --log-opts="--all" \
+            --report-format sarif \
+            --report-path gitleaks-history.sarif
+
+      - name: Emit warning annotation when findings exist
+        if: always()
+        run: |
+          node -e "const fs=require('fs');const p='gitleaks-history.sarif';if(!fs.existsSync(p)){console.log('No SARIF report generated.');process.exit(0);}const sarif=JSON.parse(fs.readFileSync(p,'utf8'));const runs=Array.isArray(sarif.runs)?sarif.runs:[];const findings=runs.reduce((sum,run)=>sum+((run.results||[]).length),0);if(findings>0){console.log('::warning::Security history scan found '+findings+' potential secret(s). Review gitleaks-history.sarif artifact.')}else{console.log('No history findings detected.')}"
+
+      - name: Upload history scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-history-report
+          path: gitleaks-history.sarif
+          if-no-files-found: ignore

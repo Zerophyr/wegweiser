@@ -10,7 +10,7 @@ async function loadProjectModels(deps) {
     deps.setProjectModelMap(new Map(response.models.map((model) => [model.id, model])));
 
     const [localItems, syncItems] = await Promise.all([
-      deps.getLocalStorage(["or_recent_models"]),
+      deps.getLocalStorage(["or_recent_models", "or_model", "or_model_provider"]),
       deps.getSyncStorage(["or_favorites"])
     ]);
 
@@ -84,7 +84,13 @@ async function loadProjectModels(deps) {
       dropdown.setRecentlyUsed(deps.buildCombinedRecentList(deps.getRecentsByProvider()));
     }
 
-    deps.renderModelSelectOptions(response.models);
+    let fallbackCombinedModelId = "";
+    if (typeof localItems.or_model === "string" && localItems.or_model.trim()) {
+      const provider = deps.normalizeProviderSafe(localItems.or_model_provider || "openrouter");
+      fallbackCombinedModelId = deps.buildCombinedModelIdSafe(provider, localItems.or_model.trim());
+    }
+
+    deps.renderModelSelectOptions(response.models, fallbackCombinedModelId);
     deps.syncSelectedModelInputWithSelect();
 
     if (deps.getCurrentProjectData()) {

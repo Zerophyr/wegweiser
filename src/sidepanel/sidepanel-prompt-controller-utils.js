@@ -1,5 +1,15 @@
 // sidepanel-prompt-controller-utils.js - prompt/image generation orchestration
 
+function buildHtmlNodes(html) {
+  const safeHtml = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
+    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(safeHtml)];
+}
+
 function setSafeHtml(element, html, safeHtmlSetter) {
   if (!element) return;
   if (typeof safeHtmlSetter === "function") {
@@ -10,7 +20,7 @@ function setSafeHtml(element, html, safeHtmlSetter) {
     window.safeHtml.setSanitizedHtml(element, html);
     return;
   }
-  element.innerHTML = typeof html === "string" ? html : "";
+  element.replaceChildren(...buildHtmlNodes(html));
 }
 
 function clearElementContent(element) {
@@ -535,3 +545,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = sidepanelPromptControllerUtils;
 }
+

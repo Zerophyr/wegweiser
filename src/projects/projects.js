@@ -106,6 +106,8 @@ const projectsRuntimeEventsControllerUtils = resolveProjectsModule('projectsRunt
 const projectsSendControllerUtils = resolveProjectsModule('projectsSendControllerUtils', './projects-send-controller-utils.js');
 const projectsRenderControllerUtils = resolveProjectsModule('projectsRenderControllerUtils', './projects-render-controller-utils.js');
 const projectsModelControllerUtils = resolveProjectsModule('projectsModelControllerUtils', './projects-model-controller-utils.js');
+const projectsModelSelectUtils = resolveProjectsModule('projectsModelSelectUtils', './projects-model-select-utils.js');
+const projectsSendDepsUtils = resolveProjectsModule('projectsSendDepsUtils', './projects-send-deps-utils.js');
 const projectsStorageUsageControllerUtils = resolveProjectsModule('projectsStorageUsageControllerUtils', './projects-storage-usage-controller-utils.js');
 const projectsThreadControllerUtils = resolveProjectsModule('projectsThreadControllerUtils', './projects-thread-controller-utils.js');
 const { applyViewSelection, getProjectsListVisibilityState, sortProjectsByUpdatedAt } = resolveProjectsModule('projectsViewUtils', './projects-view-utils.js');
@@ -182,7 +184,6 @@ const openProjectsContextModal = (thread, project) => projectsUiControllerUtils.
   escapeHtml,
   maxContextMessages: MAX_CONTEXT_MESSAGES
 });
-
 const storageBindings = projectsStorageBindingsUtils.createProjectsStorageBindings({
   storageController: projectsStorageControllerUtils,
   chatStore,
@@ -427,7 +428,6 @@ const toggleMenu = (button) => projectsThreadControllerUtils.toggleThreadMenu(bu
   toggleProjectsDropdownMenu,
   documentRef: document
 });
-
 function openCreateProjectModal() {
   projectsModalControllerUtils.openCreateProjectModal({
     buildCreateProjectModalViewState,
@@ -541,6 +541,7 @@ async function loadModels() {
     getProviderStorageKeySafe,
     normalizeProviderSafe,
     parseCombinedModelIdSafe,
+    buildCombinedModelIdSafe,
     ModelDropdownManager,
     getProjectModelInput: () => elements.ProjectModelInput || document.getElementById("project-model-input"),
     getProjectModelDropdown: () => ProjectModelDropdown,
@@ -558,12 +559,19 @@ async function loadModels() {
       if (elements.ProjectModelInput) elements.ProjectModelInput.value = displayName;
       if (elements.ProjectModel) elements.ProjectModel.value = modelId;
     },
-    renderModelSelectOptions: (models) => {
+    renderModelSelectOptions: (models, fallbackCombinedId = "") => {
       if (!elements.ProjectModel) return;
-      const currentCombinedId = elements.ProjectModel.value || "";
-      elements.ProjectModel.innerHTML = '<option value="">Use default model</option>' + models.map((m) =>
-        `<option value="${m.id}" ${m.id === currentCombinedId ? "selected" : ""}>${getModelDisplayName(m)}</option>`
-      ).join("");
+      const currentCombinedId = elements.ProjectModel.value || fallbackCombinedId || "";
+      if (projectsModelSelectUtils.renderProjectModelSelectOptions) {
+        projectsModelSelectUtils.renderProjectModelSelectOptions(
+          elements.ProjectModel,
+          models,
+          currentCombinedId,
+          getModelDisplayName
+        );
+        return;
+      }
+      elements.ProjectModel.replaceChildren();
     },
     syncSelectedModelInputWithSelect: () => {
       if (!elements.ProjectModelInput || !elements.ProjectModel?.value) return;
@@ -620,8 +628,11 @@ function bindEvents() {
     isEscapeCloseEvent
   });
 }
+function buildProjectsSendDeps(builderName, deps) {
+  const builder = projectsSendDepsUtils && projectsSendDepsUtils[builderName]; return typeof builder === "function" ? builder(deps) : deps;
+}
 function renderStreamError(ui, message, retryContext) {
-  return projectsSendControllerUtils.renderStreamError({
+  const deps = buildProjectsSendDeps("buildRenderStreamErrorDeps", {
     renderStreamErrorRuntime,
     getStreamErrorHtml,
     safeHtmlSetter: (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function')
@@ -630,10 +641,11 @@ function renderStreamError(ui, message, retryContext) {
     getRetryInProgress: () => retryInProgress,
     getIsStreaming: () => isStreaming,
     retryStreamFromContext
-  }, ui, message, retryContext);
+  });
+  return projectsSendControllerUtils.renderStreamError(deps, ui, message, retryContext);
 }
 async function retryStreamFromContext(retryContext, ui) {
-  return projectsSendControllerUtils.retryStreamFromContext({
+  const deps = buildProjectsSendDeps("buildRetryStreamFromContextDeps", {
     retryStreamFromContextRuntime,
     getIsStreaming: () => isStreaming,
     getRetryInProgress: () => retryInProgress,
@@ -648,10 +660,11 @@ async function retryStreamFromContext(retryContext, ui) {
     setIsStreaming: (value) => { isStreaming = Boolean(value); },
     streamMessage,
     renderThreadList
-  }, retryContext, ui);
+  });
+  return projectsSendControllerUtils.retryStreamFromContext(deps, retryContext, ui);
 }
 async function sendImageMessage(content, Project) {
-  return projectsSendControllerUtils.sendImageMessage({
+  const deps = buildProjectsSendDeps("buildSendImageMessageDeps", {
     currentThreadId: () => currentThreadId,
     currentProjectId: () => currentProjectId,
     setIsStreaming: (value) => { isStreaming = Boolean(value); },
@@ -673,10 +686,11 @@ async function sendImageMessage(content, Project) {
     currentProjectData: () => currentProjectData,
     updateProjectsContextButton,
     renderThreadList
-  }, content, Project);
+  });
+  return projectsSendControllerUtils.sendImageMessage(deps, content, Project);
 }
 async function sendMessage() {
-  return projectsSendControllerUtils.sendMessage({
+  const deps = buildProjectsSendDeps("buildSendMessageDeps", {
     elements,
     currentThreadId: () => currentThreadId,
     currentProjectId: () => currentProjectId,
@@ -712,9 +726,10 @@ async function sendMessage() {
     showToast,
     renderThreadList
   });
+  return projectsSendControllerUtils.sendMessage(deps);
 }
 async function streamMessage(content, Project, thread, streamingUi, startTime, options = {}) {
-  return projectsSendControllerUtils.streamMessage({
+  const deps = buildProjectsSendDeps("buildStreamMessageDeps", {
     createPort: () => chrome.runtime.connect({ name: 'streaming' }),
     setStreamPort: (port) => { streamPort = port; },
     getStreamPort: () => streamPort,
@@ -754,10 +769,11 @@ async function streamMessage(content, Project, thread, streamingUi, startTime, o
     buildStreamMessages,
     resolveStreamToggles,
     buildStartStreamPayload
-  }, content, Project, thread, streamingUi, startTime, options || {});
+  });
+  return projectsSendControllerUtils.streamMessage(deps, content, Project, thread, streamingUi, startTime, options || {});
 }
 function stopStreaming() {
-  projectsSendControllerUtils.stopStreaming({
+  const deps = buildProjectsSendDeps("buildStopStreamingDeps", {
     getStreamPort: () => streamPort,
     setStreamPort: (port) => { streamPort = port; },
     setIsStreaming: (value) => { isStreaming = Boolean(value); },
@@ -766,6 +782,7 @@ function stopStreaming() {
     setChatStreamingState,
     showToast
   });
+  projectsSendControllerUtils.stopStreaming(deps);
 }
 function setupChatInput() {
   projectsEventsControllerUtils.setupChatInput({

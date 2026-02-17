@@ -59,3 +59,11 @@ docs/
 .local-backup-meta/
 description.md
 audit.md
+
+# Local test / scan outputs
+playwright-report/
+test-results/
+.eslintcache
+*.tsbuildinfo
+gitleaks-*.sarif
+gitleaks-*.json

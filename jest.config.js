@@ -7,6 +7,7 @@ module.exports = {
     '^.+\\.ts$': ['ts-jest', { tsconfig: { esModuleInterop: true } }],
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setupTests.ts'],
+  testPathIgnorePatterns: ['<rootDir>/tests/browser/'],
   collectCoverageFrom: [
     'src/**/*.{js,ts}',
     '!src/**/*.d.ts',
@@ -16,3 +17,4 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   moduleFileExtensions: ['ts', 'js', 'json'],
 };
+

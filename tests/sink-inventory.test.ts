@@ -21,22 +21,22 @@ describe("sink inventory", () => {
     {
       relPath: "src/sidepanel/sidepanel-prompt-controller-utils.js",
       sinkClass: "safe-helper",
-      expectedTargets: ["element"]
+      expectedTargets: []
     },
     {
       relPath: "src/sidepanel/sidepanel-summarize-controller-utils.js",
       sinkClass: "safe-helper",
-      expectedTargets: ["element"]
+      expectedTargets: []
     },
     {
       relPath: "src/modules/context-viz.js",
       sinkClass: "safe-helper",
-      expectedTargets: ["element"]
+      expectedTargets: []
     },
     {
       relPath: "src/modules/sources.js",
       sinkClass: "safe-helper",
-      expectedTargets: ["element"]
+      expectedTargets: []
     },
     {
       relPath: "src/projects/projects-stream-utils.js",
@@ -50,8 +50,8 @@ describe("sink inventory", () => {
     },
     {
       relPath: "src/projects/projects-archive-view-utils.js",
-      sinkClass: "trusted-template-with-sanitized-message-html",
-      expectedTargets: ["contentEl"]
+      sinkClass: "safe-helper",
+      expectedTargets: []
     },
     {
       relPath: "src/projects/projects-render-controller-utils.js",
@@ -60,8 +60,13 @@ describe("sink inventory", () => {
     },
     {
       relPath: "src/projects/projects.js",
-      sinkClass: "trusted-select-options",
-      expectedTargets: ["elements.ProjectModel"]
+      sinkClass: "orchestration-no-direct-innerhtml",
+      expectedTargets: []
+    },
+    {
+      relPath: "src/projects/projects-model-select-utils.js",
+      sinkClass: "dom-only-options-render",
+      expectedTargets: []
     }
   ];
 
@@ -75,7 +80,7 @@ describe("sink inventory", () => {
     const sidepanelPersistence = readFile("src/sidepanel/sidepanel-answer-persistence-controller-utils.js");
 
     expect(getInnerHtmlTargets(projectsImages)).toEqual([]);
-    expect(getInnerHtmlTargets(sidepanelPersistence)).toEqual(["element"]);
+    expect(getInnerHtmlTargets(sidepanelPersistence)).toEqual([]);
     expect(projectsImages).toMatch(/replaceChildren\(\)/);
     expect(sidepanelPersistence).toMatch(/answerEl\.replaceChildren\(\)/);
   });

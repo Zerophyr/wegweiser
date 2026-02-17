@@ -122,6 +122,8 @@ const sidepanelStreamControllerModule = resolveSidepanelModuleSafe("sidepanelStr
 const sidepanelRuntimeEventsControllerModule = resolveSidepanelModuleSafe("sidepanelRuntimeEventsControllerUtils", "./sidepanel-runtime-events-controller-utils.js");
 const sidepanelAnswerPersistenceControllerModule = resolveSidepanelModuleSafe("sidepanelAnswerPersistenceControllerUtils", "./sidepanel-answer-persistence-controller-utils.js");
 const sidepanelModelSyncControllerModule = resolveSidepanelModuleSafe("sidepanelModelSyncControllerUtils", "./sidepanel-model-sync-controller-utils.js");
+const sidepanelSetupControllerModule = resolveSidepanelModuleSafe("sidepanelSetupControllerUtils", "./sidepanel-setup-controller-utils.js");
+const sidepanelBalanceControllerModule = resolveSidepanelModuleSafe("sidepanelBalanceControllerUtils", "./sidepanel-balance-controller-utils.js");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -179,32 +181,28 @@ async function loadProviderSetting() {
 }
 
 // setup panel
-function isProviderReady(localItems) {
-  const openrouterKey = typeof localItems.or_api_key === "string" ? localItems.or_api_key.trim() : "";
-  return Boolean(openrouterKey);
-}
+const sidepanelSetupDeps = {
+  getLocalStorage,
+  setupPanel,
+  promptContainer,
+  modelSection,
+  modelStatusEl,
+  setSidebarSetupRequired: (value) => { sidebarSetupRequired = Boolean(value); }
+};
 
 function updateSetupPanelVisibility(isReady) {
-  sidebarSetupRequired = !isReady;
-  if (setupPanel) {
-    setupPanel.style.display = isReady ? "none" : "flex";
+  if (sidepanelSetupControllerModule.updateSetupPanelVisibility) {
+    return sidepanelSetupControllerModule.updateSetupPanelVisibility(isReady, sidepanelSetupDeps);
   }
-  if (promptContainer) {
-    promptContainer.style.display = isReady ? "" : "none";
-  }
-  if (modelSection) {
-    modelSection.style.display = isReady ? "" : "none";
-  }
-  if (!isReady && modelStatusEl) {
-    modelStatusEl.textContent = "Add your OpenRouter API key in Options to load models.";
-  }
+  return null;
 }
 
 async function refreshSidebarSetupState() {
-  const localItems = await getLocalStorage([
-    "or_api_key"
-  ]);
-  const ready = isProviderReady(localItems);
+  if (sidepanelSetupControllerModule.refreshSidebarSetupState) {
+    return sidepanelSetupControllerModule.refreshSidebarSetupState(sidepanelSetupDeps);
+  }
+  const localItems = await getLocalStorage(["or_api_key"]);
+  const ready = Boolean(localItems?.or_api_key);
   updateSetupPanelVisibility(ready);
   return ready;
 }
@@ -391,29 +389,15 @@ function downloadImage(dataUrl, imageId, mimeType) {
 }
 
 async function refreshBalance() {
-  if (!balanceEl) return;
+  if (sidepanelBalanceControllerModule.refreshBalance) {
+    return sidepanelBalanceControllerModule.refreshBalance({
+      balanceEl,
+      sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+      logError: (...args) => console.error(...args)
+    });
+  }
 
-  balanceEl.textContent = "Loading…";
-  try {
-    const res = await chrome.runtime.sendMessage({ type: "get_balance" });
-    if (!res?.ok) {
-      balanceEl.textContent = res?.error || "Error";
-      return;
-    }
-
-    if (res.supported === false) {
-      balanceEl.textContent = "Not supported";
-      return;
-    }
-
-    const value = res.balance;
-    if (value == null || Number.isNaN(value)) {
-      balanceEl.textContent = "Unknown";
-    } else {
-      balanceEl.textContent = `$${value.toFixed(4)}`;
-    }
-  } catch (e) {
-    console.error("Error refreshing balance:", e);
+  if (balanceEl) {
     balanceEl.textContent = "Error";
   }
 }
@@ -678,3 +662,6 @@ sidepanelRuntimeEventsControllerModule.registerSidepanelRuntimeMessageHandlers?.
   balanceEl
 });
 })();
+
+
+

@@ -1,5 +1,15 @@
 // projects-send-controller-utils.js - send/stream/retry orchestration for Projects
 
+function buildHtmlNodes(html) {
+  const safeHtml = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
+    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(safeHtml)];
+}
+
 function setSafeHtml(element, html, safeHtmlSetter) {
   if (!element) return;
   if (typeof safeHtmlSetter === "function") {
@@ -10,7 +20,17 @@ function setSafeHtml(element, html, safeHtmlSetter) {
     window.safeHtml.setSanitizedHtml(element, html || "");
     return;
   }
-  element.innerHTML = typeof html === "string" ? html : "";
+  if (typeof element.replaceChildren === "function") {
+    element.replaceChildren(...buildHtmlNodes(html));
+    return;
+  }
+  if ("innerHTML" in element) {
+    element.innerHTML = typeof html === "string" ? html : "";
+    return;
+  }
+  if ("textContent" in element) {
+    element.textContent = typeof html === "string" ? html : "";
+  }
 }
 
 function renderStreamError(deps, ui, message, retryContext) {
@@ -338,3 +358,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = projectsSendControllerUtils;
 }
+

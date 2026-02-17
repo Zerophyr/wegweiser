@@ -1,12 +1,22 @@
 // sidepanel-summarize-controller-utils.js - summarize-page orchestration
 
+function buildHtmlNodes(html) {
+  const safeHtml = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
+    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(safeHtml)];
+}
+
 function setSafeHtml(element, html) {
   if (!element) return;
   if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
     window.safeHtml.setSanitizedHtml(element, html || "");
     return;
   }
-  element.innerHTML = typeof html === "string" ? html : "";
+  element.replaceChildren(...buildHtmlNodes(html));
 }
 
 function appendErrorHtml(answerEl, errorHtml) {
@@ -242,3 +252,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = sidepanelSummarizeControllerUtils;
 }
+

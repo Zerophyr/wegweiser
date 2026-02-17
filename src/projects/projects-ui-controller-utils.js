@@ -1,12 +1,22 @@
 // projects-ui-controller-utils.js - provider/context/model UI helpers for Projects
 
+function buildHtmlNodes(html) {
+  const safeHtml = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
+    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(safeHtml)];
+}
+
 function setSafeHtml(element, html) {
   if (!element) return;
   if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
     window.safeHtml.setSanitizedHtml(element, html || "");
     return;
   }
-  element.innerHTML = typeof html === "string" ? html : "";
+  element.replaceChildren(...buildHtmlNodes(html));
 }
 
 const IMAGE_CACHE_LIMIT_DEFAULT = 512;
@@ -164,3 +174,4 @@ if (typeof window !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = projectsUiControllerUtils;
 }
+

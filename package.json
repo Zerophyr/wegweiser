@@ -7,6 +7,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:smoke": "playwright test --config=playwright.config.ts",
+    "test:smoke:headed": "playwright test --config=playwright.config.ts --headed",
     "build:ts": "tsc",
     "watch:ts": "tsc --watch",
     "release": "node scripts/release.js",
@@ -17,6 +19,7 @@
     "format": "prettier --write \"**/*.{js,ts,json,md}\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/chrome": "^0.0.268",
     "@types/jest": "^29.5.11",
     "@typescript-eslint/eslint-plugin": "^6.19.0",

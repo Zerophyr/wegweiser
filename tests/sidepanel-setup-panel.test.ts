@@ -10,12 +10,17 @@ describe('sidepanel setup panel', () => {
     expect(html).toMatch(/Open Options/);
   });
 
-  test('sidebar setup logic exists in sidepanel js', () => {
+  test('sidebar setup wiring exists in sidepanel js and setup util', () => {
     const jsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js');
     const js = fs.readFileSync(jsPath, 'utf8');
     expect(js).toMatch(/setup panel/i);
     expect(js).toMatch(/openOptionsPage/);
-    expect(js).toMatch(/isProviderReady/);
-    expect(js).toMatch(/or_api_key/);
+    expect(js).toMatch(/sidepanelSetupControllerModule/);
+    expect(js).toMatch(/refreshSidebarSetupState/);
+
+    const setupUtilsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel-setup-controller-utils.js');
+    const setupUtils = fs.readFileSync(setupUtilsPath, 'utf8');
+    expect(setupUtils).toMatch(/isProviderReady/);
+    expect(setupUtils).toMatch(/or_api_key/);
   });
 });

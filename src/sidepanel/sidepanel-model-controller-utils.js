@@ -8,6 +8,7 @@ async function loadModels(deps) {
     getLocalStorage,
     loadFavoritesAndRecents,
     modelInput,
+    promptElement,
     modelDropdownRef,
     ModelDropdownManager,
     parseCombinedModelIdSafe,
@@ -83,6 +84,10 @@ async function loadModels(deps) {
             state.currentProvider = provider;
             modelStatusEl.textContent = `Using: ${displayName}`;
             await applyImageModeForModel();
+            const promptTarget = promptElement || document.getElementById("prompt");
+            if (promptTarget && typeof promptTarget.focus === "function") {
+              setTimeout(() => promptTarget.focus(), 0);
+            }
             return true;
           }
           modelStatusEl.textContent = "Failed to set model";

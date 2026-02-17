@@ -73,8 +73,12 @@ function parseSafeHtmlFragment(html) {
     const fallback = document.createElement('div');
     if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
       window.safeHtml.setSanitizedHtml(fallback, safeHtml);
+    } else if (typeof DOMParser !== 'undefined') {
+      const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, 'text/html');
+      const nodes = Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
+      fallback.replaceChildren(...nodes);
     } else {
-      fallback.innerHTML = safeHtml;
+      fallback.textContent = safeHtml;
     }
     return fallback;
   }
@@ -339,3 +343,4 @@ function applyMarkdownStyles(elementOrMarkdown, markdown) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { markdownToHtml, applyMarkdownStyles, escapeCodeHtml, DOMPURIFY_CONFIG, sanitizeWithConfiguredPolicy };
 }
+
