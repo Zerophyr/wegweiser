@@ -1,6 +1,6 @@
 {
   "name": "wegweiser",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "Chrome extension for OpenRouter - chat with models from your browser sidebar",
   "private": true,
   "scripts": {

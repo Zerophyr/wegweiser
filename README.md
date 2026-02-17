@@ -1,4 +1,4 @@
-# 🤖 Wegweiser v1.1.5
+# 🤖 Wegweiser v1.2.0
 
 > Your friendly AI companion powered by OpenRouter - chat with models right from your browser sidebar!
 
@@ -39,11 +39,10 @@ _(Coming soon)_
 2. Click the extension icon or open the side panel
 3. Click the gear icon (⚙️) to open options
 4. Enter your OpenRouter API key in the provider card
-5. Enable the providers you want to load models for (Enable is disabled until a key is present)
-6. Models refresh automatically when providers are enabled/disabled
-7. If no provider is enabled, the sidebar shows a setup panel with an “Open Options” shortcut
-8. Select your preferred model from the search dropdown
-9. Click "Save" if you changed the model
+5. Models refresh automatically after key updates
+6. If no valid API key is set, the sidebar shows a setup panel with an “Open Options” shortcut
+7. Select your preferred model from the search dropdown
+8. Click "Save" if you changed the model
 
 ## 📖 User Guide
 
@@ -75,7 +74,7 @@ _(Coming soon)_
 3. Theme applies immediately
 
 ### Options Highlights
-1. **Provider card + Enable toggle**: OpenRouter is enabled when a valid API key is present
+1. **Provider card**: Add your OpenRouter API key to unlock model loading
 2. **Balance display**: Uses OpenRouter credits endpoint automatically
 3. **Key visibility**: Eye icons hide/show keys (always hidden on reload)
 4. **Streaming debug log**: Toggle logging and download the last 500 stream events (includes summaries)
@@ -121,14 +120,21 @@ Wegweiser-extension/
 
 ## 📝 Changelog
 
-### v1.1.5 (Latest)
+### v1.2.0 (Latest)
+- 🧱 **Controller Refactor** - Extracted Projects and Sidepanel render/state orchestration into dedicated controller modules
+- 🛡️ **Sink Coverage Expansion** - Added broader sink inventory tests and tightened safe HTML coverage across trusted/static paths
+- 🧼 **Mechanical Sink Cleanup** - Replaced clear-only DOM writes with safer clear primitives where applicable
+- 🔁 **Model Sync Reliability** - Strengthened Sidepanel model sync hooks for storage/focus/visibility refresh scenarios
+- ✅ **Regression Coverage** - Added new Projects/Sidepanel controller tests and updated line-budget gates for smaller orchestration roots
+
+### v1.1.5
 - 🔐 **Encrypted Local Storage** - Sensitive local data encrypted at rest with a device-local key
 - 🧩 **Automatic Migration** - Plaintext settings are migrated to encrypted storage on first read
 - 🛡️ **No Passphrase Required** - Encryption is transparent with no extra steps for users
 - 🗃️ **Encrypted IndexedDB Chats** - Chat data migrated to IndexedDB and encrypted at rest
 
 ### v1.1.4
-- 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no provider is enabled
+- 🧭 **Onboarding Setup Panel** - Sidebar shows a setup card with “Open Options” when no API key is configured
 - 🧠 **Context Timeline Reliability** - Sidebar context timeline persists across reopen/service worker idle
 - 🧠 **Context Badge Refresh** - Context icon now updates on sidebar reopen
 
