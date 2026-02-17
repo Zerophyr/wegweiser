@@ -104,6 +104,7 @@ const projectsModalControllerUtils = resolveProjectsModule('projectsModalControl
 const projectsEventsControllerUtils = resolveProjectsModule('projectsEventsControllerUtils', './projects-events-controller-utils.js');
 const projectsRuntimeEventsControllerUtils = resolveProjectsModule('projectsRuntimeEventsControllerUtils', './projects-runtime-events-controller-utils.js');
 const projectsSendControllerUtils = resolveProjectsModule('projectsSendControllerUtils', './projects-send-controller-utils.js');
+const projectsRenderControllerUtils = resolveProjectsModule('projectsRenderControllerUtils', './projects-render-controller-utils.js');
 const projectsModelControllerUtils = resolveProjectsModule('projectsModelControllerUtils', './projects-model-controller-utils.js');
 const projectsStorageUsageControllerUtils = resolveProjectsModule('projectsStorageUsageControllerUtils', './projects-storage-usage-controller-utils.js');
 const projectsThreadControllerUtils = resolveProjectsModule('projectsThreadControllerUtils', './projects-thread-controller-utils.js');
@@ -241,137 +242,51 @@ function showView(viewName) {
   }
 }
 async function renderProjectsList() {
-  const ProjectsRaw = await loadProjects();
-  const visibility = getProjectsListVisibilityState(ProjectsRaw);
-  elements.ProjectsGrid.style.display = visibility.gridDisplay;
-  elements.emptyState.style.display = visibility.emptyDisplay;
-  if (visibility.showEmpty) {
-    return;
-  }
-  const Projects = sortProjectsByUpdatedAt(ProjectsRaw);
-  const cardsHtml = await Promise.all(Projects.map(async (Project) => {
-    const modelName = getProjectModelLabel(Project);
-    const dateStr = formatDate(Project.updatedAt);
-    return buildProjectCardHtml(Project, modelName, dateStr, escapeHtml);
-  }));
-  elements.ProjectsGrid.innerHTML = cardsHtml.join('');
-  // Add click handlers using event delegation
-  document.querySelectorAll('.project-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      const target = e.target;
-      const action = resolveProjectCardClickAction(target, card);
-      if (action.type === 'toggle-menu') {
-        e.stopPropagation();
-        toggleMenu(action.button);
-      } else if (action.type === 'edit') {
-        e.stopPropagation();
-        openEditProjectModal(action.projectId);
-      } else if (action.type === 'delete') {
-        e.stopPropagation();
-        openDeleteModal('Project', action.projectId);
-      } else if (action.type === 'open') {
-        openProject(action.projectId);
-      }
-    });
+  return projectsRenderControllerUtils.renderProjectsList({
+    loadProjects, getProjectsListVisibilityState, sortProjectsByUpdatedAt, elements,
+    getProjectModelLabel, formatDate, buildProjectCardHtml, escapeHtml,
+    resolveProjectCardClickAction, toggleMenu, openEditProjectModal, openDeleteModal, openProject,
+    queryProjectCards: () => document.querySelectorAll('.project-card')
   });
 }
 async function renderThreadList() {
-  if (!currentProjectId) return;
-  const threads = await loadThreads(currentProjectId);
-  const threadViewState = getThreadListViewState(threads);
-  if (threadViewState.isEmpty) {
-    elements.threadList.innerHTML = buildEmptyThreadListHtml();
-    return;
-  }
-  elements.threadList.innerHTML = buildThreadListHtml(
-    threadViewState.threads,
-    currentThreadId,
-    escapeHtml,
-    formatRelativeTime
-  );
-  // Add click handlers using event delegation
-  document.querySelectorAll('.thread-item').forEach(item => {
-    item.addEventListener('click', async (e) => {
-      const target = e.target;
-      const action = resolveThreadItemClickAction(target, item);
-      if (action.type === 'toggle-menu') {
-        e.stopPropagation();
-        toggleMenu(action.button);
-      } else if (action.type === 'rename') {
-        e.stopPropagation();
-        openRenameModal(action.threadId);
-      } else if (action.type === 'export') {
-        e.stopPropagation();
-        exportThread(action.threadId, action.format);
-      } else if (action.type === 'delete-thread') {
-        e.stopPropagation();
-        openDeleteModal('thread', action.threadId);
-      } else if (action.type === 'ignore') {
-        e.stopPropagation();
-      } else if (action.type === 'open') {
-        const threadId = action.threadId || item?.dataset?.threadId || null;
-        if (threadId) {
-          await openThread(threadId);
-        }
-      }
-    });
+  return projectsRenderControllerUtils.renderThreadList({
+    currentProjectId, loadThreads, getThreadListViewState, elements,
+    buildEmptyThreadListHtml, buildThreadListHtml, currentThreadId,
+    escapeHtml, formatRelativeTime, resolveThreadItemClickAction,
+    toggleMenu, openRenameModal, exportThread, openDeleteModal, openThread,
+    queryThreadItems: () => document.querySelectorAll('.thread-item')
   });
 }
 let currentArchivedMessages = [];
-function buildMessageHtml(messages) {
-  return buildProjectsMessageHtml(messages, {
-    escapeHtml,
-    applyMarkdownStyles,
+function buildRenderMessageDeps() {
+  return {
+    elements, currentProjectData, updateProjectsContextButton,
+    shouldShowSummaryBadge, buildArchiveSectionHtml, buildChatMessagesContainerHtml,
+    buildProjectsMessageHtml, escapeHtml, applyMarkdownStyles,
     extractSources: (typeof extractSources === 'function' ? extractSources : null),
-    getTokenBarStyle: (typeof getTokenBarStyle === 'function' ? getTokenBarStyle : null)
-  });
-}
-function postProcessMessages(root) {
-  processProjectsAssistantSources(root, {
+    getTokenBarStyle: (typeof getTokenBarStyle === 'function' ? getTokenBarStyle : null),
+    processProjectsAssistantSources,
     makeSourceReferencesClickable: (typeof makeSourceReferencesClickable === 'function' ? makeSourceReferencesClickable : null),
     createSourcesIndicator: (typeof createSourcesIndicator === 'function' ? createSourcesIndicator : null),
-    renderChatSourcesSummary,
-    logger: console
-  });
-  bindProjectsCopyButtons(root, {
-    writeText: (text) => navigator.clipboard.writeText(text),
+    renderChatSourcesSummary, bindProjectsCopyButtons,
+    writeClipboardText: (text) => navigator.clipboard.writeText(text),
     showToast: (typeof showToast === 'function' ? showToast : () => {}),
-    setTimeoutFn: setTimeout
-  });
+    setTimeoutFn: setTimeout, logger: console
+  };
 }
 function renderChatMessages(messages, thread = null) {
-  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
-  if (!chatMessagesEl) {
-    return;
-  }
-  if (!messages || messages.length === 0) {
-    chatMessagesEl.innerHTML = '';
-    updateProjectsContextButton(thread, currentProjectData);
-    return;
-  }
-  const archivedMessages = thread?.archivedMessages || [];
-  currentArchivedMessages = archivedMessages;
-  const summaryUpdatedAt = thread?.summaryUpdatedAt || null;
-  const showSummaryBadge = shouldShowSummaryBadge(summaryUpdatedAt, Date.now(), 30000);
-  const archiveHtml = buildArchiveSectionHtml(archivedMessages);
-  const messagesHtml = buildMessageHtml(messages);
-  chatMessagesEl.innerHTML = buildChatMessagesContainerHtml({
-    archiveHtml,
-    showSummaryBadge,
-    messagesHtml
+  const result = projectsRenderControllerUtils.renderChatMessages(messages, thread, {
+    ...buildRenderMessageDeps(),
+    hydrateImageCards
   });
-  postProcessMessages(chatMessagesEl);
-  hydrateImageCards(chatMessagesEl);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  updateProjectsContextButton(thread, currentProjectData);
+  currentArchivedMessages = result?.archivedMessages || [];
 }
 function toggleArchiveSection() {
-  const chatMessagesEl = elements.chatMessages || document.getElementById('chat-messages');
-  toggleArchiveSectionInContainer({
-    chatMessagesEl,
+  projectsRenderControllerUtils.toggleArchiveSection({
+    ...buildRenderMessageDeps(),
     currentArchivedMessages,
-    buildMessageHtml,
-    postProcessMessages
+    toggleArchiveSectionInContainer
   });
 }
 function closeExportMenus() {

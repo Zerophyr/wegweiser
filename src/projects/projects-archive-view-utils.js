@@ -28,7 +28,7 @@ function toggleArchiveSectionInContainer({
   const isOpen = archiveBlock.getAttribute("data-archive-open") === "true";
 
   if (isOpen) {
-    contentEl.innerHTML = "";
+    contentEl.replaceChildren();
     archiveBlock.setAttribute("data-archive-open", "false");
     archiveBlock.classList.remove("open");
     if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "false");

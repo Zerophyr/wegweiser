@@ -16,10 +16,11 @@ describe('sidepanel streaming UI state', () => {
   });
 
   test('sanitizes restored persisted answers through safe-html helper when available', () => {
-    const jsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js');
-    const js = fs.readFileSync(jsPath, 'utf8');
-    expect(js).toMatch(/setAnswerHtmlSafe\(payload\.html\)/);
-    expect(js).toMatch(/safeHtml\.setSanitizedHtml\(answerEl,\s*html\s*\|\|\s*""\)/);
+    const sidepanelJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js'), 'utf8');
+    const persistenceJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel-answer-persistence-controller-utils.js'), 'utf8');
+    expect(sidepanelJs).toMatch(/createAnswerPersistenceController/);
+    expect(persistenceJs).toMatch(/setAnswerHtmlSafe\(payload\.html\)/);
+    expect(persistenceJs).toMatch(/safeHtml\.setSanitizedHtml\(element,\s*html\s*\|\|\s*""\)/);
   });
 
   test('does not interpolate raw error messages directly into innerHTML', () => {

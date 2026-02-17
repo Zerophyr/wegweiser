@@ -55,4 +55,20 @@ describe("safe html sinks", () => {
     expect(content).not.toMatch(/element\.innerHTML\s*=\s*html/);
   });
 
+  test("projects render controller keeps render sinks localized", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-render-controller-utils.js"), "utf8");
+    expect(content).toMatch(/ProjectsGrid\.innerHTML/);
+    expect(content).toMatch(/threadList\.innerHTML/);
+    expect(content).toMatch(/chatMessagesEl\.innerHTML/);
+  });
+
+  test("projects archive and image helpers use clear-only DOM APIs where possible", () => {
+    const archive = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-archive-view-utils.js"), "utf8");
+    const image = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-image-utils.js"), "utf8");
+    const sidepanel = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-answer-persistence-controller-utils.js"), "utf8");
+    expect(archive).toMatch(/contentEl\.replaceChildren\(\)/);
+    expect(image).toMatch(/contentEl\.replaceChildren\(\)/);
+    expect(sidepanel).toMatch(/answerEl\.replaceChildren\(\)/);
+  });
+
 });

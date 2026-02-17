@@ -107,7 +107,7 @@ const {
   getImageViewerBaseUrl: getImageViewerBaseUrlFromUtils
 } = sidepanelStreamModule;
 const sidepanelAnswerStoreModule = resolveSidepanelModuleSafe("sidepanelAnswerStoreUtils", "./sidepanel-answer-store-utils.js");
-const { ANSWER_CACHE_KEY_PREFIX: ANSWER_CACHE_KEY_PREFIX_SAFE, getAnswerStorage: getAnswerStorageSafe, getCurrentTabId: getCurrentTabIdSafe, getSidepanelThreadId: getSidepanelThreadIdSafe, buildAnswerCacheKey: buildAnswerCacheKeySafe } = sidepanelAnswerStoreModule;
+const { getAnswerStorage: getAnswerStorageSafe, getCurrentTabId: getCurrentTabIdSafe, getSidepanelThreadId: getSidepanelThreadIdSafe, buildAnswerCacheKey: buildAnswerCacheKeySafe } = sidepanelAnswerStoreModule;
 const sidepanelAnswerUiModule = resolveSidepanelModuleSafe("sidepanelAnswerUiUtils", "./sidepanel-answer-ui-utils.js");
 const { hasAnswerContent: hasAnswerContentSafe, buildSourcesCountLabel: buildSourcesCountLabelSafe } = sidepanelAnswerUiModule;
 const sidepanelExportModule = resolveSidepanelModuleSafe("sidepanelExportUtils", "./sidepanel-export-utils.js");
@@ -120,6 +120,8 @@ const sidepanelEventsControllerModule = resolveSidepanelModuleSafe("sidepanelEve
 const sidepanelSummarizeControllerModule = resolveSidepanelModuleSafe("sidepanelSummarizeControllerUtils", "./sidepanel-summarize-controller-utils.js");
 const sidepanelStreamControllerModule = resolveSidepanelModuleSafe("sidepanelStreamControllerUtils", "./sidepanel-stream-controller-utils.js");
 const sidepanelRuntimeEventsControllerModule = resolveSidepanelModuleSafe("sidepanelRuntimeEventsControllerUtils", "./sidepanel-runtime-events-controller-utils.js");
+const sidepanelAnswerPersistenceControllerModule = resolveSidepanelModuleSafe("sidepanelAnswerPersistenceControllerUtils", "./sidepanel-answer-persistence-controller-utils.js");
+const sidepanelModelSyncControllerModule = resolveSidepanelModuleSafe("sidepanelModelSyncControllerUtils", "./sidepanel-model-sync-controller-utils.js");
 
 function setImageToggleUi(enabled, disabled = false) {
   if (!imageToggle) return;
@@ -174,58 +176,6 @@ async function loadProviderSetting() {
   } catch (e) {
     console.warn("Failed to load provider setting:", e);
   }
-}
-
-async function syncSelectedModelFromConfig() {
-  try {
-    const stored = await getLocalStorage(["or_model", "or_model_provider", "or_provider"]);
-    let modelId = stored?.or_model || "";
-    let provider = normalizeProviderSafeFromProvider(stored?.or_model_provider || stored?.or_provider);
-
-    if (!modelId) {
-      const cfgRes = await chrome.runtime.sendMessage({ type: "get_config" });
-      if (!cfgRes?.ok || !cfgRes.config?.model) return;
-      modelId = cfgRes.config.model;
-      provider = normalizeProviderSafeFromProvider(cfgRes.config.modelProvider || cfgRes.config.provider);
-    }
-
-    const combinedId = buildCombinedModelIdSafeFromProvider(provider, modelId);
-    if (selectedCombinedModelId === combinedId) return;
-
-    selectedCombinedModelId = combinedId;
-    currentProvider = provider;
-
-    const selected = modelMap.get(combinedId);
-    const displayName = selected ? getModelDisplayNameFromProvider(selected) : modelId;
-
-    if (modelInput) modelInput.value = displayName;
-    if (modelStatusEl) modelStatusEl.textContent = `Using: ${displayName}`;
-    await applyImageModeForModel();
-  } catch (e) {
-    console.warn("Failed to sync selected model from config:", e);
-  }
-}
-
-function registerStorageModelSyncListener() {
-  if (!chrome?.storage?.onChanged?.addListener) return;
-
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes) return;
-    if (!changes.or_model && !changes.or_model_provider && !changes.or_provider) return;
-    syncSelectedModelFromConfig();
-  });
-}
-
-function registerVisibilityModelSync() {
-  window.addEventListener("focus", () => {
-    syncSelectedModelFromConfig();
-  });
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      syncSelectedModelFromConfig();
-    }
-  });
 }
 
 // setup panel
@@ -296,6 +246,29 @@ const sidepanelControllerState = {
   set streamStoppedByUser(value) { streamStoppedByUser = Boolean(value); }
 };
 
+const sidepanelModelSyncController = sidepanelModelSyncControllerModule.createModelSyncController({
+  getLocalStorage,
+  sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
+  normalizeProviderSafe: normalizeProviderSafeFromProvider,
+  buildCombinedModelIdSafe: buildCombinedModelIdSafeFromProvider,
+  getSelectedCombinedModelId: () => selectedCombinedModelId,
+  setSelectedCombinedModelId: (value) => { selectedCombinedModelId = value; },
+  setCurrentProvider: (value) => { currentProvider = value; },
+  getModelMap: () => modelMap,
+  getModelDisplayName: getModelDisplayNameFromProvider,
+  modelInput,
+  modelStatusEl,
+  applyImageModeForModel,
+  storageOnChanged: chrome?.storage?.onChanged,
+  windowRef: window,
+  documentRef: document,
+  logWarn: (...args) => console.warn(...args)
+});
+
+const syncSelectedModelFromConfig = sidepanelModelSyncController.syncSelectedModelFromConfig;
+const registerStorageModelSyncListener = sidepanelModelSyncController.registerStorageModelSyncListener;
+const registerVisibilityModelSync = sidepanelModelSyncController.registerVisibilityModelSync;
+
 async function refreshContextVisualization() {
   if (!contextViz) return;
   try {
@@ -343,105 +316,24 @@ function setAnswerLoading(isLoading) {
   }
 }
 
-let answerPersistTimeout = null;
+const sidepanelAnswerPersistenceController = sidepanelAnswerPersistenceControllerModule.createAnswerPersistenceController({
+  answerEl,
+  metaEl,
+  chatStore,
+  getSidepanelThreadId: getSidepanelThreadIdSafe,
+  getAnswerStorage: getAnswerStorageSafe,
+  getCurrentTabId: getCurrentTabIdSafe,
+  buildAnswerCacheKey: buildAnswerCacheKeySafe,
+  sidepanelProjectId: SIDEPANEL_PROJECT_ID,
+  updateAnswerVisibility,
+  logWarn: (...args) => console.warn(...args)
+});
 
-function setAnswerHtmlSafe(html) {
-  if (!answerEl) return;
-  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-    window.safeHtml.setSanitizedHtml(answerEl, html || "");
-    return;
-  }
-  answerEl.innerHTML = typeof html === "string" ? html : "";
-}
-
-function clearAnswerHtml() {
-  if (!answerEl) return;
-  answerEl.innerHTML = "";
-}
-
-function scheduleAnswerPersist() {
-  if (answerPersistTimeout) {
-    clearTimeout(answerPersistTimeout);
-  }
-  answerPersistTimeout = setTimeout(() => {
-    answerPersistTimeout = null;
-    persistAnswers().catch((e) => {
-      console.warn("Failed to persist answers:", e);
-    });
-  }, 200);
-}
-
-async function persistAnswers() {
-  if (!answerEl) return;
-  const html = answerEl.innerHTML || "";
-  const metaText = metaEl?.textContent || "";
-  if (chatStore && typeof chatStore.putThread === "function") {
-    const threadId = await getSidepanelThreadIdSafe();
-    if (!html.trim()) {
-      if (typeof chatStore.deleteThread === "function") {
-        await chatStore.deleteThread(threadId);
-      }
-      return;
-    }
-    await chatStore.putThread({
-      id: threadId,
-      projectId: SIDEPANEL_PROJECT_ID,
-      title: "Sidepanel",
-      html,
-      metaText,
-      updatedAt: Date.now()
-    });
-    return;
-  }
-  const storage = getAnswerStorageSafe();
-  if (!storage) return;
-  const tabId = await getCurrentTabIdSafe();
-  const key = buildAnswerCacheKeySafe(tabId);
-  if (!html.trim()) {
-    if (typeof storage.remove === "function") {
-      await storage.remove([key]);
-    } else {
-      await storage.set({ [key]: null });
-    }
-    return;
-  }
-  await storage.set({ [key]: { html, metaText } });
-}
-
-async function restorePersistedAnswers() {
-  if (!answerEl) return;
-  if (chatStore && typeof chatStore.getThread === "function") {
-    const threadId = await getSidepanelThreadIdSafe();
-    const payload = await chatStore.getThread(threadId);
-    if (payload?.html) {
-      setAnswerHtmlSafe(payload.html);
-      if (payload.metaText) {
-        metaEl.textContent = payload.metaText;
-      }
-      updateAnswerVisibility();
-    } else {
-      clearAnswerHtml();
-      updateAnswerVisibility();
-    }
-    return;
-  }
-  const storage = getAnswerStorageSafe();
-  if (!storage) return;
-  const tabId = await getCurrentTabIdSafe();
-  const key = buildAnswerCacheKeySafe(tabId);
-  const stored = await storage.get([key]);
-  const payload = stored?.[key];
-  if (payload?.html) {
-    setAnswerHtmlSafe(payload.html);
-    if (payload.metaText) {
-      metaEl.textContent = payload.metaText;
-    }
-    updateAnswerVisibility();
-  } else {
-    clearAnswerHtml();
-    updateAnswerVisibility();
-  }
-}
+const setAnswerHtmlSafe = sidepanelAnswerPersistenceController.setAnswerHtmlSafe;
+const clearAnswerHtml = sidepanelAnswerPersistenceController.clearAnswerHtml;
+const scheduleAnswerPersist = sidepanelAnswerPersistenceController.scheduleAnswerPersist;
+const restorePersistedAnswers = sidepanelAnswerPersistenceController.restorePersistedAnswers;
+const registerAnswerObserver = sidepanelAnswerPersistenceController.registerAnswerObserver;
 
 function renderSourcesSummary(answerItem, sources) {
   const summary = answerItem?.querySelector('.answer-sources-summary');
@@ -532,50 +424,29 @@ if (balanceRefreshBtn) {
 
 function buildSidepanelPromptDeps() {
   return {
-    state: sidepanelControllerState,
-    promptEl,
-    askBtn,
-    setPromptStreamingState,
-    metaEl,
-    showAnswerBox,
-    answerEl,
-    updateAnswerVisibility,
-    answerSection,
+    state: sidepanelControllerState, promptEl, askBtn, setPromptStreamingState, metaEl, showAnswerBox,
+    answerEl, updateAnswerVisibility, answerSection,
     parseCombinedModelIdSafe: parseCombinedModelIdSafeFromProvider,
     normalizeProviderSafe: normalizeProviderSafeFromProvider,
     sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
     buildImageCard: (typeof buildImageCard === "function") ? buildImageCard : null,
     putImageCacheEntry: (typeof putImageCacheEntry === "function") ? putImageCacheEntry : null,
     getImageCacheEntry: (typeof getImageCacheEntry === "function") ? getImageCacheEntry : null,
-    openImageInNewTab,
-    downloadImage,
-    refreshBalance,
-    sanitizePrompt: sanitizePromptSafe,
+    openImageInNewTab, downloadImage, refreshBalance, sanitizePrompt: sanitizePromptSafe,
     clearPromptAfterSend: (typeof clearPromptAfterSend === "function") ? clearPromptAfterSend : null,
     generateImageImpl: (prompt) => generateImage(prompt),
-    typingIndicator,
-    showTypingIndicator,
-    queryActiveTab: () => chrome.tabs.query({ active: true, currentWindow: true }),
-    getProviderLabelSafe: getProviderLabelSafeFromProvider,
-    hideTypingIndicator,
+    typingIndicator, showTypingIndicator, queryActiveTab: () => chrome.tabs.query({ active: true, currentWindow: true }),
+    getProviderLabelSafe: getProviderLabelSafeFromProvider, hideTypingIndicator,
     buildStreamErrorHtml: buildStreamErrorHtmlSafe,
     getStreamingFallbackMessage: (typeof getStreamingFallbackMessage === "function") ? getStreamingFallbackMessage : null,
     extractReasoningFromStreamChunk: (typeof extractReasoningFromStreamChunk === "function") ? extractReasoningFromStreamChunk : null,
-    extractSources,
-    applyMarkdownStyles,
+    extractSources, applyMarkdownStyles,
     safeHtmlSetter: (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function")
       ? window.safeHtml.setSanitizedHtml
       : null,
-    modelMap,
-    getModelDisplayName: getModelDisplayNameFromProvider,
-    UI_CONSTANTS,
+    modelMap, getModelDisplayName: getModelDisplayNameFromProvider, UI_CONSTANTS,
     removeReasoningBubbles: (typeof removeReasoningBubbles === "function") ? removeReasoningBubbles : null,
-    makeSourceReferencesClickable,
-    createSourcesIndicator,
-    renderSourcesSummary,
-    contextViz,
-    escapeHtml,
-    estimatedCostEl
+    makeSourceReferencesClickable, createSourcesIndicator, renderSourcesSummary, contextViz, escapeHtml, estimatedCostEl
   };
 }
 
@@ -610,43 +481,25 @@ stopBtn.addEventListener("click", () => {
 const summarizeBtn = document.getElementById("summarizeBtn");
 
 sidepanelSummarizeControllerModule.registerSummarizeHandler({
-  summarizeBtn,
-  askBtn,
-  metaEl,
-  answerEl,
-  answerSection,
-  showAnswerBox,
-  showTypingIndicator,
-  hideTypingIndicator,
+  summarizeBtn, askBtn, metaEl, answerEl, answerSection, showAnswerBox, showTypingIndicator, hideTypingIndicator,
   getProviderLabel: getProviderLabelSafeFromProvider,
-  getCurrentProvider: () => currentProvider,
-  getWebSearchEnabled: () => webSearchEnabled,
-  getReasoningEnabled: () => reasoningEnabled,
+  getCurrentProvider: () => currentProvider, getWebSearchEnabled: () => webSearchEnabled, getReasoningEnabled: () => reasoningEnabled,
   sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
   renderMarkdown: (element, text) => renderStreamingText(element, text),
-  renderSourcesSummary,
-  makeSourceReferencesClickable,
-  createSourcesIndicator,
-  extractSources,
-  updateAnswerVisibility,
-  refreshBalance,
-  getContextViz: () => contextViz,
+  renderSourcesSummary, makeSourceReferencesClickable, createSourcesIndicator, extractSources,
+  updateAnswerVisibility, refreshBalance, getContextViz: () => contextViz,
   getSelectedModel: () => (selectedCombinedModelId ? getModelDisplayNameFromProvider(modelMap.get(selectedCombinedModelId)) : null),
   getDefaultModel: (value) => value,
   estimateTokenBarPercentage: (tokens) => tokens ? Math.min((tokens / UI_CONSTANTS.TOKEN_BAR_MAX_TOKENS) * 100, 100) : 0,
-  escapeHtml,
-  toast
+  escapeHtml, toast
 });
 
 function autoResizeTextarea() {
-  // Reset height to auto to get the correct scrollHeight
   promptEl.style.height = 'auto';
-  // Set height to scrollHeight, using constants for limits
   const newHeight = Math.min(promptEl.scrollHeight, UI_CONSTANTS.TEXTAREA_MAX_HEIGHT);
   promptEl.style.height = newHeight + 'px';
 }
 
-// Update token estimation display
 function updateTokenEstimation() {
   const text = promptEl.value.trim();
   if (text.length > 0) {
@@ -658,65 +511,36 @@ function updateTokenEstimation() {
   }
 }
 
-// Create debounced version for performance
 const debouncedTokenEstimation = typeof debounce === 'function'
   ? debounce(updateTokenEstimation, UI_CONSTANTS.DEBOUNCE_DELAY)
   : updateTokenEstimation;
 
-sidepanelEventsControllerModule.registerPromptEventHandlers({
-  promptEl,
-  askQuestion,
-  autoResizeTextarea,
-  debouncedTokenEstimation
-});
-
-sidepanelEventsControllerModule.registerGlobalShortcutHandlers({
-  promptEl,
-  metaEl,
-  findClearButton: () => document.getElementById("clear-answer-btn")
-});
+sidepanelEventsControllerModule.registerPromptEventHandlers({ promptEl, askQuestion, autoResizeTextarea, debouncedTokenEstimation });
+sidepanelEventsControllerModule.registerGlobalShortcutHandlers({ promptEl, metaEl, findClearButton: () => document.getElementById("clear-answer-btn") });
 
 async function loadModels() {
   return sidepanelModelControllerModule.loadModels({
-    state: sidepanelControllerState,
-    modelStatusEl,
-    sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload),
-    getLocalStorage,
-    loadFavoritesAndRecents,
-    modelInput,
-    modelDropdownRef: () => modelDropdown,
-    ModelDropdownManager,
+    state: sidepanelControllerState, modelStatusEl,
+    sendRuntimeMessage: (payload) => chrome.runtime.sendMessage(payload), getLocalStorage, loadFavoritesAndRecents,
+    modelInput, modelDropdownRef: () => modelDropdown, ModelDropdownManager,
     parseCombinedModelIdSafe: parseCombinedModelIdSafeFromProvider,
-    normalizeProviderSafe: normalizeProviderSafeFromProvider,
-    getModelDisplayName: getModelDisplayNameFromProvider,
-    setLocalStorage,
-    getProviderStorageKeySafe: getProviderStorageKeySafeFromProvider,
-    buildCombinedRecentList,
-    buildCombinedFavoritesList,
-    setModelDropdown: (value) => { modelDropdown = value; },
-    applyImageModeForModel,
+    normalizeProviderSafe: normalizeProviderSafeFromProvider, getModelDisplayName: getModelDisplayNameFromProvider,
+    setLocalStorage, getProviderStorageKeySafe: getProviderStorageKeySafeFromProvider,
+    buildCombinedRecentList, buildCombinedFavoritesList,
+    setModelDropdown: (value) => { modelDropdown = value; }, applyImageModeForModel,
     buildCombinedModelIdSafe: buildCombinedModelIdSafeFromProvider
   });
 }
 
 async function loadToggleSettings() {
   return sidepanelModelControllerModule.loadToggleSettings({
-    state: sidepanelControllerState,
-    getLocalStorage,
-    setLocalStorage,
-    webSearchToggle,
-    reasoningToggle,
-    imageToggle,
-    setImageToggleUi,
-    setImageToggleTitle
+    state: sidepanelControllerState, getLocalStorage, setLocalStorage,
+    webSearchToggle, reasoningToggle, imageToggle, setImageToggleUi, setImageToggleTitle
   });
 }
 
 async function saveToggleSettings() {
-  return sidepanelModelControllerModule.saveToggleSettings({
-    state: sidepanelControllerState,
-    setLocalStorage
-  });
+  return sidepanelModelControllerModule.saveToggleSettings({ state: sidepanelControllerState, setLocalStorage });
 }
 
 webSearchToggle.addEventListener("click", async () => {
@@ -816,12 +640,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateAnswerVisibility();
   await restorePersistedAnswers();
 
-  if (answerEl && typeof MutationObserver !== "undefined") {
-    const observer = new MutationObserver(() => {
-      scheduleAnswerPersist();
-    });
-    observer.observe(answerEl, { childList: true, subtree: true, characterData: true });
-  }
+  registerAnswerObserver();
 
   if (typeof cleanupImageCache === "function") {
     cleanupImageCache().catch((e) => {

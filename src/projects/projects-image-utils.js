@@ -103,7 +103,7 @@ async function hydrateImageCards(root, deps = {}) {
       card = buildCard({ state: "expired" });
     }
 
-    contentEl.innerHTML = "";
+    contentEl.replaceChildren();
     contentEl.appendChild(card);
   }
 }
