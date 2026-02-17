@@ -1,0 +1,36 @@
+title = "Wegweiser Secret Scan Rules"
+
+[allowlist]
+description = "Allow non-secret placeholders"
+regexes = [
+  '''sk-or-\.\.\.''',
+  '''ghp_\[A-Za-z0-9\]\{36\}''',
+  '''github_pat_\[A-Za-z0-9_\]\+'''
+]
+paths = [
+  '''tests/.*'''
+]
+
+[[rules]]
+id = "github-classic-pat"
+description = "GitHub classic personal access token"
+regex = '''ghp_[A-Za-z0-9]{36}'''
+tags = ["github", "token"]
+
+[[rules]]
+id = "github-fine-grained-pat"
+description = "GitHub fine-grained personal access token"
+regex = '''github_pat_[A-Za-z0-9_]{20,}'''
+tags = ["github", "token"]
+
+[[rules]]
+id = "github-credential-in-url"
+description = "Credentials embedded in GitHub URL"
+regex = '''https?://[^\s/@:]+:[^\s/@]+@github\.com'''
+tags = ["github", "url", "credentials"]
+
+[[rules]]
+id = "private-key-header"
+description = "Private key material"
+regex = '''-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'''
+tags = ["key", "private"]

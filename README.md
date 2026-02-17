@@ -31,6 +31,15 @@ _(Coming soon)_
 4. Click "Load unpacked"
 5. Select the extension directory
 
+## 👩‍💻 Contributor Security Setup
+
+1. Use SSH for git remotes (no embedded credentials):
+   - `git remote set-url origin git@github.com:Zerophyr/wegweiser.git`
+2. Install local git hooks once per clone:
+   - `npm run hooks:install`
+3. Run secret scans before release work:
+   - `npm run security:scan`
+
 ## 🔑 Setup
 
 1. Get your API key:
@@ -73,6 +82,15 @@ _(Coming soon)_
    - **Light** - Clean light theme
 3. Theme applies immediately
 
+### Release Packaging & CRX Signing
+1. Run packaging:
+   - `npm run release`
+2. Optional signed CRX output requires both environment variables:
+   - `CWS_PRIVATE_KEY_PATH` (path to private key file)
+   - `CHROME_PATH` (path to Chrome/Chromium executable)
+3. If either variable is missing or invalid, release still creates the upload ZIP and skips signed CRX.
+4. Never commit key files or place credentials in git remote URLs.
+
 ### Options Highlights
 1. **Provider card**: Add your OpenRouter API key to unlock model loading
 2. **Balance display**: Uses OpenRouter credits endpoint automatically
@@ -86,7 +104,7 @@ _(Coming soon)_
 ```
 Wegweiser-extension/
 ├── .github/                # CI workflows
-├── scripts/                # Build/release utilities
+├── scripts/                # Build/release/security utilities
 ├── src/
 │   ├── background/         # Service worker + provider/API orchestration + background-* helpers
 │   ├── sidepanel/          # Sidebar UI + sidepanel-* helpers
@@ -117,6 +135,18 @@ Wegweiser-extension/
 - **Local Image Storage** - Generated images stored in IndexedDB on your device
 - **Image Cleanup** - Manual clear option available in Options
 - **No Telemetry** - No data collected or shared
+- **Security Policy** - See `SECURITY.md` for reporting and incident-response guidance
+
+### Secret Incident Recovery
+
+If a credential is exposed:
+1. Revoke the leaked token/key immediately.
+2. Rotate and replace credentials in local settings/CI.
+3. Verify remotes contain no embedded credentials:
+   - `git remote -v`
+4. Run scans:
+   - `npm run security:scan`
+   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_" --oneline`
 
 ## 📝 Changelog
 

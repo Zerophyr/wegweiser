@@ -10,6 +10,9 @@
     "build:ts": "tsc",
     "watch:ts": "tsc --watch",
     "release": "node scripts/release.js",
+    "security:scan": "node scripts/security/scan-repo-secrets.js",
+    "security:scan:staged": "node scripts/security/scan-staged-secrets.js",
+    "hooks:install": "git config core.hooksPath .githooks",
     "lint": "eslint . --ext .js,.ts",
     "format": "prettier --write \"**/*.{js,ts,json,md}\""
   },

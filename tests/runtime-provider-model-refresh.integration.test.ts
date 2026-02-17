@@ -5,21 +5,24 @@ const { registerProjectsRuntimeMessageHandlers } = require("../src/projects/proj
 const { registerOptionsRuntimeMessageHandlers } = require("../src/options/options-runtime-events-controller-utils.js");
 
 function createRuntimeHarness() {
-  let listener: ((msg: any) => void) | null = null;
+  const listeners = new Set<(msg: any) => void>();
   return {
     runtime: {
       onMessage: {
-        addListener: (fn: any) => {
-          listener = fn;
+        addListener: (fn: (msg: any) => void) => {
+          listeners.add(fn);
         },
-        removeListener: (fn: any) => {
-          if (listener === fn) listener = null;
+        removeListener: (fn: (msg: any) => void) => {
+          listeners.delete(fn);
         }
       }
     },
     dispatch: (msg: any) => {
-      if (listener) listener(msg);
-    }
+      for (const listener of listeners) {
+        listener(msg);
+      }
+    },
+    listenerCount: () => listeners.size
   };
 }
 
@@ -117,5 +120,73 @@ describe("runtime provider/model refresh integration", () => {
 
     expect(loadModels).toHaveBeenCalledTimes(1);
     expect(loadModels).toHaveBeenCalledWith({ silent: true });
+  });
+
+  test("cross-page broadcast updates sidepanel and projects while options reloads once", async () => {
+    const harness = createRuntimeHarness();
+    expect(harness.listenerCount()).toBe(0);
+
+    const sidepanelDeps = {
+      runtime: harness.runtime,
+      refreshSidebarSetupState: jest.fn().mockResolvedValue(true),
+      loadProviderSetting: jest.fn().mockResolvedValue(undefined),
+      loadModels: jest.fn().mockResolvedValue(undefined),
+      refreshBalance: jest.fn().mockResolvedValue(undefined),
+      refreshFavoritesOnly: jest.fn().mockResolvedValue(undefined),
+      balanceEl: { textContent: "" }
+    };
+    const projectsDeps = {
+      runtime: harness.runtime,
+      loadProviderSetting: jest.fn().mockResolvedValue(undefined),
+      loadModels: jest.fn().mockResolvedValue(undefined),
+      getProviderLabelSafe: jest.fn().mockReturnValue("OpenRouter"),
+      showToast: jest.fn()
+    };
+    let lastSilentAt = 0;
+    const optionsDeps = {
+      runtime: harness.runtime,
+      getModelsLoadInFlight: () => false,
+      getLastSilentModelsLoadAt: () => lastSilentAt,
+      setLastSilentModelsLoadAt: (value: number) => { lastSilentAt = value; },
+      minReloadIntervalMs: 1500,
+      loadModels: jest.fn()
+    };
+
+    registerSidepanelRuntimeMessageHandlers(sidepanelDeps);
+    registerProjectsRuntimeMessageHandlers(projectsDeps);
+    registerOptionsRuntimeMessageHandlers(optionsDeps);
+    expect(harness.listenerCount()).toBe(3);
+
+    harness.dispatch({ type: "provider_settings_updated", provider: "openrouter" });
+    await flushAsync();
+
+    expect(sidepanelDeps.loadModels).toHaveBeenCalledTimes(1);
+    expect(sidepanelDeps.refreshBalance).toHaveBeenCalledTimes(1);
+    expect(projectsDeps.loadModels).toHaveBeenCalledTimes(1);
+    expect(projectsDeps.showToast).toHaveBeenCalledTimes(1);
+
+    harness.dispatch({ type: "models_updated" });
+    harness.dispatch({ type: "models_updated" });
+    await flushAsync();
+
+    expect(sidepanelDeps.loadModels).toHaveBeenCalledTimes(3);
+    expect(projectsDeps.loadModels).toHaveBeenCalledTimes(3);
+    expect(optionsDeps.loadModels).toHaveBeenCalledTimes(1);
+  });
+
+  test("options ignores model refresh while model load is already in-flight", () => {
+    const harness = createRuntimeHarness();
+    const loadModels = jest.fn();
+    registerOptionsRuntimeMessageHandlers({
+      runtime: harness.runtime,
+      getModelsLoadInFlight: () => true,
+      getLastSilentModelsLoadAt: () => 0,
+      setLastSilentModelsLoadAt: jest.fn(),
+      minReloadIntervalMs: 1500,
+      loadModels
+    });
+
+    harness.dispatch({ type: "models_updated" });
+    expect(loadModels).not.toHaveBeenCalled();
   });
 });

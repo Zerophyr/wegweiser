@@ -85,16 +85,38 @@ function buildZip(version) {
   return zipPath;
 }
 
+function resolveExistingPath(envName, value) {
+  const resolved = path.resolve(value);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`${envName} points to a missing path. Set a valid absolute path.`);
+  }
+  return resolved;
+}
+
+function getSigningConfig() {
+  const keyPathRaw = process.env.CWS_PRIVATE_KEY_PATH;
+  const chromePathRaw = process.env.CHROME_PATH;
+  if (!keyPathRaw && !chromePathRaw) {
+    return null;
+  }
+  if (!keyPathRaw || !chromePathRaw) {
+    throw new Error("CRX signing requires both CWS_PRIVATE_KEY_PATH and CHROME_PATH.");
+  }
+  return {
+    keyPath: resolveExistingPath("CWS_PRIVATE_KEY_PATH", keyPathRaw),
+    chromePath: resolveExistingPath("CHROME_PATH", chromePathRaw)
+  };
+}
+
 function trySignCrx(version) {
-  const keyPath = process.env.CWS_PRIVATE_KEY_PATH;
-  const chromePath = process.env.CHROME_PATH;
-  if (!keyPath || !chromePath) {
+  const signingConfig = getSigningConfig();
+  if (!signingConfig) {
     return null;
   }
 
   const extensionDir = rootDir;
   const pemPath = path.join(rootDir, path.basename(extensionDir) + ".pem");
-  const cmd = `"${chromePath}" --pack-extension="${extensionDir}" --pack-extension-key="${keyPath}"`;
+  const cmd = `"${signingConfig.chromePath}" --pack-extension="${extensionDir}" --pack-extension-key="${signingConfig.keyPath}"`;
   run(cmd, { cwd: rootDir });
 
   const crxName = path.basename(extensionDir) + ".crx";
@@ -108,7 +130,8 @@ function trySignCrx(version) {
   }
   const crxTarget = path.join(distDir, `wegweiser-v${version}.crx`);
   fs.renameSync(crxSource, crxTarget);
-  const normalizedKeyPath = path.resolve(keyPath);
+
+  const normalizedKeyPath = path.resolve(signingConfig.keyPath);
   const normalizedPemPath = path.resolve(pemPath);
   if (normalizedKeyPath !== normalizedPemPath && fs.existsSync(pemPath)) {
     fs.unlinkSync(pemPath);

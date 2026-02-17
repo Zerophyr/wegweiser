@@ -132,6 +132,39 @@ describe("runtime stream stop integration", () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
+
+  test("sidepanel stop is idempotent on rapid double-click", () => {
+    const disconnect = jest.fn();
+    const state: any = {
+      activePort: { disconnect },
+      streamStopRequested: false,
+      streamStoppedByUser: false
+    };
+    const showToast = jest.fn();
+
+    const first = stopActiveStream({
+      state,
+      setPromptStreamingState: jest.fn(),
+      askBtn: { disabled: true },
+      metaEl: { textContent: "" },
+      hideTypingIndicator: jest.fn(),
+      showToast
+    });
+    const second = stopActiveStream({
+      state,
+      setPromptStreamingState: jest.fn(),
+      askBtn: { disabled: true },
+      metaEl: { textContent: "" },
+      hideTypingIndicator: jest.fn(),
+      showToast
+    });
+
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
   test("projects stream promise resolves when stream disconnects during stop", async () => {
     const disconnect = jest.fn();
     const messageListeners: Array<(msg: any) => void> = [];
