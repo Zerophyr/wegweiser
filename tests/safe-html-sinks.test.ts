@@ -29,6 +29,12 @@ describe("safe html sinks", () => {
     expect(content).toMatch(/promptHistoryEl\.replaceChildren\(\)/);
   });
 
+  test("options page loads purifier and safe-html pipeline", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "options", "options.html"), "utf8");
+    expect(content).toMatch(/<script src="\.\.\/lib\/purify\.min\.js"><\/script>/);
+    expect(content).toMatch(/<script src="\.\.\/modules\/safe-html\.js"><\/script>/);
+    expect(content).toMatch(/<script src="\.\.\/modules\/markdown\.js"><\/script>/);
+  });
   test("toast routes rendering through helper instead of direct toast innerHTML", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "toast.js"), "utf8");
     expect(content).toMatch(/function setToastHtml\(/);
@@ -86,3 +92,4 @@ describe("safe html sinks", () => {
   });
 
 });
+

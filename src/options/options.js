@@ -135,6 +135,7 @@ const {
   }
 } = providerUiUtils;
 const optionsModelControllerUtils = (typeof window !== "undefined" && window.optionsModelControllerUtils) || {};
+const optionsHistoryFormatUtils = (typeof window !== "undefined" && window.optionsHistoryFormatUtils) || {};
 const optionsHistoryDetailControllerUtils = (typeof window !== "undefined" && window.optionsHistoryDetailControllerUtils) || {};
 const optionsHistoryControllerUtils = (typeof window !== "undefined" && window.optionsHistoryControllerUtils) || {};
 const optionsRuntimeEventsControllerUtils = (typeof window !== "undefined" && window.optionsRuntimeEventsControllerUtils) || {};
@@ -400,23 +401,39 @@ function renderPromptHistory(history) {
 
   promptHistoryEl.replaceChildren();
 
+  const normalizeHistoryEntry = optionsHistoryFormatUtils.normalizeHistoryEntryForDisplay
+    || ((entry) => ({ ...entry, promptText: String(entry?.prompt || ""), answerText: String(entry?.answer || "") }));
+  const buildPreviewSnippet = optionsHistoryFormatUtils.buildPreviewSnippet
+    || ((text, maxLen = 80) => {
+      const raw = String(text || "").replace(/\s+/g, " ").trim();
+      if (raw.length <= maxLen) return raw;
+      return `${raw.slice(0, maxLen)}...`;
+    });
+
   for (const item of history) {
+    const displayItem = normalizeHistoryEntry(item);
     const div = document.createElement("div");
     div.className = "history-item";
     div.style.cssText = "background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;";
 
     const ts = new Date(item.createdAt).toLocaleString();
     const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
-    const buildPreview = historyViewUtils.buildHistoryPreviewHtml || ((entry, timestamp, escapeFn) => `
+    const buildPreview = historyViewUtils.buildHistoryPreviewHtml || ((entry, timestamp, escapeFn, snippetFn) => {
+      const promptPreview = snippetFn(entry.promptText || entry.prompt || "", 80);
+      const answerPreview = snippetFn(entry.answerText || entry.answer || "", 110);
+      return `
       <div class="history-preview">
         <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px;">${timestamp}</div>
         <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 600;">Prompt:</div>
-        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeFn((entry.prompt || "").length > 80 ? `${entry.prompt.slice(0, 80)}...` : (entry.prompt || ""))}</div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeFn(promptPreview)}</div>
+        <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 600;">Response:</div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeFn(answerPreview || "No response available")}</div>
         <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Click to view full context</div>
       </div>
-    `);
+    `;
+    });
 
-    setHtmlSafely(div, buildPreview(item, ts, escapeHtml));
+    setHtmlSafely(div, buildPreview(displayItem, ts, escapeHtml, buildPreviewSnippet));
 
     div.dataset.itemId = item.id;
 
@@ -796,3 +813,7 @@ optionsRuntimeEventsControllerUtils.registerOptionsRuntimeMessageHandlers?.({
   loadModels
 });
 })();
+
+
+
+
