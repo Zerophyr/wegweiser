@@ -25,6 +25,7 @@ Please include:
   - `npm run security:scan:staged`
   - `npm run security:scan`
 - Keep signing keys outside the repo and outside logs.
+- Never paste live API keys/tokens in chat, issues, or pull requests.
 
 ## Incident Response (Credential Leak)
 
@@ -33,5 +34,5 @@ Please include:
 3. Verify local git remotes do not include credentials.
 4. Run repository scans and history checks:
    - `npm run security:scan`
-   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_" --oneline`
+   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_|sk-or-v1-[A-Za-z0-9]{40,}" --oneline`
 5. Document remediation in internal release notes.

@@ -24,10 +24,6 @@ function setSafeHtml(element, html, safeHtmlSetter) {
     element.replaceChildren(...buildHtmlNodes(html));
     return;
   }
-  if ("innerHTML" in element) {
-    element.innerHTML = typeof html === "string" ? html : "";
-    return;
-  }
   if ("textContent" in element) {
     element.textContent = typeof html === "string" ? html : "";
   }

@@ -9,6 +9,35 @@ function buildMessageHtml(messages, deps = {}) {
   });
 }
 
+function buildHtmlNodes(html) {
+  const value = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, "text/html");
+    return Array.from(parsed.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(value)];
+}
+
+function setSafeHtml(element, html, setSanitizedHtmlFn) {
+  if (!element) return;
+  if (typeof setSanitizedHtmlFn === "function") {
+    setSanitizedHtmlFn(element, html || "");
+    return;
+  }
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  if (typeof element.replaceChildren === "function") {
+    element.replaceChildren(...buildHtmlNodes(html));
+    return;
+  }
+  if ("textContent" in element) {
+    element.textContent = typeof html === "string" ? html : "";
+  }
+}
+
 function postProcessMessages(root, deps = {}) {
   deps.processProjectsAssistantSources(root, {
     makeSourceReferencesClickable: deps.makeSourceReferencesClickable,
@@ -40,7 +69,7 @@ async function renderProjectsList(deps = {}) {
     return deps.buildProjectCardHtml(project, modelName, dateStr, deps.escapeHtml);
   }));
 
-  deps.elements.ProjectsGrid.innerHTML = cardsHtml.join("");
+  setSafeHtml(deps.elements.ProjectsGrid, cardsHtml.join(""), deps.safeHtmlSetter);
   const cards = typeof deps.queryProjectCards === "function"
     ? deps.queryProjectCards()
     : document.querySelectorAll(".project-card");
@@ -69,15 +98,19 @@ async function renderThreadList(deps = {}) {
   const threads = await deps.loadThreads(deps.currentProjectId);
   const threadViewState = deps.getThreadListViewState(threads);
   if (threadViewState.isEmpty) {
-    deps.elements.threadList.innerHTML = deps.buildEmptyThreadListHtml();
+    setSafeHtml(deps.elements.threadList, deps.buildEmptyThreadListHtml(), deps.safeHtmlSetter);
     return;
   }
 
-  deps.elements.threadList.innerHTML = deps.buildThreadListHtml(
-    threadViewState.threads,
-    deps.currentThreadId,
-    deps.escapeHtml,
-    deps.formatRelativeTime
+  setSafeHtml(
+    deps.elements.threadList,
+    deps.buildThreadListHtml(
+      threadViewState.threads,
+      deps.currentThreadId,
+      deps.escapeHtml,
+      deps.formatRelativeTime
+    ),
+    deps.safeHtmlSetter
   );
 
   const items = typeof deps.queryThreadItems === "function"
@@ -128,11 +161,11 @@ function renderChatMessages(messages, thread = null, deps = {}) {
   const showSummaryBadge = deps.shouldShowSummaryBadge(summaryUpdatedAt, Date.now(), 30000);
   const archiveHtml = deps.buildArchiveSectionHtml(archivedMessages);
   const messagesHtml = buildMessageHtml(messages, deps);
-  chatMessagesEl.innerHTML = deps.buildChatMessagesContainerHtml({
+  setSafeHtml(chatMessagesEl, deps.buildChatMessagesContainerHtml({
     archiveHtml,
     showSummaryBadge,
     messagesHtml
-  });
+  }), deps.safeHtmlSetter);
   postProcessMessages(chatMessagesEl, deps);
   deps.hydrateImageCards(chatMessagesEl);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;

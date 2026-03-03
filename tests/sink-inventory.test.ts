@@ -40,13 +40,13 @@ describe("sink inventory", () => {
     },
     {
       relPath: "src/projects/projects-stream-utils.js",
-      sinkClass: "trusted-static-template",
-      expectedTargets: ["messageDiv", "ui.content"]
+      sinkClass: "safe-helper",
+      expectedTargets: []
     },
     {
       relPath: "src/projects/projects-message-flow-utils.js",
-      sinkClass: "trusted-static-template",
-      expectedTargets: ["tempWrapper"]
+      sinkClass: "dom-fragment-builder",
+      expectedTargets: []
     },
     {
       relPath: "src/projects/projects-archive-view-utils.js",
@@ -55,8 +55,8 @@ describe("sink inventory", () => {
     },
     {
       relPath: "src/projects/projects-render-controller-utils.js",
-      sinkClass: "trusted-render-orchestration",
-      expectedTargets: ["chatMessagesEl", "deps.elements.ProjectsGrid", "deps.elements.threadList"]
+      sinkClass: "safe-helper",
+      expectedTargets: []
     },
     {
       relPath: "src/projects/projects.js",
@@ -66,6 +66,11 @@ describe("sink inventory", () => {
     {
       relPath: "src/projects/projects-model-select-utils.js",
       sinkClass: "dom-only-options-render",
+      expectedTargets: []
+    },
+    {
+      relPath: "src/projects/projects-send-controller-utils.js",
+      sinkClass: "safe-helper",
       expectedTargets: []
     }
   ];

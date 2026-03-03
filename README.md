@@ -39,14 +39,75 @@ _(Coming soon)_
    - `npm run hooks:install`
 3. Run security scans before release work:
    - `npm run security:scan`
-4. Follow TDD for behavior changes (Red -> Green -> Refactor):
+4. Never paste live API keys in chat/issues/PRs. If exposed, revoke and rotate immediately.
+5. Follow TDD for behavior changes (Red -> Green -> Refactor):
    - Write/update a failing test first.
    - Run the failing test and confirm expected failure.
    - Implement minimal code to pass.
    - Re-run full unit tests and smoke tests for relevant flows.
-5. Use local TDD guardrails before pushing:
+6. Use local TDD guardrails before pushing:
    - `npm run tdd:check:staged`
    - `npm run test:related`
+
+### 🔁 Developer Workflow (Local -> PR)
+
+Run these in order for feature/bugfix branches:
+
+1. `npm ci`
+2. `npm run hooks:install` *(once per clone)*
+3. `npm run security:scan:staged` *(before commit)*
+4. `npm run tdd:check:staged`
+5. `npm run test:related` *(quick loop for changed source files)*
+6. `npm test -- --runInBand` *(pre-PR gate)*
+7. `npm run test:smoke` *(UI flow gate)*
+8. Push and open PR *(required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`)*
+
+Use `test:related` for fast iteration and always run the full Jest + smoke gates before opening a PR. Use `npm run test:smoke:parallel` only for optional flake hunting.
+
+### 🌐 Live Provider Smoke (Manual + Nightly)
+
+Use this lane to validate real OpenRouter model refresh/balance/inference without affecting PR gates.
+
+- Required env:
+  - `LIVE_PROVIDER_SMOKE=1`
+  - `OPENROUTER_TEST_API_KEY=<limited test key>`
+- Optional env:
+  - `OPENROUTER_CANARY_MODEL=openai/gpt-4o-mini`
+  - `OPENROUTER_REQUIRED_MODELS=<comma-separated raw model IDs>`
+- Local run:
+  - `npm run test:smoke:live`
+- Headed debug run:
+  - `npm run test:smoke:live:headed`
+
+Notes:
+- Keep test keys limited and dedicated to smoke validation.
+- Never commit/store keys in repo files. Use shell env vars and GitHub secrets only.
+- CI workflow `.github/workflows/live-provider-smoke.yml` runs nightly + `workflow_dispatch` and is non-blocking for PR merge.
+
+### 🛠️ TDD Guardrail Tuning Policy (Maintainers)
+
+For the next 2 weeks, track `tdd-guard` false positives and tune only `scripts/tdd/tdd-check.config.json`:
+
+- Allowed tuning:
+  - `areaAliases` improvements
+  - `ignoredSourceGlobs` for clearly non-behavioral/vendor/generated paths
+- Not allowed:
+  - broad ignores for core runtime folders (`src/background`, `src/sidepanel`, `src/projects`, `src/options`)
+  - disabling `tdd-guard` or removing required status checks
+
+### 🔐 Branch Protection Baseline (Maintainers)
+
+Configure GitHub branch protection for `main` with:
+
+- Require pull request before merge
+- Required approvals: 1
+- Dismiss stale approvals: enabled
+- Require status checks: enabled
+- Require branches to be up to date: enabled
+- Required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`
+- Restrict force pushes: enabled
+- Restrict deletions: enabled
+- Include administrators: enabled
 
 ## 🔑 Setup
 
@@ -154,7 +215,7 @@ If a credential is exposed:
    - `git remote -v`
 4. Run scans:
    - `npm run security:scan`
-   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_" --oneline`
+   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_|sk-or-v1-[A-Za-z0-9]{40,}" --oneline`
 
 ## 📝 Changelog
 

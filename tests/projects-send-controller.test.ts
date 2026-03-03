@@ -77,7 +77,7 @@ describe("projects-send-controller-utils", () => {
     expect(setStreamPort).toHaveBeenCalled();
   });
   test("renderStreamError fallback writes HTML", () => {
-    const content = { innerHTML: "" };
+    const content = document.createElement("div");
     renderStreamError({
       renderStreamErrorRuntime: null,
       getStreamErrorHtml: (msg: any) => `ERR:${msg}`,

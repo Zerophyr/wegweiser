@@ -49,6 +49,35 @@ function getTypingIndicatorHtml() {
   `;
 }
 
+function buildHtmlNodes(html) {
+  const value = typeof html === "string" ? html : "";
+  if (typeof document === "undefined") return [];
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, "text/html");
+    return Array.from(parsed.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(value)];
+}
+
+function setSafeHtml(element, html, setSanitizedHtmlFn) {
+  if (!element) return;
+  if (typeof setSanitizedHtmlFn === "function") {
+    setSanitizedHtmlFn(element, html || "");
+    return;
+  }
+  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
+    window.safeHtml.setSanitizedHtml(element, html || "");
+    return;
+  }
+  if (typeof element.replaceChildren === "function") {
+    element.replaceChildren(...buildHtmlNodes(html));
+    return;
+  }
+  if ("textContent" in element) {
+    element.textContent = typeof html === "string" ? html : "";
+  }
+}
+
 function getStreamErrorHtml(message, escapeHtmlFn) {
   const escape = typeof escapeHtmlFn === "function"
     ? escapeHtmlFn
@@ -82,7 +111,7 @@ function createStreamingAssistantMessage(getTokenBarStyleFn) {
 
   const messageDiv = document.createElement("div");
   messageDiv.className = "chat-message chat-message-assistant";
-  messageDiv.innerHTML = `
+  setSafeHtml(messageDiv, `
     <div class="chat-bubble-wrapper">
       <div class="chat-meta">
         <span class="chat-meta-text">Streaming...</span>
@@ -125,7 +154,7 @@ function createStreamingAssistantMessage(getTokenBarStyleFn) {
         </div>
       </div>
     </div>
-  `;
+  `);
 
   return {
     messageDiv,
@@ -183,7 +212,7 @@ function updateAssistantFooter(ui, meta, getTokenBarStyleFn) {
 function resetStreamingUi(ui, getTokenBarStyleFn) {
   if (!ui) return ui;
   if (ui.content) {
-    ui.content.innerHTML = getTypingIndicatorHtml();
+    setSafeHtml(ui.content, getTypingIndicatorHtml());
   }
   if (ui.metaText) {
     ui.metaText.textContent = "Streaming...";
