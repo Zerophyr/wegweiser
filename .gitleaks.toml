@@ -34,3 +34,10 @@ id = "private-key-header"
 description = "Private key material"
 regex = '''-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'''
 tags = ["key", "private"]
+
+[[rules]]
+id = "openrouter-api-key"
+description = "OpenRouter API key"
+regex = '''sk-or-v1-[A-Za-z0-9]{40,}'''
+tags = ["openrouter", "token"]
+

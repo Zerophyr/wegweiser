@@ -11,6 +11,10 @@ const SECRET_PATTERNS = [
     regex: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g
   },
   {
+    name: "OpenRouter API key",
+    regex: /\bsk-or-v1-[A-Za-z0-9]{40,}\b/g
+  },
+  {
     name: "Git credentials in URL",
     regex: /https?:\/\/[^\s\/@:]+:[^\s\/@]+@github\.com/gi
   },

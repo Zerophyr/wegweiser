@@ -10,6 +10,8 @@ export type ExtensionHarness = {
   openExtensionPage: (relativePath: string) => Promise<Page>;
   seedLocalStorage: (values: Record<string, unknown>) => Promise<void>;
   seedSyncStorage: (values: Record<string, unknown>) => Promise<void>;
+  clearLocalStorage: (keys: string[]) => Promise<void>;
+  sendRuntimeMessage: <T = any>(payload: Record<string, unknown>, relativePath?: string) => Promise<T>;
   close: () => Promise<void>;
 };
 
@@ -32,12 +34,27 @@ async function resolveExtensionId(context: BrowserContext) {
 
 async function runStorageSet(page: Page, area: "local" | "sync", values: Record<string, unknown>) {
   await page.evaluate(async ({ storageArea, payload }) => {
+    if (storageArea === "local" && typeof (window as any).setEncrypted === "function") {
+      await (window as any).setEncrypted(payload);
+      return;
+    }
+
     const target = chrome.storage?.[storageArea];
     if (!target || typeof target.set !== "function") {
       throw new Error(`chrome.storage.${storageArea}.set is unavailable`);
     }
     await target.set(payload);
   }, { storageArea: area, payload: values });
+}
+
+async function runLocalStorageRemove(page: Page, keys: string[]) {
+  await page.evaluate(async (keysToRemove) => {
+    const target = chrome.storage?.local;
+    if (!target || typeof target.remove !== "function") {
+      throw new Error("chrome.storage.local.remove is unavailable");
+    }
+    await target.remove(keysToRemove);
+  }, keys);
 }
 
 export async function launchExtensionHarness(): Promise<ExtensionHarness> {
@@ -78,6 +95,29 @@ export async function launchExtensionHarness(): Promise<ExtensionHarness> {
     }
   };
 
+  const clearLocalStorage = async (keys: string[]) => {
+    const page = await openExtensionPage("src/options/options.html");
+    try {
+      await runLocalStorageRemove(page, keys);
+    } finally {
+      await page.close();
+    }
+  };
+
+  const sendRuntimeMessage = async <T = any>(
+    payload: Record<string, unknown>,
+    relativePath = "src/options/options.html"
+  ): Promise<T> => {
+    const page = await openExtensionPage(relativePath);
+    try {
+      return await page.evaluate(async (message) => {
+        return chrome.runtime.sendMessage(message as any);
+      }, payload) as T;
+    } finally {
+      await page.close();
+    }
+  };
+
   const close = async () => {
     await context.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -90,6 +130,8 @@ export async function launchExtensionHarness(): Promise<ExtensionHarness> {
     openExtensionPage,
     seedLocalStorage,
     seedSyncStorage,
+    clearLocalStorage,
+    sendRuntimeMessage,
     close
   };
 }

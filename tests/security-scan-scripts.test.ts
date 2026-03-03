@@ -17,6 +17,7 @@ describe("security scan scripts", () => {
     const content = fs.readFileSync(commonPath, "utf8");
     expect(content).toMatch(/ghp_\[A-Za-z0-9\]\{36\}/);
     expect(content).toMatch(/github_pat_\[A-Za-z0-9_\]\{20,/);
+    expect(content).toMatch(/sk-or-v1-\[A-Za-z0-9\]\{40,/);
     expect(content).toMatch(/PRIVATE KEY/);
   });
 
