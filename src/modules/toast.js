@@ -1,13 +1,30 @@
 // toast.js - Toast notification system
 
 
+
+function buildToastNodes(html) {
+  const value = typeof html === 'string' ? html : '';
+  if (typeof document === 'undefined') return [];
+  if (typeof DOMParser !== 'undefined') {
+    const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, 'text/html');
+    return Array.from(parsed.body.childNodes).map((node) => document.importNode(node, true));
+  }
+  return [document.createTextNode(value)];
+}
+
 function setToastHtml(toastEl, html) {
   if (!toastEl) return;
   if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
     window.safeHtml.setSanitizedHtml(toastEl, html || '');
     return;
   }
-  toastEl.innerHTML = typeof html === 'string' ? html : '';
+  if (typeof toastEl.replaceChildren === 'function') {
+    toastEl.replaceChildren(...buildToastNodes(html));
+    return;
+  }
+  if ('textContent' in toastEl) {
+    toastEl.textContent = typeof html === 'string' ? html : '';
+  }
 }
 
 /**

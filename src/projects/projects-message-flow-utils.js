@@ -9,18 +9,23 @@ function clearChatInput(inputEl) {
 function createGeneratingImageMessage(buildImageCardFn) {
   const tempWrapper = document.createElement("div");
   tempWrapper.className = "chat-message chat-message-assistant image-message";
-  tempWrapper.innerHTML = `
-    <div class="chat-bubble-wrapper">
-      <div class="chat-bubble">
-        <div class="chat-content"></div>
-      </div>
-    </div>
-  `;
 
-  const tempContent = tempWrapper.querySelector(".chat-content");
-  if (tempContent && typeof buildImageCardFn === "function") {
+  const bubbleWrapper = document.createElement("div");
+  bubbleWrapper.className = "chat-bubble-wrapper";
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+
+  const tempContent = document.createElement("div");
+  tempContent.className = "chat-content";
+
+  bubble.appendChild(tempContent);
+  bubbleWrapper.appendChild(bubble);
+  tempWrapper.appendChild(bubbleWrapper);
+
+  if (typeof buildImageCardFn === "function") {
     tempContent.appendChild(buildImageCardFn({ state: "generating" }));
-  } else if (tempContent) {
+  } else {
     tempContent.textContent = "Generating image...";
   }
   return tempWrapper;

@@ -61,7 +61,7 @@ Run these in order for feature/bugfix branches:
 7. `npm run test:smoke` *(UI flow gate)*
 8. Push and open PR *(required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`)*
 
-Use `test:related` for fast iteration and always run the full Jest + smoke gates before opening a PR.
+Use `test:related` for fast iteration and always run the full Jest + smoke gates before opening a PR. Use `npm run test:smoke:parallel` only for optional flake hunting.
 
 ### 🛠️ TDD Guardrail Tuning Policy (Maintainers)
 

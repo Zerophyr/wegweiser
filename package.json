@@ -7,7 +7,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:smoke": "playwright test --config=playwright.config.ts",
+    "test:smoke": "playwright test --config=playwright.config.ts --workers=1",
     "test:smoke:headed": "playwright test --config=playwright.config.ts --headed",
     "build:ts": "tsc",
     "watch:ts": "tsc --watch",
@@ -19,7 +19,8 @@
     "format": "prettier --write \"**/*.{js,ts,json,md}\"",
     "tdd:check": "node scripts/tdd/check-test-impact.js",
     "tdd:check:staged": "node scripts/tdd/check-test-impact.js --staged",
-    "test:related": "node scripts/tdd/run-related-tests.js --staged"
+    "test:related": "node scripts/tdd/run-related-tests.js --staged",
+    "test:smoke:parallel": "playwright test --config=playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

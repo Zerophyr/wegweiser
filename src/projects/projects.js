@@ -209,8 +209,7 @@ const {
   createProject, updateProject, deleteProject, getProject, createThread, updateThread,
   deleteThread, getThread, addMessageToThread
 } = storageBindings;
-let currentProjectId = null;
-let currentThreadId = null;
+let currentProjectId = null, currentThreadId = null;
 let currentProjectData = null;
 let isStreaming = false;
 let imageModeEnabled = false;
@@ -273,7 +272,8 @@ function buildRenderMessageDeps() {
     renderChatSourcesSummary, bindProjectsCopyButtons,
     writeClipboardText: (text) => navigator.clipboard.writeText(text),
     showToast: (typeof showToast === 'function' ? showToast : () => {}),
-    setTimeoutFn: setTimeout, logger: console
+    setTimeoutFn: setTimeout, logger: console,
+    safeHtmlSetter: (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') ? window.safeHtml.setSanitizedHtml : null
   };
 }
 function renderChatMessages(messages, thread = null) {

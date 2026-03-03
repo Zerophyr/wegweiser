@@ -55,11 +55,25 @@ describe("safe html sinks", () => {
     expect(content).not.toMatch(/element\.innerHTML\s*=\s*html/);
   });
 
-  test("projects render controller keeps render sinks localized", () => {
+  test("projects render controller routes HTML writes through helper", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-render-controller-utils.js"), "utf8");
-    expect(content).toMatch(/ProjectsGrid\.innerHTML/);
-    expect(content).toMatch(/threadList\.innerHTML/);
-    expect(content).toMatch(/chatMessagesEl\.innerHTML/);
+    expect(content).toMatch(/function setSafeHtml\(/);
+    expect(content).toMatch(/setSafeHtml\(deps\.elements\.ProjectsGrid/);
+    expect(content).toMatch(/setSafeHtml\(deps\.elements\.threadList/);
+    expect(content).toMatch(/setSafeHtml\(chatMessagesEl/);
+    expect(content).not.toMatch(/\.innerHTML\s*=/);
+  });
+
+  test("projects message and stream helpers avoid direct innerHTML assignments", () => {
+    const messageFlow = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-message-flow-utils.js"), "utf8");
+    const streamUtils = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-stream-utils.js"), "utf8");
+    const sendController = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-send-controller-utils.js"), "utf8");
+
+    expect(messageFlow).not.toMatch(/\.innerHTML\s*=/);
+    expect(streamUtils).not.toMatch(/\.innerHTML\s*=/);
+    expect(sendController).not.toMatch(/\.innerHTML\s*=/);
+    expect(streamUtils).toMatch(/setSafeHtml\(/);
+    expect(messageFlow).toMatch(/createGeneratingImageMessage\(/);
   });
 
   test("projects archive and image helpers use clear-only DOM APIs where possible", () => {
