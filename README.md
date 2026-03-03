@@ -95,20 +95,6 @@ For the next 2 weeks, track `tdd-guard` false positives and tune only `scripts/t
   - broad ignores for core runtime folders (`src/background`, `src/sidepanel`, `src/projects`, `src/options`)
   - disabling `tdd-guard` or removing required status checks
 
-### 🔐 Branch Protection Baseline (Maintainers)
-
-Configure GitHub branch protection for `main` with:
-
-- Require pull request before merge
-- Required approvals: 1
-- Dismiss stale approvals: enabled
-- Require status checks: enabled
-- Require branches to be up to date: enabled
-- Required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`
-- Restrict force pushes: enabled
-- Restrict deletions: enabled
-- Include administrators: enabled
-
 ## 🔑 Setup
 
 1. Get your API key:
