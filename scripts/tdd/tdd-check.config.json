@@ -1,0 +1,21 @@
+{
+  "sourceRoot": "src/",
+  "testRoot": "tests/",
+  "ignoredSourceGlobs": [
+    "src/lib/**",
+    "src/image-viewer/**"
+  ],
+  "alwaysRelatedTestGlobs": [
+    "tests/browser/**",
+    "tests/**/*.integration.test.ts"
+  ],
+  "areaAliases": {
+    "background": ["background", "runtime"],
+    "sidepanel": ["sidepanel", "runtime"],
+    "projects": ["projects", "runtime"],
+    "options": ["options", "runtime", "provider", "model"],
+    "modules": ["markdown", "models", "model", "provider", "toast", "source", "sources", "stream", "reasoning", "runtime", "safe"],
+    "shared": ["chat", "store", "encrypted", "crypto", "image", "utils", "runtime"],
+    "image-viewer": ["image", "viewer", "runtime"]
+  }
+}

@@ -41,6 +41,32 @@ jobs:
           name: wegweiser-build
           path: dist/*.zip
 
+  tdd-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TDD impact guard
+        run: >-
+          npm run tdd:check --
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.sha }}"
+
   browser-smoke:
     runs-on: ubuntu-latest
     permissions:

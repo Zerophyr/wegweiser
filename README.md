@@ -31,14 +31,22 @@ _(Coming soon)_
 4. Click "Load unpacked"
 5. Select the extension directory
 
-## 👩‍💻 Contributor Security Setup
+## 👩‍💻 Contributor Security & Quality Setup
 
 1. Use SSH for git remotes (no embedded credentials):
    - `git remote set-url origin git@github.com:Zerophyr/wegweiser.git`
 2. Install local git hooks once per clone:
    - `npm run hooks:install`
-3. Run secret scans before release work:
+3. Run security scans before release work:
    - `npm run security:scan`
+4. Follow TDD for behavior changes (Red -> Green -> Refactor):
+   - Write/update a failing test first.
+   - Run the failing test and confirm expected failure.
+   - Implement minimal code to pass.
+   - Re-run full unit tests and smoke tests for relevant flows.
+5. Use local TDD guardrails before pushing:
+   - `npm run tdd:check:staged`
+   - `npm run test:related`
 
 ## 🔑 Setup
 
