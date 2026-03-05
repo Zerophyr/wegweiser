@@ -6,7 +6,10 @@ const {
   getProviderLabel,
   normalizeProviderId,
   getProviderStorageKey,
-  parseModelsResponse
+  parseModelsResponse,
+  retryWithBackoff,
+  debounce,
+  validateUrl
 } = require("../src/shared/utils.js");
 const { extractSources } = require("../src/modules/sources");
 const { exportMarkdown } = require("../src/modules/exporter");
@@ -219,3 +222,58 @@ describe("model display helpers", () => {
   });
 });
 
+
+
+describe("retryWithBackoff", () => {
+  test("retries transient failures and eventually resolves", async () => {
+    let attempts = 0;
+    const resultPromise = retryWithBackoff(async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const error: any = new Error("temporary");
+        error.status = 500;
+        throw error;
+      }
+      return "ok";
+    }, 3, 1);
+
+    await expect(resultPromise).resolves.toBe("ok");
+    expect(attempts).toBe(3);
+  });
+
+  test("does not retry client errors", async () => {
+    const error: any = new Error("bad request");
+    error.status = 400;
+
+    await expect(retryWithBackoff(async () => {
+      throw error;
+    }, 3, 1)).rejects.toThrow("bad request");
+  });
+});
+
+describe("debounce", () => {
+  test("invokes function once with latest args", () => {
+    jest.useFakeTimers();
+    const fn = jest.fn();
+    const debounced = debounce(fn, 100);
+
+    debounced("a");
+    debounced("b");
+    debounced("c");
+
+    expect(fn).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(100);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith("c");
+    jest.useRealTimers();
+  });
+});
+
+describe("validateUrl", () => {
+  test("accepts only http/https URLs", () => {
+    expect(validateUrl("https://openrouter.ai")).toBe(true);
+    expect(validateUrl("http://example.com")).toBe(true);
+    expect(validateUrl("ftp://example.com")).toBe(false);
+    expect(validateUrl("javascript:alert(1)")).toBe(false);
+  });
+});

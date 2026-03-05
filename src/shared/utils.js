@@ -257,6 +257,23 @@ function groupModelsByProvider(models) {
   return grouped;
 }
 
+
+const sharedUtilsStreamingModule = (typeof globalThis !== "undefined" && globalThis.sharedUtilsStreaming)
+  || (typeof module !== "undefined" && module.exports ? require("./utils-streaming.js") : null)
+  || {};
+
+const {
+  renderStreamingText: renderStreamingTextImpl = async (container, text) => {
+    if (container) container.textContent = text;
+  },
+  extractReasoningFromStreamChunk: extractReasoningFromStreamChunkImpl = () => ({ content: "", reasoning: "" }),
+  getTokenBarStyle: getTokenBarStyleImpl = () => ({ percent: 0, gradient: "linear-gradient(90deg, var(--color-success, #22c55e), #16a34a)" }),
+  getStreamingFallbackMessage: getStreamingFallbackMessageImpl = () => null,
+  removeReasoningBubbles: removeReasoningBubblesImpl = () => {},
+  formatThreadModelLabel: formatThreadModelLabelImpl = () => "Model: Default",
+  buildSummarizerMessages: buildSummarizerMessagesImpl = () => []
+} = sharedUtilsStreamingModule;
+
 /**
  * Formats a date as a relative time string (e.g., "2 hours ago")
  * @param {Date|number} date - Date object or timestamp
@@ -303,195 +320,6 @@ async function batchStorageOperations(operations) {
   return Promise.all(operations);
 }
 
-/**
- * Renders text with streaming effect - optimized to apply markdown only once at the end
- * @param {HTMLElement} container - Container element to render into
- * @param {string} text - Text to render
- * @param {number} chunkSize - Number of words per chunk (default: 10)
- * @param {number} delay - Delay between chunks in ms (default: 30)
- * @returns {Promise<void>}
- */
-async function renderStreamingText(container, text, chunkSize = 10, delay = 30) {
-  const words = text.split(' ');
-  let currentText = '';
-
-  // Create a temporary text node for streaming
-  const textNode = document.createTextNode('');
-  container.appendChild(textNode);
-
-  for (let i = 0; i < words.length; i += chunkSize) {
-    const chunk = words.slice(i, Math.min(i + chunkSize, words.length));
-    currentText += (i > 0 ? ' ' : '') + chunk.join(' ');
-
-    // Update text node (no HTML parsing - super fast)
-    textNode.textContent = currentText;
-
-    // Small delay for streaming effect
-    if (i + chunkSize < words.length) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  // Remove text node
-  textNode.remove();
-
-  // Apply markdown rendering once at the end (single parse)
-  if (typeof applyMarkdownStyles === 'function') {
-    applyMarkdownStyles(container, text);
-  } else {
-    container.textContent = text;
-  }
-}
-
-/**
- * Extracts reasoning wrapped in <think> tags from a streaming chunk.
- * Keeps tag fragments between chunks via state.carry.
- * @param {{inReasoning?: boolean, carry?: string}} state - Streaming parser state (mutated).
- * @param {string} chunk - Incoming chunk text.
- * @returns {{content: string, reasoning: string}} Parsed deltas.
- */
-function extractReasoningFromStreamChunk(state, chunk) {
-  const target = (state && typeof state === "object") ? state : {};
-  if (typeof target.inReasoning !== "boolean") {
-    target.inReasoning = false;
-  }
-  if (typeof target.carry !== "string") {
-    target.carry = "";
-  }
-
-  const startTag = "<think>";
-  const endTag = "</think>";
-  let input = target.carry + (typeof chunk === "string" ? chunk : "");
-  target.carry = "";
-
-  let contentOut = "";
-  let reasoningOut = "";
-
-  while (input.length > 0) {
-    if (target.inReasoning) {
-      const endIdx = input.indexOf(endTag);
-      if (endIdx === -1) {
-        const partialIdx = input.lastIndexOf("</");
-        if (partialIdx !== -1 && partialIdx > input.length - endTag.length) {
-          reasoningOut += input.slice(0, partialIdx);
-          target.carry = input.slice(partialIdx);
-        } else {
-          reasoningOut += input;
-        }
-        input = "";
-      } else {
-        reasoningOut += input.slice(0, endIdx);
-        input = input.slice(endIdx + endTag.length);
-        target.inReasoning = false;
-      }
-    } else {
-      const startIdx = input.indexOf(startTag);
-      if (startIdx === -1) {
-        const partialIdx = input.lastIndexOf("<");
-        if (partialIdx !== -1 && partialIdx > input.length - startTag.length) {
-          contentOut += input.slice(0, partialIdx);
-          target.carry = input.slice(partialIdx);
-        } else {
-          contentOut += input;
-        }
-        input = "";
-      } else {
-        contentOut += input.slice(0, startIdx);
-        input = input.slice(startIdx + startTag.length);
-        target.inReasoning = true;
-      }
-    }
-  }
-
-  return { content: contentOut, reasoning: reasoningOut };
-}
-
-/**
- * Computes token bar percentage and gradient
- * @param {number|null} tokens - Token count
- * @param {number} maxTokens - Maximum token count for the bar
- * @returns {{percent: number, gradient: string}} Style info for token bar
- */
-function getTokenBarStyle(tokens, maxTokens = 4000) {
-  if (!tokens || !maxTokens) {
-    return { percent: 0, gradient: 'linear-gradient(90deg, var(--color-success, #22c55e), #16a34a)' };
-  }
-  const percent = Math.round(Math.min((tokens / maxTokens) * 100, 100));
-  let gradient = 'linear-gradient(90deg, var(--color-success, #22c55e), #16a34a)';
-  if (percent >= 80) {
-    gradient = 'linear-gradient(90deg, var(--color-error, #ef4444), #dc2626)';
-  } else if (percent >= 50) {
-    gradient = 'linear-gradient(90deg, var(--color-warning, #eab308), #ca8a04)';
-  }
-  return { percent, gradient };
-}
-
-/**
- * Builds a fallback error message when a stream ends without an answer.
- * @param {string} answerText - The accumulated answer text
- * @param {boolean} hasReasoning - Whether reasoning was streamed
- * @returns {string|null} Error message to display, or null if answer exists
- */
-function getStreamingFallbackMessage(answerText, hasReasoning = false) {
-  const trimmed = typeof answerText === "string" ? answerText.trim() : "";
-  if (trimmed.length > 0) {
-    return null;
-  }
-  if (hasReasoning) {
-    return "Stream ended after reasoning but no final answer was returned. Please try again.";
-  }
-  return "Stream ended with no answer received. Please try again.";
-}
-
-/**
- * Removes reasoning bubble elements from a container.
- * @param {HTMLElement|Document} container - Container to clean.
- */
-function removeReasoningBubbles(container) {
-  if (!container || typeof container.querySelectorAll !== "function") return;
-  container.querySelectorAll('.reasoning-content, .chat-reasoning-bubble').forEach((el) => {
-    el.remove();
-  });
-}
-
-/**
- * Formats the active model label for a thread/project.
- * @param {{model?: string, modelDisplayName?: string}} project
- * @returns {string}
- */
-function formatThreadModelLabel(project = {}) {
-  if (project && typeof project.modelDisplayName === "string" && project.modelDisplayName.trim()) {
-    return `Model: ${project.modelDisplayName.trim()}`;
-  }
-  if (project && typeof project.model === "string" && project.model.trim()) {
-    return `Model: ${project.model.trim()}`;
-  }
-  return "Model: Default";
-}
-
-/**
- * Builds a summarization prompt for older thread history.
- * @param {string|null} previousSummary - Existing summary if any
- * @param {Array<{role: string, content: string}>} historyToSummarize - Messages to summarize
- * @returns {Array<{role: string, content: string}>}
- */
-function buildSummarizerMessages(previousSummary, historyToSummarize) {
-  const systemPrompt = [
-    "You are a concise summarizer.",
-    "Capture user goals, decisions, constraints, key facts, and open questions.",
-    "Avoid long quotes and verbosity; keep only durable context."
-  ].join(" ");
-
-  const messages = [{ role: "system", content: systemPrompt }];
-  if (previousSummary) {
-    messages.push({ role: "system", content: `Summary so far:\n${previousSummary}` });
-  }
-  if (Array.isArray(historyToSummarize)) {
-    messages.push(...historyToSummarize);
-  }
-  return messages;
-}
-
 if (typeof module !== "undefined") {
   module.exports = {
     escapeHtml,
@@ -516,12 +344,12 @@ if (typeof module !== "undefined") {
     truncateText,
     deepClone,
     batchStorageOperations,
-    renderStreamingText,
-    extractReasoningFromStreamChunk,
-    getTokenBarStyle,
-    getStreamingFallbackMessage,
-    removeReasoningBubbles,
-    formatThreadModelLabel,
-    buildSummarizerMessages
+    renderStreamingText: renderStreamingTextImpl,
+    extractReasoningFromStreamChunk: extractReasoningFromStreamChunkImpl,
+    getTokenBarStyle: getTokenBarStyleImpl,
+    getStreamingFallbackMessage: getStreamingFallbackMessageImpl,
+    removeReasoningBubbles: removeReasoningBubblesImpl,
+    formatThreadModelLabel: formatThreadModelLabelImpl,
+    buildSummarizerMessages: buildSummarizerMessagesImpl
   };
 }

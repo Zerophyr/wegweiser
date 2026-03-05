@@ -1,19 +1,64 @@
 const fs = require("fs");
 const path = require("path");
 
-describe("monolith line budget", () => {
-  const limits: Array<{ relPath: string; maxLines: number }> = [
-    { relPath: "src/projects/projects.js", maxLines: 820 },
-    { relPath: "src/sidepanel/sidepanel.js", maxLines: 700 },
-    { relPath: "src/background/background.js", maxLines: 700 },
-    { relPath: "src/options/options.js", maxLines: 850 },
-    { relPath: "src/shared/chat-store.js", maxLines: 320 }
-  ];
+const repoRoot = path.join(__dirname, "..");
+const configPath = path.join(__dirname, "line-budget.config.json");
+const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+  maxLines: number;
+  includeGlob: string;
+  excludeGlobs: string[];
+};
 
-  test.each(limits)("$relPath stays <= $maxLines lines", ({ relPath, maxLines }) => {
-    const filePath = path.join(__dirname, "..", relPath);
+function normalizePath(filePath: string): string {
+  return filePath.replace(/\\/g, "/");
+}
+
+function shouldExclude(relPath: string, excludeGlobs: string[]): boolean {
+  return excludeGlobs.some((glob) => {
+    if (glob.endsWith("/**")) {
+      return relPath.startsWith(glob.slice(0, -2));
+    }
+    return relPath === glob;
+  });
+}
+
+function collectJsFiles(startDir: string): string[] {
+  const out: string[] = [];
+  const entries = fs.readdirSync(startDir, { withFileTypes: true }) as Array<{
+    name: string;
+    isDirectory: () => boolean;
+    isFile: () => boolean;
+  }>;
+
+  entries.forEach((entry) => {
+    const fullPath = path.join(startDir, entry.name);
+    const relPath = normalizePath(path.relative(repoRoot, fullPath));
+    if (entry.isDirectory()) {
+      if (shouldExclude(`${relPath}/`, config.excludeGlobs)) {
+        return;
+      }
+      out.push(...collectJsFiles(fullPath));
+      return;
+    }
+    if (entry.isFile() && fullPath.endsWith(".js") && !shouldExclude(relPath, config.excludeGlobs)) {
+      out.push(relPath);
+    }
+  });
+
+  return out;
+}
+
+describe("line budget", () => {
+  const srcDir = path.join(repoRoot, "src");
+  const files = collectJsFiles(srcDir).sort();
+
+  test("tracks at least one file", () => {
+    expect(files.length).toBeGreaterThan(0);
+  });
+
+  test.each(files)("%s stays <= max lines", (relPath: string) => {
+    const filePath = path.join(repoRoot, relPath);
     const lineCount = fs.readFileSync(filePath, "utf8").split(/\r?\n/).length;
-    expect(lineCount).toBeLessThanOrEqual(maxLines);
+    expect(lineCount).toBeLessThanOrEqual(config.maxLines);
   });
 });
-

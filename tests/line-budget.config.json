@@ -1,0 +1,7 @@
+{
+  "maxLines": 500,
+  "includeGlob": "src/**/*.js",
+  "excludeGlobs": [
+    "src/lib/**"
+  ]
+}
