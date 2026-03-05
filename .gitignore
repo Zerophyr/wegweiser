@@ -9,7 +9,7 @@ build/
 *.d.ts
 
 # Test coverage
-coverage/
+/coverage/
 .nyc_output/
 
 # Environment variables & secrets

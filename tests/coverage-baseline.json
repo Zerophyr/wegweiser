@@ -1,0 +1,656 @@
+{
+  "src/background/background-balance-controller-utils.js": {
+    "statements": 91.66,
+    "branches": 63.63,
+    "functions": 50,
+    "lines": 97.72
+  },
+  "src/background/background-context-store-utils.js": {
+    "statements": 87.17,
+    "branches": 63.15,
+    "functions": 100,
+    "lines": 94.11
+  },
+  "src/background/background-debug-stream-utils.js": {
+    "statements": 93.1,
+    "branches": 65.62,
+    "functions": 80,
+    "lines": 100
+  },
+  "src/background/background-image-controller-utils.js": {
+    "statements": 74.71,
+    "branches": 51.68,
+    "functions": 12.5,
+    "lines": 89.04
+  },
+  "src/background/background-image-utils.js": {
+    "statements": 53.06,
+    "branches": 30,
+    "functions": 57.14,
+    "lines": 57.14
+  },
+  "src/background/background-model-cache-controller-utils.js": {
+    "statements": 81.08,
+    "branches": 57.14,
+    "functions": 40,
+    "lines": 93.75
+  },
+  "src/background/background-models-utils.js": {
+    "statements": 88.88,
+    "branches": 72.97,
+    "functions": 50,
+    "lines": 88.88
+  },
+  "src/background/background-query-controller-utils.js": {
+    "statements": 75.39,
+    "branches": 46.09,
+    "functions": 33.33,
+    "lines": 79.13
+  },
+  "src/background/background-stream-chunk-utils.js": {
+    "statements": 96.42,
+    "branches": 62.5,
+    "functions": 100,
+    "lines": 96.15
+  },
+  "src/background/background-stream-runtime-utils.js": {
+    "statements": 90,
+    "branches": 70,
+    "functions": 100,
+    "lines": 90
+  },
+  "src/background/background-summarize-controller-utils.js": {
+    "statements": 81.57,
+    "branches": 46.8,
+    "functions": 37.5,
+    "lines": 82.35
+  },
+  "src/modules/exporter.js": {
+    "statements": 20.58,
+    "branches": 23.07,
+    "functions": 22.22,
+    "lines": 22.58
+  },
+  "src/modules/image-cards.js": {
+    "statements": 61.95,
+    "branches": 38.7,
+    "functions": 25,
+    "lines": 61.95
+  },
+  "src/modules/markdown.js": {
+    "statements": 54.54,
+    "branches": 28.07,
+    "functions": 50,
+    "lines": 57.28
+  },
+  "src/modules/models-dropdown-events-utils.js": {
+    "statements": 46.21,
+    "branches": 22.98,
+    "functions": 47.36,
+    "lines": 50.42
+  },
+  "src/modules/models-dropdown-render-utils.js": {
+    "statements": 81.5,
+    "branches": 63.52,
+    "functions": 75.86,
+    "lines": 87.64
+  },
+  "src/modules/models-dropdown.js": {
+    "statements": 68.23,
+    "branches": 57.81,
+    "functions": 36.06,
+    "lines": 71.07
+  },
+  "src/modules/provider-ui-utils.js": {
+    "statements": 81.25,
+    "branches": 50,
+    "functions": 80,
+    "lines": 81.25
+  },
+  "src/modules/safe-html.js": {
+    "statements": 70.83,
+    "branches": 50,
+    "functions": 100,
+    "lines": 76.19
+  },
+  "src/modules/source-cards.js": {
+    "statements": 36.9,
+    "branches": 18.91,
+    "functions": 7.69,
+    "lines": 39.74
+  },
+  "src/modules/sources-modal-utils.js": {
+    "statements": 76.36,
+    "branches": 44,
+    "functions": 26.66,
+    "lines": 77.77
+  },
+  "src/modules/sources.js": {
+    "statements": 86.82,
+    "branches": 62.5,
+    "functions": 81.81,
+    "lines": 90.9
+  },
+  "src/modules/streaming-ui.js": {
+    "statements": 78.57,
+    "branches": 75,
+    "functions": 100,
+    "lines": 84.61
+  },
+  "src/options/options-history-detail-controller-utils.js": {
+    "statements": 53.33,
+    "branches": 50,
+    "functions": 33.33,
+    "lines": 54.92
+  },
+  "src/options/options-history-format-utils.js": {
+    "statements": 84.12,
+    "branches": 69.09,
+    "functions": 100,
+    "lines": 86.27
+  },
+  "src/options/options-history-render-controller-utils.js": {
+    "statements": 13.55,
+    "branches": 17.07,
+    "functions": 8.33,
+    "lines": 14.54
+  },
+  "src/options/options-history-utils.js": {
+    "statements": 100,
+    "branches": 56.25,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/options/options-history-view-utils.js": {
+    "statements": 71.42,
+    "branches": 34.37,
+    "functions": 40,
+    "lines": 83.33
+  },
+  "src/options/options-model-dropdown-controller-utils.js": {
+    "statements": 19.11,
+    "branches": 17.5,
+    "functions": 23.07,
+    "lines": 18.75
+  },
+  "src/options/options-notify-utils.js": {
+    "statements": 88.23,
+    "branches": 72,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/options/options-page-actions-utils.js": {
+    "statements": 9.75,
+    "branches": 9.37,
+    "functions": 10,
+    "lines": 10.52
+  },
+  "src/options/options-runtime-events-controller-utils.js": {
+    "statements": 84.21,
+    "branches": 72.22,
+    "functions": 50,
+    "lines": 88.23
+  },
+  "src/projects/projects-archive-view-utils.js": {
+    "statements": 82,
+    "branches": 54.54,
+    "functions": 83.33,
+    "lines": 90.24
+  },
+  "src/projects/projects-basic-utils.js": {
+    "statements": 77.08,
+    "branches": 59.45,
+    "functions": 100,
+    "lines": 87.17
+  },
+  "src/projects/projects-cards-utils.js": {
+    "statements": 90,
+    "branches": 50,
+    "functions": 50,
+    "lines": 100
+  },
+  "src/projects/projects-chat-click-utils.js": {
+    "statements": 92.85,
+    "branches": 75,
+    "functions": 100,
+    "lines": 92.85
+  },
+  "src/projects/projects-chat-panel-utils.js": {
+    "statements": 92.3,
+    "branches": 64.28,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-chat-settings-utils.js": {
+    "statements": 92.3,
+    "branches": 62.5,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-chat-view-utils.js": {
+    "statements": 100,
+    "branches": 57.89,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-click-actions-utils.js": {
+    "statements": 61.76,
+    "branches": 43.33,
+    "functions": 100,
+    "lines": 80
+  },
+  "src/projects/projects-context.js": {
+    "statements": 93.65,
+    "branches": 56.09,
+    "functions": 86.66,
+    "lines": 98.33
+  },
+  "src/projects/projects-data-utils.js": {
+    "statements": 100,
+    "branches": 59.09,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-delete-modal-utils.js": {
+    "statements": 100,
+    "branches": 58.33,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-elements-utils.js": {
+    "statements": 100,
+    "branches": 62.5,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-emoji-utils.js": {
+    "statements": 100,
+    "branches": 62.5,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-events-controller-utils.js": {
+    "statements": 46.87,
+    "branches": 23.88,
+    "functions": 31.81,
+    "lines": 48.78
+  },
+  "src/projects/projects-export-menu-utils.js": {
+    "statements": 88.23,
+    "branches": 58.33,
+    "functions": 100,
+    "lines": 93.33
+  },
+  "src/projects/projects-export-utils.js": {
+    "statements": 90.9,
+    "branches": 45.94,
+    "functions": 71.42,
+    "lines": 95.23
+  },
+  "src/projects/projects-form-utils.js": {
+    "statements": 100,
+    "branches": 68.57,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-image-utils.js": {
+    "statements": 60,
+    "branches": 45.09,
+    "functions": 27.27,
+    "lines": 63.51
+  },
+  "src/projects/projects-menu-utils.js": {
+    "statements": 89.47,
+    "branches": 61.11,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-message-flow-utils.js": {
+    "statements": 94.11,
+    "branches": 62.5,
+    "functions": 100,
+    "lines": 96.96
+  },
+  "src/projects/projects-message-postprocess-utils.js": {
+    "statements": 86.36,
+    "branches": 55.81,
+    "functions": 75,
+    "lines": 90.47
+  },
+  "src/projects/projects-message-render-utils.js": {
+    "statements": 94.73,
+    "branches": 54.68,
+    "functions": 50,
+    "lines": 100
+  },
+  "src/projects/projects-modal-controller-utils.js": {
+    "statements": 26.35,
+    "branches": 20,
+    "functions": 30,
+    "lines": 26.98
+  },
+  "src/projects/projects-modal-ui-utils.js": {
+    "statements": 90,
+    "branches": 76.92,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-model-controller-utils.js": {
+    "statements": 8.47,
+    "branches": 9.52,
+    "functions": 0,
+    "lines": 8.77
+  },
+  "src/projects/projects-model-select-utils.js": {
+    "statements": 95.23,
+    "branches": 70.58,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-module-resolver.js": {
+    "statements": 92.3,
+    "branches": 76.19,
+    "functions": 100,
+    "lines": 92.3
+  },
+  "src/projects/projects-project-modal-utils.js": {
+    "statements": 100,
+    "branches": 46.66,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-render-controller-utils.js": {
+    "statements": 72.47,
+    "branches": 49.42,
+    "functions": 82.35,
+    "lines": 74.28
+  },
+  "src/projects/projects-runtime-events-controller-utils.js": {
+    "statements": 86.36,
+    "branches": 66.66,
+    "functions": 60,
+    "lines": 90.47
+  },
+  "src/projects/projects-send-controller-utils.js": {
+    "statements": 35.75,
+    "branches": 25.34,
+    "functions": 61.11,
+    "lines": 37.36
+  },
+  "src/projects/projects-send-deps-utils.js": {
+    "statements": 100,
+    "branches": 33.33,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-sources-summary-utils.js": {
+    "statements": 92.59,
+    "branches": 73.33,
+    "functions": 66.66,
+    "lines": 96.15
+  },
+  "src/projects/projects-storage-bindings-utils.js": {
+    "statements": 48,
+    "branches": 23.07,
+    "functions": 11.76,
+    "lines": 67.64
+  },
+  "src/projects/projects-storage-controller-utils.js": {
+    "statements": 34.01,
+    "branches": 29.03,
+    "functions": 21.42,
+    "lines": 36.43
+  },
+  "src/projects/projects-storage-usage-controller-utils.js": {
+    "statements": 19.44,
+    "branches": 20,
+    "functions": 16.66,
+    "lines": 19.44
+  },
+  "src/projects/projects-storage-utils.js": {
+    "statements": 92.5,
+    "branches": 67.07,
+    "functions": 100,
+    "lines": 96.1
+  },
+  "src/projects/projects-storage-view-utils.js": {
+    "statements": 84,
+    "branches": 64.51,
+    "functions": 100,
+    "lines": 90.47
+  },
+  "src/projects/projects-storage-warning-utils.js": {
+    "statements": 85.71,
+    "branches": 58.33,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-stream-chunk-utils.js": {
+    "statements": 86.66,
+    "branches": 60,
+    "functions": 60,
+    "lines": 92.85
+  },
+  "src/projects/projects-stream-request-utils.js": {
+    "statements": 100,
+    "branches": 53.84,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-stream-runtime-utils.js": {
+    "statements": 80.19,
+    "branches": 56.04,
+    "functions": 100,
+    "lines": 89.53
+  },
+  "src/projects/projects-stream-utils.js": {
+    "statements": 85.04,
+    "branches": 55.14,
+    "functions": 80,
+    "lines": 88.23
+  },
+  "src/projects/projects-summarization-flow-utils.js": {
+    "statements": 71.05,
+    "branches": 51.16,
+    "functions": 16.66,
+    "lines": 84.37
+  },
+  "src/projects/projects-thread-controller-utils.js": {
+    "statements": 48.64,
+    "branches": 36.66,
+    "functions": 25,
+    "lines": 51.42
+  },
+  "src/projects/projects-thread-list-utils.js": {
+    "statements": 84.61,
+    "branches": 56.25,
+    "functions": 60,
+    "lines": 100
+  },
+  "src/projects/projects-thread-view-utils.js": {
+    "statements": 100,
+    "branches": 58.33,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects-ui-controller-utils.js": {
+    "statements": 64.76,
+    "branches": 37.66,
+    "functions": 71.42,
+    "lines": 68.81
+  },
+  "src/projects/projects-view-utils.js": {
+    "statements": 100,
+    "branches": 54.54,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/projects/projects.js": {
+    "statements": 35.27,
+    "branches": 22.34,
+    "functions": 3.33,
+    "lines": 100
+  },
+  "src/shared/chat-store-backends.js": {
+    "statements": 36.4,
+    "branches": 22.09,
+    "functions": 24.73,
+    "lines": 46.54
+  },
+  "src/shared/chat-store.js": {
+    "statements": 49.7,
+    "branches": 32.88,
+    "functions": 47.05,
+    "lines": 56.64
+  },
+  "src/shared/debug-log.js": {
+    "statements": 100,
+    "branches": 71.42,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/shared/encrypted-storage.js": {
+    "statements": 53.48,
+    "branches": 48.64,
+    "functions": 33.33,
+    "lines": 57.5
+  },
+  "src/shared/image-cache.js": {
+    "statements": 55.97,
+    "branches": 45.16,
+    "functions": 82.35,
+    "lines": 60.48
+  },
+  "src/shared/image-store.js": {
+    "statements": 18.9,
+    "branches": 23.57,
+    "functions": 16.39,
+    "lines": 22.68
+  },
+  "src/shared/model-capabilities.js": {
+    "statements": 91.48,
+    "branches": 81.48,
+    "functions": 100,
+    "lines": 95.23
+  },
+  "src/shared/utils-streaming.js": {
+    "statements": 75.82,
+    "branches": 64.93,
+    "functions": 70,
+    "lines": 78.4
+  },
+  "src/shared/utils.js": {
+    "statements": 52.67,
+    "branches": 47.91,
+    "functions": 52.77,
+    "lines": 56.84
+  },
+  "src/shared/visibility-toggle.js": {
+    "statements": 93.33,
+    "branches": 65.85,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-answer-persistence-controller-utils.js": {
+    "statements": 68.18,
+    "branches": 52.77,
+    "functions": 69.23,
+    "lines": 74.68
+  },
+  "src/sidepanel/sidepanel-answer-store-utils.js": {
+    "statements": 89.47,
+    "branches": 50,
+    "functions": 100,
+    "lines": 89.47
+  },
+  "src/sidepanel/sidepanel-answer-ui-utils.js": {
+    "statements": 100,
+    "branches": 75,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-balance-controller-utils.js": {
+    "statements": 86.95,
+    "branches": 63.15,
+    "functions": 100,
+    "lines": 90.47
+  },
+  "src/sidepanel/sidepanel-export-utils.js": {
+    "statements": 100,
+    "branches": 61.53,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-image-generation-utils.js": {
+    "statements": 48.42,
+    "branches": 30.86,
+    "functions": 62.5,
+    "lines": 50
+  },
+  "src/sidepanel/sidepanel-model-controller-utils.js": {
+    "statements": 38.68,
+    "branches": 34.48,
+    "functions": 27.27,
+    "lines": 40.47
+  },
+  "src/sidepanel/sidepanel-model-sync-controller-utils.js": {
+    "statements": 86.66,
+    "branches": 54.38,
+    "functions": 85.71,
+    "lines": 90.19
+  },
+  "src/sidepanel/sidepanel-module-resolver.js": {
+    "statements": 84.61,
+    "branches": 66.66,
+    "functions": 100,
+    "lines": 84.61
+  },
+  "src/sidepanel/sidepanel-prompt-controller-utils.js": {
+    "statements": 33.05,
+    "branches": 23.48,
+    "functions": 25,
+    "lines": 36.11
+  },
+  "src/sidepanel/sidepanel-provider.js": {
+    "statements": 100,
+    "branches": 70,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-runtime-events-controller-utils.js": {
+    "statements": 88.88,
+    "branches": 68.18,
+    "functions": 60,
+    "lines": 92.3
+  },
+  "src/sidepanel/sidepanel-setup-controller-utils.js": {
+    "statements": 100,
+    "branches": 73.07,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-sources-summary-utils.js": {
+    "statements": 89.28,
+    "branches": 64.7,
+    "functions": 66.66,
+    "lines": 92.59
+  },
+  "src/sidepanel/sidepanel-stream-controller-utils.js": {
+    "statements": 100,
+    "branches": 66.66,
+    "functions": 100,
+    "lines": 100
+  },
+  "src/sidepanel/sidepanel-stream-utils.js": {
+    "statements": 82.6,
+    "branches": 60,
+    "functions": 100,
+    "lines": 94.73
+  },
+  "src/sidepanel/sidepanel-ui-helpers-utils.js": {
+    "statements": 8.95,
+    "branches": 9.43,
+    "functions": 7.14,
+    "lines": 10.16
+  }
+}
