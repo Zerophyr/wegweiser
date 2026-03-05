@@ -372,10 +372,10 @@
     "lines": 90.47
   },
   "src/projects/projects-send-controller-utils.js": {
-    "statements": 35.75,
-    "branches": 25.34,
-    "functions": 61.11,
-    "lines": 37.36
+    "statements": 50.5,
+    "branches": 33.55,
+    "functions": 68.42,
+    "lines": 52.91
   },
   "src/projects/projects-send-deps-utils.js": {
     "statements": 100,
@@ -486,9 +486,9 @@
     "lines": 100
   },
   "src/projects/projects.js": {
-    "statements": 35.27,
+    "statements": 35.18,
     "branches": 22.34,
-    "functions": 3.33,
+    "functions": 3.31,
     "lines": 100
   },
   "src/shared/chat-store-backends.js": {
