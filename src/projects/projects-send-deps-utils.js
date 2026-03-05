@@ -25,6 +25,7 @@ function buildRetryStreamFromContextDeps(params = {}) {
     elements: params.elements,
     setChatStreamingState: params.setChatStreamingState,
     setIsStreaming: params.setIsStreaming,
+    getStreamPort: params.getStreamPort,
     streamMessage: params.streamMessage,
     renderThreadList: params.renderThreadList
   };
@@ -78,6 +79,7 @@ function buildSendMessageDeps(params = {}) {
     setSendStreamingState: params.setSendStreamingState,
     setChatStreamingState: params.setChatStreamingState,
     setIsStreaming: params.setIsStreaming,
+    getStreamPort: params.getStreamPort,
     streamMessage: params.streamMessage,
     showToast: params.showToast,
     renderThreadList: params.renderThreadList

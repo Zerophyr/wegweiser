@@ -70,7 +70,7 @@ test("Projects stop during disconnect transition does not leave stale error stat
               errorTimeout = window.setTimeout(() => {
                 if (disconnected) return;
                 messageListeners.forEach((listener) => listener({ type: "error", error: "Simulated upstream error" }));
-              }, 450);
+              }, 1200);
               return;
             }
 
@@ -82,7 +82,7 @@ test("Projects stop during disconnect transition does not leave stale error stat
                 tokens: 101,
                 contextSize: 2
               }));
-            }, 180);
+            }, 1000);
           },
           disconnect: () => {
             if (disconnected) return;
@@ -119,6 +119,7 @@ test("Projects stop during disconnect transition does not leave stale error stat
 
     await page.waitForSelector("#new-thread-btn");
     await page.click("#new-thread-btn");
+    await page.waitForSelector(".thread-item.active");
 
     await page.waitForSelector("#chat-input");
     await page.fill("#chat-input", "first prompt");
@@ -128,6 +129,7 @@ test("Projects stop during disconnect transition does not leave stale error stat
     await expect(page.locator("#chat-input")).toBeDisabled();
 
     await page.click("#stop-btn");
+    await expect(page.locator("#chat-input")).toBeEnabled({ timeout: 3000 });
 
     await page.fill("#chat-input", "second prompt after stop");
     await page.click("#send-btn");

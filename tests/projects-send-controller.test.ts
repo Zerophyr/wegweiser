@@ -1,11 +1,95 @@
 const {
   stopStreaming,
   renderStreamError,
+  sendMessage,
   streamMessage
 } = require("../src/projects/projects-send-controller-utils.js");
 export {};
 
 describe("projects-send-controller-utils", () => {
+  test("sendMessage keeps streaming state when an older stream settles after a newer one starts", async () => {
+    const deferred = () => {
+      let resolve: () => void = () => {};
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    };
+
+    const firstStream = deferred();
+    const secondStream = deferred();
+
+    const threadMessages: any[] = [];
+    const chatMessages = document.createElement("div");
+    const chatInput: any = { value: "first prompt", style: { height: "44px" } };
+
+    let isStreaming = false;
+    let streamPort: any = null;
+    let streamCall = 0;
+
+    const deps: any = {
+      elements: {
+        chatInput,
+        chatMessages,
+        sendBtn: {}
+      },
+      currentThreadId: () => "thread_1",
+      currentProjectId: () => "project_1",
+      getIsStreaming: () => isStreaming,
+      getProject: async () => ({ customInstructions: "", model: "openai/gpt-4o-mini", modelProvider: "openrouter" }),
+      getImageModeEnabled: () => false,
+      addMessageToThread: async (_threadId: string, message: any) => {
+        threadMessages.push(message);
+      },
+      clearChatInput: (input: any) => { input.value = ""; },
+      getThread: async () => ({ messages: [...threadMessages], summary: "" }),
+      maybeSummarizeBeforeStreaming: async (thread: any) => thread,
+      summarizationDeps: {},
+      renderChatMessages: jest.fn(),
+      buildStreamContext: jest.fn(() => ({ webSearch: false, reasoning: false })),
+      currentProvider: () => "openrouter",
+      setLastStreamContext: jest.fn(),
+      createStreamingAssistantMessage: () => ({ messageDiv: document.createElement("div"), content: document.createElement("div") }),
+      getTokenBarStyle: jest.fn(),
+      setSendStreamingState: jest.fn(),
+      setChatStreamingState: jest.fn(),
+      setIsStreaming: (value: boolean) => { isStreaming = value; },
+      getStreamPort: () => streamPort,
+      streamMessage: jest.fn(() => {
+        streamCall += 1;
+        if (streamCall === 1) {
+          streamPort = { id: "port-1" };
+          return firstStream.promise;
+        }
+        streamPort = { id: "port-2" };
+        return secondStream.promise;
+      }),
+      showToast: jest.fn(),
+      renderThreadList: jest.fn()
+    };
+
+    const firstSend = sendMessage(deps);
+
+    // Simulate user stop before first stream settles, then start a new stream.
+    isStreaming = false;
+    streamPort = null;
+    chatInput.value = "second prompt";
+
+    const secondSend = sendMessage(deps);
+
+    firstStream.resolve();
+    await firstSend;
+
+    expect(streamPort).toEqual({ id: "port-2" });
+    expect(isStreaming).toBe(true);
+
+    streamPort = null;
+    secondStream.resolve();
+    await secondSend;
+
+    expect(isStreaming).toBe(false);
+  });
+
   test("stopStreaming disconnects active port and resets state", () => {
     const disconnect = jest.fn();
     let streamPort = { disconnect };
