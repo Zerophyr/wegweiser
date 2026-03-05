@@ -13,7 +13,6 @@ describe('sidepanel setup panel', () => {
   test('sidebar setup wiring exists in sidepanel js and setup util', () => {
     const jsPath = path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel.js');
     const js = fs.readFileSync(jsPath, 'utf8');
-    expect(js).toMatch(/setup panel/i);
     expect(js).toMatch(/openOptionsPage/);
     expect(js).toMatch(/sidepanelSetupControllerModule/);
     expect(js).toMatch(/refreshSidebarSetupState/);

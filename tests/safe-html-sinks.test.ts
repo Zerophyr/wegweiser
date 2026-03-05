@@ -3,10 +3,11 @@ const fs = require("fs");
 const path = require("path");
 
 describe("safe html sinks", () => {
-  test("sidepanel prompt rendering routes through safe helper", () => {
-    const content = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-prompt-controller-utils.js"), "utf8");
-    expect(content).toMatch(/function setSafeHtml\(/);
-    expect(content).toMatch(/setSafeHtml\(answerContent/);
+  test("sidepanel prompt and image rendering route through safe helper", () => {
+    const promptContent = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-prompt-controller-utils.js"), "utf8");
+    const imageContent = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-image-generation-utils.js"), "utf8");
+    expect(imageContent).toMatch(/function setSafeHtml\(/);
+    expect(promptContent).toMatch(/setSafeHtmlFromImage\(answerContent/);
   });
 
   test("sidepanel summarize routes dynamic answer container through safe helper", () => {
@@ -24,11 +25,18 @@ describe("safe html sinks", () => {
   });
 
   test("options history rendering uses safe html helper and replaceChildren clears", () => {
-    const content = fs.readFileSync(path.join(__dirname, "..", "src", "options", "options.js"), "utf8");
-    expect(content).toMatch(/setHtmlSafely\(/);
-    expect(content).toMatch(/promptHistoryEl\.replaceChildren\(\)/);
+    const optionsContent = fs.readFileSync(path.join(__dirname, "..", "src", "options", "options.js"), "utf8");
+    const renderContent = fs.readFileSync(path.join(__dirname, "..", "src", "options", "options-history-render-controller-utils.js"), "utf8");
+    expect(optionsContent).toMatch(/setHtmlSafely\(/);
+    expect(renderContent).toMatch(/promptHistoryEl\.replaceChildren\(\)/);
   });
 
+  test("options page loads purifier and safe-html pipeline", () => {
+    const content = fs.readFileSync(path.join(__dirname, "..", "src", "options", "options.html"), "utf8");
+    expect(content).toMatch(/<script src="\.\.\/lib\/purify\.min\.js"><\/script>/);
+    expect(content).toMatch(/<script src="\.\.\/modules\/safe-html\.js"><\/script>/);
+    expect(content).toMatch(/<script src="\.\.\/modules\/markdown\.js"><\/script>/);
+  });
   test("toast routes rendering through helper instead of direct toast innerHTML", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "toast.js"), "utf8");
     expect(content).toMatch(/function setToastHtml\(/);
@@ -86,3 +94,5 @@ describe("safe html sinks", () => {
   });
 
 });
+
+

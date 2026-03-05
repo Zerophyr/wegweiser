@@ -206,8 +206,11 @@ async function sendMessage(deps) {
     console.error("Stream error:", err);
     deps.showToast(err.message || "Failed to send message", "error");
   } finally {
-    deps.setSendStreamingState(deps.elements.sendBtn, deps.setChatStreamingState, false);
-    deps.setIsStreaming(false);
+    const hasActiveStreamPort = typeof deps.getStreamPort === "function"
+      ? Boolean(deps.getStreamPort())
+      : false;
+    deps.setSendStreamingState(deps.elements.sendBtn, deps.setChatStreamingState, hasActiveStreamPort);
+    deps.setIsStreaming(hasActiveStreamPort);
     await deps.renderThreadList();
   }
 }
@@ -227,7 +230,16 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
     };
 
     let streamPort = deps.createPort();
+    const streamPortRef = streamPort;
     deps.setStreamPort(streamPort);
+
+    const setStreamPortIfCurrent = (nextPort) => {
+      if (typeof deps.getStreamPort === "function" && deps.getStreamPort() !== streamPortRef) {
+        return false;
+      }
+      deps.setStreamPort(nextPort);
+      return true;
+    };
 
     const chunkState = deps.createStreamChunkState(streamingUi, deps.createReasoningAppender);
     const assistantBubble = chunkState.assistantBubble;
@@ -285,7 +297,7 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
           deps.removeReasoningBubbles(messageDiv);
         }
         streamPort = deps.disconnectStreamPort(streamPort);
-        deps.setStreamPort(streamPort);
+        setStreamPortIfCurrent(streamPort);
         resolveOnce();
       } else if (msg.type === "error") {
         renderStreamError(deps, streamingUi, msg.error, options.retryContext || deps.lastStreamContext());
@@ -296,13 +308,13 @@ async function streamMessage(deps, content, project, thread, streamingUi, startT
           deps.removeReasoningBubbles(messageDiv);
         }
         streamPort = deps.disconnectStreamPort(streamPort);
-        deps.setStreamPort(streamPort);
+        setStreamPortIfCurrent(streamPort);
         rejectOnce(new Error(msg.error));
       }
     });
 
     streamPort.onDisconnect.addListener(() => {
-      deps.setStreamPort(null);
+      setStreamPortIfCurrent(null);
       resolveOnce();
     });
 

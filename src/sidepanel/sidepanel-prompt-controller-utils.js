@@ -1,158 +1,14 @@
 // sidepanel-prompt-controller-utils.js - prompt/image generation orchestration
 
-function buildHtmlNodes(html) {
-  const safeHtml = typeof html === "string" ? html : "";
-  if (typeof document === "undefined") return [];
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
-    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
-  }
-  return [document.createTextNode(safeHtml)];
-}
+const sidepanelImageGenerationModule = (typeof globalThis !== "undefined" && globalThis.sidepanelImageGenerationUtils)
+  || (typeof module !== "undefined" && module.exports ? require("./sidepanel-image-generation-utils.js") : null)
+  || {};
 
-function setSafeHtml(element, html, safeHtmlSetter) {
-  if (!element) return;
-  if (typeof safeHtmlSetter === "function") {
-    safeHtmlSetter(element, html);
-    return;
-  }
-  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-    window.safeHtml.setSanitizedHtml(element, html);
-    return;
-  }
-  element.replaceChildren(...buildHtmlNodes(html));
-}
-
-function clearElementContent(element) {
-  if (!element) return;
-  element.textContent = "";
-}
-
-async function generateImage(deps, prompt) {
-  const {
-    state,
-    askBtn,
-    setPromptStreamingState,
-    metaEl,
-    showAnswerBox,
-    answerEl,
-    updateAnswerVisibility,
-    answerSection,
-    parseCombinedModelIdSafe,
-    normalizeProviderSafe,
-    sendRuntimeMessage,
-    buildImageCard,
-    putImageCacheEntry,
-    getImageCacheEntry,
-    openImageInNewTab,
-    downloadImage,
-    refreshBalance
-  } = deps;
-
-  askBtn.disabled = true;
-  setPromptStreamingState(false);
-  metaEl.textContent = "🖼️ Generating image...";
-  showAnswerBox();
-
-  const answerItem = document.createElement("div");
-  answerItem.className = "answer-item";
-  setSafeHtml(answerItem, `
-    <div class="answer-meta">
-      <span>${new Date().toLocaleTimeString()} - Image</span>
-    </div>
-    <div class="answer-content"></div>
-  `);
-
-  const answerContent = answerItem.querySelector(".answer-content");
-  if (answerContent && typeof buildImageCard === "function") {
-    answerContent.appendChild(buildImageCard({ state: "generating" }));
-  } else if (answerContent) {
-    answerContent.textContent = "Generating image...";
-  }
-
-  answerEl.appendChild(answerItem);
-  updateAnswerVisibility();
-  answerSection.scrollTop = answerSection.scrollHeight;
-
-  try {
-    const parsed = parseCombinedModelIdSafe(state.selectedCombinedModelId || "");
-    const provider = normalizeProviderSafe(parsed.provider || state.currentProvider);
-    const modelId = parsed.modelId || "";
-
-    const res = await sendRuntimeMessage({
-      type: "image_query",
-      prompt,
-      provider,
-      model: modelId
-    });
-
-    if (!res?.ok) {
-      const errorMessage = res?.error || "Failed to generate image.";
-      if (answerContent && typeof buildImageCard === "function") {
-        clearElementContent(answerContent);
-        answerContent.appendChild(buildImageCard({ state: "error" }));
-      } else if (answerContent) {
-        answerContent.textContent = errorMessage;
-      }
-      metaEl.textContent = "❌ Failed to generate image.";
-      return;
-    }
-
-    const image = res.image || {};
-    const imageId = image.imageId || crypto.randomUUID();
-    const mimeType = image.mimeType || "image/png";
-    const dataUrl = image.dataUrl || image.data || "";
-
-    if (typeof putImageCacheEntry === "function") {
-      await putImageCacheEntry({ imageId, mimeType, dataUrl, createdAt: Date.now() });
-    }
-
-    let resolvedDataUrl = dataUrl;
-    if (typeof getImageCacheEntry === "function") {
-      const cached = await getImageCacheEntry(imageId);
-      resolvedDataUrl = cached?.dataUrl || cached?.data || resolvedDataUrl;
-    }
-
-    if (answerContent && typeof buildImageCard === "function") {
-      if (!resolvedDataUrl) {
-        clearElementContent(answerContent);
-        answerContent.appendChild(buildImageCard({ state: "expired" }));
-        metaEl.textContent = "⚠️ Image expired.";
-        return;
-      }
-      const readyCard = buildImageCard({
-        state: "ready",
-        imageUrl: resolvedDataUrl,
-        mode: "sidepanel",
-        onView: () => openImageInNewTab(resolvedDataUrl, imageId),
-        onDownload: () => downloadImage(resolvedDataUrl, imageId, mimeType)
-      });
-      const thumb = readyCard.querySelector(".image-card-thumb");
-      if (thumb) {
-        thumb.addEventListener("click", () => openImageInNewTab(resolvedDataUrl, imageId));
-      }
-      clearElementContent(answerContent);
-      answerContent.appendChild(readyCard);
-    } else if (answerContent) {
-      answerContent.textContent = "Image generated.";
-    }
-
-    metaEl.textContent = "✅ Image generated.";
-    answerSection.scrollTop = answerSection.scrollHeight;
-    await refreshBalance();
-  } catch (e) {
-    console.error("Error generating image:", e);
-    if (answerContent && typeof buildImageCard === "function") {
-      clearElementContent(answerContent);
-      answerContent.appendChild(buildImageCard({ state: "error" }));
-    } else if (answerContent) {
-      answerContent.textContent = e?.message || String(e);
-    }
-    metaEl.textContent = "❌ Failed to generate image.";
-  } finally {
-    askBtn.disabled = false;
-  }
-}
+const {
+  setSafeHtml: setSafeHtmlFromImage = () => {},
+  clearElementContent: clearElementContentFromImage = () => {},
+  generateImage: generateImageFromImageUtils = async () => {}
+} = sidepanelImageGenerationModule;
 
 async function askQuestion(deps) {
   const {
@@ -161,7 +17,7 @@ async function askQuestion(deps) {
     sanitizePrompt,
     metaEl,
     clearPromptAfterSend,
-    generateImageImpl,
+    generateImageImpl: generateImageFromDeps,
     askBtn,
     setPromptStreamingState,
     showAnswerBox,
@@ -215,7 +71,7 @@ async function askQuestion(deps) {
       promptEl.value = "";
       promptEl.style.height = "auto";
     }
-    await generateImageImpl(prompt);
+    await (typeof generateImageFromDeps === "function" ? generateImageFromDeps : (p) => generateImageFromImageUtils(deps, p))(prompt);
     return;
   }
 
@@ -242,7 +98,7 @@ async function askQuestion(deps) {
     const contextBadge = contextSize > 2
       ? `<span class="answer-context-badge" title="${contextSize} messages in conversation context">🧠 ${Math.floor(contextSize / 2)} Q&A</span>`
       : "";
-    setSafeHtml(answerItem, `
+    setSafeHtmlFromImage(answerItem, `
       <div class="answer-meta">
         <span>${new Date().toLocaleTimeString()} - Streaming...</span>
       </div>
@@ -296,7 +152,7 @@ async function askQuestion(deps) {
       wrapper.style.marginBottom = "12px";
       wrapper.setAttribute("role", "region");
       wrapper.setAttribute("aria-label", "Reasoning steps");
-      setSafeHtml(wrapper, `
+      setSafeHtmlFromImage(wrapper, `
         <div style="padding: 12px; background: var(--color-bg-tertiary); border-left: 3px solid var(--color-topic-5); border-radius: 4px;">
           <div class="reasoning-header" style="font-size: 12px; font-weight: 600; color: var(--color-topic-5); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;"><span>💭</span><span>Thinking...</span></div>
           <div class="reasoning-text" style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; white-space: pre-wrap;"></div>
@@ -317,7 +173,7 @@ async function askQuestion(deps) {
     state.lastStreamContext = streamContext;
 
     const resetAnswerForRetry = () => {
-      clearElementContent(answerContent);
+      clearElementContentFromImage(answerContent);
       const metaSpan = answerMeta.querySelector("span");
       if (metaSpan) metaSpan.textContent = `${new Date().toLocaleTimeString()} - Streaming...`;
       const timeSpan = answerItem.querySelector(".answer-time");
@@ -332,7 +188,7 @@ async function askQuestion(deps) {
     };
 
     const renderStreamError = (message, statusText) => {
-      setSafeHtml(answerContent, buildStreamErrorHtml(message), safeHtmlSetter);
+      setSafeHtmlFromImage(answerContent, buildStreamErrorHtml(message), safeHtmlSetter);
       const retryBtn = answerContent.querySelector(".retry-btn");
       if (retryBtn) {
         retryBtn.addEventListener("click", () => {
@@ -429,12 +285,12 @@ async function askQuestion(deps) {
             if (safeHtmlSetter) {
               safeHtmlSetter(answerContent, renderedHTML);
             } else {
-              setSafeHtml(answerContent, renderedHTML, safeHtmlSetter);
+              setSafeHtmlFromImage(answerContent, renderedHTML, safeHtmlSetter);
             }
             answerSection.scrollTop = answerSection.scrollHeight;
           } catch (e) {
             const renderMessage = `Error rendering: ${e?.message || "Unknown error"}`;
-            setSafeHtml(answerContent, buildStreamErrorHtml(renderMessage), safeHtmlSetter);
+            setSafeHtmlFromImage(answerContent, buildStreamErrorHtml(renderMessage), safeHtmlSetter);
           }
           return;
         }
@@ -466,7 +322,7 @@ async function askQuestion(deps) {
           if (fullAnswer) {
             const { sources, cleanText } = extractSources(fullAnswer);
             const rendered = applyMarkdownStyles(cleanText);
-            setSafeHtml(answerContent, rendered, safeHtmlSetter);
+            setSafeHtmlFromImage(answerContent, rendered, safeHtmlSetter);
             if (sources.length > 0) {
               makeSourceReferencesClickable(answerContent, sources);
               const sourcesIndicator = createSourcesIndicator(sources, answerEl);
@@ -516,7 +372,7 @@ async function askQuestion(deps) {
       window.safeHtml.appendSanitizedHtml(answerEl, errorHtml);
     } else {
       const wrapper = document.createElement("div");
-      setSafeHtml(wrapper, errorHtml, safeHtmlSetter);
+      setSafeHtmlFromImage(wrapper, errorHtml, safeHtmlSetter);
       const errorNode = wrapper.firstElementChild;
       if (errorNode) {
         answerEl.appendChild(errorNode);
@@ -534,7 +390,7 @@ async function askQuestion(deps) {
 }
 
 const sidepanelPromptControllerUtils = {
-  generateImage,
+  generateImage: generateImageFromImageUtils,
   askQuestion
 };
 

@@ -1,11 +1,7 @@
 (() => {
-// options.js
-
-// Initialize theme on page load
 if (typeof initTheme === 'function') {
   initTheme();
 }
-
 const openrouterApiKeyInput = document.getElementById("openrouterApiKey");
 const enableOpenrouterToggle = document.getElementById("enable-openrouter");
 const enableOpenrouterStatus = document.getElementById("enable-openrouter-status");
@@ -23,7 +19,6 @@ const clearDebugLogBtn = document.getElementById("clear-debug-log-btn");
 const clearImageCacheBtn = document.getElementById("clear-image-cache-btn");
 const imageCacheLimitInput = document.getElementById("image-cache-limit");
 const imageCacheLimitValue = document.getElementById("image-cache-limit-value");
-
 const getLocalStorage = (keys) => (
   typeof window.getEncrypted === "function"
     ? window.getEncrypted(keys)
@@ -34,9 +29,6 @@ const setLocalStorage = (values) => (
     ? window.setEncrypted(values)
     : chrome.storage.local.set(values)
 );
-// encrypted-storage
-
-// In-memory copies
 let combinedModels = []; // [{ id, rawId, provider, displayName }]
 let modelMap = new Map(); // combinedId -> model
 let favoriteModelsByProvider = {
@@ -51,8 +43,6 @@ let modelDropdown = null; // ModelDropdownManager instance
 let modelsLoadRequestId = 0;
 let modelsLoadInFlight = false;
 let lastSilentModelsLoadAt = 0;
-
-// Undo state for history deletion
 let pendingDeleteItem = null; // { item, timeout }
 let pendingClearAllHistory = null; // { items, timeout }
 const DEBUG_STREAM_KEY = "or_debug_stream";
@@ -67,19 +57,16 @@ const PROVIDER_KEY_STORAGE = {
 const PROVIDER_LABELS = {
   openrouter: "OpenRouter"
 };
-
 function normalizeImageCacheLimitMb(value) {
   if (!Number.isFinite(value)) return IMAGE_CACHE_LIMIT_DEFAULT;
   const clamped = Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, value));
   const snapped = Math.round(clamped / IMAGE_CACHE_LIMIT_STEP) * IMAGE_CACHE_LIMIT_STEP;
   return Math.max(IMAGE_CACHE_LIMIT_MIN, Math.min(IMAGE_CACHE_LIMIT_MAX, snapped));
 }
-
 function updateImageCacheLimitLabel(value) {
   if (!imageCacheLimitValue) return;
   imageCacheLimitValue.textContent = `${value} MB`;
 }
-
 function setHtmlSafely(element, html) {
   if (!element) return;
   if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
@@ -88,13 +75,10 @@ function setHtmlSafely(element, html) {
   }
   element.textContent = typeof html === "string" ? html : "";
 }
-
 function setupKeyVisibilityToggles() {
   if (typeof bindVisibilityToggles !== "function") return;
   bindVisibilityToggles(document);
 }
-
-// ---- Provider helpers ----
 const providerUiUtils = (typeof window !== "undefined" && window.providerUiUtils) || {};
 const {
   normalizeProviderSafe: normalizeProvider = () => "openrouter",
@@ -113,52 +97,43 @@ const {
     const modelId = combinedId.slice(splitIndex + 1);
     return { provider, modelId };
   },
-  getModelDisplayName = (model) => model?.displayName || model?.name || model?.id || "",
-  buildCombinedFavoritesList: combineFavoritesByProvider = (favoritesByProvider) => {
-    const combined = [];
-    ["openrouter"].forEach((provider) => {
-      const favorites = favoritesByProvider[provider] || new Set();
-      favorites.forEach((modelId) => combined.push(buildCombinedModelIdSafe(provider, modelId)));
-    });
-    return combined;
-  },
-  buildCombinedRecentList: combineRecentsByProvider = (recentsByProvider) => {
-    const combined = [];
-    ["openrouter"].forEach((provider) => {
-      const recents = recentsByProvider[provider] || [];
-      recents.forEach((modelId) => {
-        const combinedId = buildCombinedModelIdSafe(provider, modelId);
-        if (!combined.includes(combinedId)) combined.push(combinedId);
-      });
-    });
-    return combined;
-  }
+  getModelDisplayName = (model) => model?.displayName || model?.name || model?.id || "",  buildCombinedFavoritesList: combineFavoritesByProvider = () => [],
+  buildCombinedRecentList: combineRecentsByProvider = () => []
 } = providerUiUtils;
 const optionsModelControllerUtils = (typeof window !== "undefined" && window.optionsModelControllerUtils) || {};
+const optionsModelDropdownControllerUtils = (typeof window !== "undefined" && window.optionsModelDropdownControllerUtils) || {};
+const optionsHistoryFormatUtils = (typeof window !== "undefined" && window.optionsHistoryFormatUtils) || {};
 const optionsHistoryDetailControllerUtils = (typeof window !== "undefined" && window.optionsHistoryDetailControllerUtils) || {};
+const optionsHistoryRenderControllerUtils = (typeof window !== "undefined" && window.optionsHistoryRenderControllerUtils) || {};
 const optionsHistoryControllerUtils = (typeof window !== "undefined" && window.optionsHistoryControllerUtils) || {};
 const optionsRuntimeEventsControllerUtils = (typeof window !== "undefined" && window.optionsRuntimeEventsControllerUtils) || {};
 const optionsNotifyUtils = (typeof window !== "undefined" && window.optionsNotifyUtils) || {};
-
+const optionsPageActionsUtils = (typeof window !== "undefined" && window.optionsPageActionsUtils) || {};
+const {
+  exportHistoryJSON: exportHistoryJSONFromUtils = () => {},
+  exportHistoryCSV: exportHistoryCSVFromUtils = () => {},
+  wireProviderKeyInput: wireProviderKeyInputFromUtils = () => {},
+  wireProviderEnableToggle: wireProviderEnableToggleFromUtils = () => {},
+  registerDebugStreamHandlers: registerDebugStreamHandlersFromUtils = () => {},
+  registerImageCacheHandlers: registerImageCacheHandlersFromUtils = () => {},
+  registerThemeHandlers: registerThemeHandlersFromUtils = () => {}
+} = optionsPageActionsUtils;
 const notifyProviderSettingsUpdated = (providerId) => optionsNotifyUtils.notifyProviderSettingsUpdated
   ? optionsNotifyUtils.notifyProviderSettingsUpdated(chrome.runtime, providerId, console)
   : Promise.resolve();
 const notifyModelsUpdated = () => optionsNotifyUtils.notifyModelsUpdated
   ? optionsNotifyUtils.notifyModelsUpdated(chrome.runtime, console)
   : Promise.resolve();
-
 async function persistSelectedModelSelection(combinedModelId) {
   const parsed = parseCombinedModelIdSafe(combinedModelId);
   const provider = normalizeProvider(parsed.provider);
   const rawModelId = parsed.modelId;
   if (!rawModelId) return false;
-
   await setLocalStorage({
     or_model: rawModelId,
     or_model_provider: provider,
     or_provider: provider
   });
-
   try {
     await chrome.runtime.sendMessage({
       type: "set_model",
@@ -168,117 +143,61 @@ async function persistSelectedModelSelection(combinedModelId) {
   } catch (e) {
     console.warn("Failed to push selected model to background:", e);
   }
-
   await notifyModelsUpdated();
   return true;
 }
-
 function initModelDropdown() {
-  if (modelDropdown) {
-    modelDropdown.destroy();
-    modelDropdown = null;
-  }
-
-  modelDropdown = new ModelDropdownManager({
-    inputElement: modelInput,
-    containerType: 'modal',
-    preferProvidedRecents: true,
-    onModelSelect: async (modelId) => {
-      selectedCombinedModelId = modelId;
-      const selectedModel = modelMap.get(modelId);
-      const displayName = selectedModel ? getModelDisplayName(selectedModel) : modelId;
-
-      if (modelInput) {
-        modelInput.value = displayName;
-      }
-      if (modelSelect) {
-        modelSelect.value = modelId;
-      }
-
-      try {
-        const applied = await persistSelectedModelSelection(modelId);
-        if (!applied) return false;
-        if (statusEl) {
-          statusEl.textContent = "Model updated.";
-          statusEl.style.color = "var(--color-success)";
-          setTimeout(() => {
-            if (statusEl.textContent === "Model updated.") {
-              statusEl.textContent = "";
-              statusEl.style.color = "";
-            }
-          }, 1500);
-        }
-        return true;
-      } catch (e) {
-        console.error("Failed to persist selected model:", e);
-        if (statusEl) {
-          statusEl.textContent = "Failed to update model.";
-          statusEl.style.color = "var(--color-error)";
-        }
-        return false;
-      }
-    },
-    onToggleFavorite: async (modelId, isFavorite) => {
-      const parsed = parseCombinedModelIdSafe(modelId);
-      const provider = normalizeProvider(parsed.provider);
-      const rawId = parsed.modelId;
-
-      if (!favoriteModelsByProvider[provider]) {
-        favoriteModelsByProvider[provider] = new Set();
-      }
-
-      if (isFavorite) {
-        favoriteModelsByProvider[provider].add(rawId);
-      } else {
-        favoriteModelsByProvider[provider].delete(rawId);
-      }
-
-      await chrome.storage.sync.set({
-        [getProviderStorageKeySafe("or_favorites", provider)]: Array.from(favoriteModelsByProvider[provider])
-      });
-
-      try {
-        await chrome.runtime.sendMessage({ type: "favorites_updated" });
-      } catch (e) {
-        console.warn("Failed to notify favorites update:", e);
-      }
-    },
-    onAddRecent: async (modelId) => {
-      const parsed = parseCombinedModelIdSafe(modelId);
-      const provider = normalizeProvider(parsed.provider);
-      const rawId = parsed.modelId;
-
-      const current = recentModelsByProvider[provider] || [];
-      const next = [rawId, ...current.filter(id => id !== rawId)].slice(0, 5);
-      recentModelsByProvider[provider] = next;
-
-      await setLocalStorage({
-        [getProviderStorageKeySafe("or_recent_models", provider)]: next
-      });
-
-      modelDropdown.setRecentlyUsed(buildCombinedRecentList());
-    }
-  });
+  modelDropdown = optionsModelDropdownControllerUtils.initModelDropdown
+    ? optionsModelDropdownControllerUtils.initModelDropdown({
+        existingDropdown: modelDropdown,
+        destroyDropdown: () => { if (modelDropdown) { modelDropdown.destroy(); modelDropdown = null; } },
+        modelInput,
+        modelSelect,
+        modelMap,
+        selectedCombinedModelId,
+        setSelectedCombinedModelId: (value) => { selectedCombinedModelId = value; },
+        parseCombinedModelIdSafe,
+        normalizeProvider,
+        persistSelectedModelSelection,
+        statusEl,
+        getModelDisplayName,
+        favoriteModelsByProvider,
+        recentModelsByProvider,
+        setFavoriteModelsByProvider: (value) => { favoriteModelsByProvider = value; },
+        setRecentModelsByProvider: (value) => { recentModelsByProvider = value; },
+        chromeStorageSync: chrome.storage.sync,
+        getProviderStorageKeySafe,
+        setLocalStorage,
+        buildCombinedFavoritesListFn: optionsModelDropdownControllerUtils.buildCombinedFavoritesList,
+        buildCombinedRecentListFn: optionsModelDropdownControllerUtils.buildCombinedRecentList,
+        notifyFavoritesUpdated: async () => {
+          try {
+            await chrome.runtime.sendMessage({ type: "favorites_updated" });
+          } catch (e) {
+            console.warn("Failed to notify favorites update:", e);
+          }
+        },
+        onRecentModelsUpdated: (nextRecents) => {
+          recentModelsByProvider = nextRecents;
+          if (modelDropdown) {
+            modelDropdown.setRecentlyUsed(buildCombinedRecentList());
+          }
+        },
+        ModelDropdownManager
+      })
+    : modelDropdown;
 }
-
 function buildCombinedFavoritesList() {
-  return combineFavoritesByProvider(favoriteModelsByProvider);
+  return optionsModelDropdownControllerUtils.buildCombinedFavoritesList(favoriteModelsByProvider, buildCombinedModelIdSafe);
 }
-
 function buildCombinedRecentList() {
-  return combineRecentsByProvider(recentModelsByProvider);
+  return optionsModelDropdownControllerUtils.buildCombinedRecentList(recentModelsByProvider, buildCombinedModelIdSafe);
 }
-
 function loadFavoritesAndRecents(localItems, syncItems) {
-  favoriteModelsByProvider = {
-    openrouter: new Set(syncItems.or_favorites || [])
-  };
-
-  recentModelsByProvider = {
-    openrouter: localItems.or_recent_models || []
-  };
+  const result = optionsModelDropdownControllerUtils.loadFavoritesAndRecents(localItems, syncItems);
+  favoriteModelsByProvider = result.favoriteModelsByProvider;
+  recentModelsByProvider = result.recentModelsByProvider;
 }
-
 const optionsModelController = optionsModelControllerUtils.createOptionsModelController
   ? optionsModelControllerUtils.createOptionsModelController({
       getLocalStorage,
@@ -314,36 +233,28 @@ const optionsModelController = optionsModelControllerUtils.createOptionsModelCon
       notifyProviderSettingsUpdated
     })
   : null;
-
 let loadCachedModelsFromStorage = optionsModelController?.loadCachedModelsFromStorage || (async () => []);
 let loadSelectedModel = optionsModelController?.loadSelectedModel || (() => {});
 let loadModels = optionsModelController?.loadModels || (async () => {});
-
 function updateEnableStatus(provider, enabled) {
   const statusEl = enableOpenrouterStatus;
   if (!statusEl) return;
   statusEl.style.display = enabled ? "inline" : "none";
 }
-
 async function syncProviderToggleState(provider, apiKeyValue) {
   const hasKey = Boolean(apiKeyValue && apiKeyValue.trim().length);
   const toggle = enableOpenrouterToggle;
   if (!toggle) return;
-
   toggle.disabled = true;
   toggle.checked = hasKey;
   updateEnableStatus(provider, hasKey);
 }
-
 async function loadProviderCards(localItems) {
   if (openrouterApiKeyInput) {
     openrouterApiKeyInput.value = localItems.or_api_key || "";
   }
   await syncProviderToggleState("openrouter", openrouterApiKeyInput?.value || "");
 }
-
-// ---- Load stored settings (API key, model, favorites, history limit) ----
-// SECURITY FIX: API key now stored in chrome.storage.local (not synced across devices)
 Promise.all([
   getLocalStorage([
     "or_api_key",
@@ -363,7 +274,6 @@ Promise.all([
   loadFavoritesAndRecents(localItems, syncItems);
   loadSelectedModel(localItems);
   initModelDropdown();
-
   const debugEnabled = Boolean(localItems.or_debug_stream);
   if (debugStreamToggle) {
     debugStreamToggle.checked = debugEnabled;
@@ -378,79 +288,35 @@ Promise.all([
     collapseOnProjectsToggle.checked = localItems.or_collapse_on_projects !== false;
   }
 });
-
-// ---- Load and render prompt history ----
 async function loadPromptHistory() {
-  try {
-    const res = await getLocalStorage(["or_history"]);
-    const history = res.or_history || [];
-    currentHistory = history; // Store for detail view
-    renderPromptHistory(history);
-  } catch (e) {
-    console.error("Error loading history:", e);
-    promptHistoryEl.textContent = "Error loading history.";
-  }
+  return optionsHistoryRenderControllerUtils.loadPromptHistory
+    ? optionsHistoryRenderControllerUtils.loadPromptHistory({
+        getLocalStorage,
+        setCurrentHistory: (value) => { currentHistory = Array.isArray(value) ? value : []; },
+        renderPromptHistory,
+        promptHistoryEl,
+        logError: (...args) => console.error(...args)
+      })
+    : null;
 }
-
 function renderPromptHistory(history) {
-  if (!history.length) {
-    promptHistoryEl.textContent = "No prompt history yet.";
-    return;
-  }
-
-  promptHistoryEl.replaceChildren();
-
-  for (const item of history) {
-    const div = document.createElement("div");
-    div.className = "history-item";
-    div.style.cssText = "background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s ease;";
-
-    const ts = new Date(item.createdAt).toLocaleString();
-    const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
-    const buildPreview = historyViewUtils.buildHistoryPreviewHtml || ((entry, timestamp, escapeFn) => `
-      <div class="history-preview">
-        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px;">${timestamp}</div>
-        <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 4px; font-weight: 600;">Prompt:</div>
-        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; white-space: pre-wrap;">${escapeFn((entry.prompt || "").length > 80 ? `${entry.prompt.slice(0, 80)}...` : (entry.prompt || ""))}</div>
-        <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px;">Click to view full context</div>
-      </div>
-    `);
-
-    setHtmlSafely(div, buildPreview(item, ts, escapeHtml));
-
-    div.dataset.itemId = item.id;
-
-    promptHistoryEl.appendChild(div);
-  }
-
-  // Add click functionality to show detail on right side
-  document.querySelectorAll(".history-item").forEach(item => {
-    item.addEventListener("click", (e) => {
-      // Don't toggle if clicking on buttons
-      if (e.target.tagName === "BUTTON") return;
-
-      const itemId = item.dataset.itemId;
-      const historyItem = currentHistory.find(h => h.id === itemId);
-      if (historyItem) {
-        showHistoryDetail(historyItem);
-
-        // Highlight selected item
-        document.querySelectorAll(".history-item").forEach(i => {
-          i.style.background = "var(--color-bg)";
-          i.style.borderColor = "var(--color-border)";
-        });
-        item.style.background = "var(--color-bg-secondary)";
-        item.style.borderColor = "var(--color-primary)";
-      }
-    });
-  });
-
+  return optionsHistoryRenderControllerUtils.renderPromptHistory
+    ? optionsHistoryRenderControllerUtils.renderPromptHistory({
+        history,
+        promptHistoryEl,
+        getCurrentHistory: () => currentHistory,
+        onSelectHistoryItem: showHistoryDetail,
+        setHtmlSafely,
+        escapeHtml,
+        optionsHistoryFormatUtils,
+        historyViewUtils: (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {}
+      })
+    : null;
 }
-
-// Show history detail in right column
 function showHistoryDetail(item) {
-  return optionsHistoryDetailControllerUtils.showOptionsHistoryDetail
-    ? optionsHistoryDetailControllerUtils.showOptionsHistoryDetail(item, {
+  return optionsHistoryRenderControllerUtils.showHistoryDetail
+    ? optionsHistoryRenderControllerUtils.showHistoryDetail(item, {
+        optionsHistoryDetailControllerUtils,
         setHtmlSafely,
         escapeHtml,
         getCurrentHistory: () => currentHistory,
@@ -465,17 +331,12 @@ function showHistoryDetail(item) {
       })
     : null;
 }
-
-// Close detail panel
 document.addEventListener("DOMContentLoaded", async () => {
   const closeBtn = document.getElementById("history-close-detail");
   const previewColumn = document.getElementById("history-preview-column");
-
   if (closeBtn && previewColumn) {
     closeBtn.addEventListener("click", () => {
       previewColumn.classList.remove("active");
-
-      // Remove highlight from all items
       document.querySelectorAll(".history-item").forEach(i => {
         i.style.background = "var(--color-bg)";
         i.style.borderColor = "var(--color-border)";
@@ -483,35 +344,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
-
 async function commitDeleteHistoryItem(id) {
-  try {
-    const res = await getLocalStorage(["or_history"]);
-    const history = res.or_history || [];
-    const filtered = history.filter(item => item.id !== id);
-    await setLocalStorage({ or_history: filtered });
-    // Update in-memory copy
-    currentHistory = filtered;
-  } catch (e) {
-    console.error("Error deleting history item:", e);
-  }
+  return optionsHistoryRenderControllerUtils.commitDeleteHistoryItem
+    ? optionsHistoryRenderControllerUtils.commitDeleteHistoryItem({
+        id,
+        getLocalStorage,
+        setLocalStorage,
+        setCurrentHistory: (value) => { currentHistory = Array.isArray(value) ? value : []; },
+        logError: (...args) => console.error(...args)
+      })
+    : null;
 }
-
-// ---- Load models from OpenRouter API ----
-
-// Auto-load models when page opens if API key exists
 Promise.all([
   getLocalStorage([
     "or_api_key"
   ])
 ]).then(([localItems]) => {
   if (localItems.or_api_key) {
-    // Small delay to ensure UI is ready
     setTimeout(() => loadModels(), 100);
   }
 });
-
-// ---- Save settings (key + model + history limit) ----
 saveBtn.addEventListener("click", async () => {
   const combinedModelId = modelSelect.value.trim();
   const historyLimit = parseInt(historyLimitInput.value) || 20;
@@ -519,15 +371,11 @@ saveBtn.addEventListener("click", async () => {
   const imageCacheLimitMb = imageCacheLimitInput
     ? normalizeImageCacheLimitMb(parseInt(imageCacheLimitInput.value, 10))
     : IMAGE_CACHE_LIMIT_DEFAULT;
-
-  // Model is optional - if not set, will use default from constants
   const dataToSave = {
     or_history_limit: historyLimit,
     or_collapse_on_projects: collapseOnProjects,
     [IMAGE_CACHE_LIMIT_KEY]: imageCacheLimitMb
   };
-
-  // Only save model if one is selected
   if (combinedModelId) {
     const parsed = parseCombinedModelIdSafe(combinedModelId);
     dataToSave.or_model = parsed.modelId;
@@ -535,15 +383,12 @@ saveBtn.addEventListener("click", async () => {
     dataToSave.or_provider = normalizeProvider(parsed.provider);
     selectedCombinedModelId = combinedModelId;
   }
-
-  // SECURITY FIX: Store API key in local storage (not synced)
   await Promise.all([
     setLocalStorage(dataToSave),
     chrome.storage.sync.set({
       or_favorites: Array.from(favoriteModelsByProvider.openrouter || [])
     })
   ]);
-
   statusEl.textContent = combinedModelId ? "Saved." : "Saved. (Using default model)";
   statusEl.style.color = "var(--color-success)";
   await loadModels();
@@ -553,102 +398,40 @@ saveBtn.addEventListener("click", async () => {
     statusEl.style.color = "";
   }, 2500);
 });
-
 async function saveProviderKey(provider, value) {
   const key = PROVIDER_KEY_STORAGE[provider];
   await setLocalStorage({ [key]: value });
 }
-
 let updateProviderModelsAfterChange = optionsModelController?.updateProviderModelsAfterChange || (async () => {});
-
 function wireProviderKeyInput(provider, inputEl) {
-  if (!inputEl) return;
-  let debounceId = null;
-  inputEl.addEventListener("input", () => {
-    const value = inputEl.value.trim();
-    if (debounceId) {
-      clearTimeout(debounceId);
-    }
-    debounceId = setTimeout(async () => {
-      await saveProviderKey(provider, value);
-      await syncProviderToggleState(provider, value);
-      if (value.length === 0) {
-        updateEnableStatus(provider, false);
-      }
-      await updateProviderModelsAfterChange();
-    }, 300);
+  return wireProviderKeyInputFromUtils({
+    provider,
+    inputEl,
+    saveProviderKey,
+    syncProviderToggleState,
+    updateEnableStatus,
+    updateProviderModelsAfterChange
   });
 }
-
 function wireProviderEnableToggle(provider, toggleEl, inputEl) {
-  if (!toggleEl) return;
-  toggleEl.addEventListener("change", async () => {
-    const hasKey = Boolean(inputEl?.value?.trim().length);
-    if (!hasKey) {
-      toggleEl.checked = false;
-      toggleEl.disabled = true;
-      updateEnableStatus(provider, false);
-      return;
-    }
-    updateEnableStatus(provider, toggleEl.checked);
-    await updateProviderModelsAfterChange();
+  return wireProviderEnableToggleFromUtils({
+    provider,
+    toggleEl,
+    inputEl,
+    updateEnableStatus,
+    updateProviderModelsAfterChange
   });
 }
-
 wireProviderKeyInput("openrouter", openrouterApiKeyInput);
 wireProviderEnableToggle("openrouter", enableOpenrouterToggle, openrouterApiKeyInput);
-
-// ---- Export history functionality ----
 function exportHistoryJSON() {
-  if (currentHistory.length === 0) {
-    toast.warning("No history to export");
-    return;
-  }
-
   const historyUtils = (typeof window !== "undefined" && window.optionsHistoryUtils) || {};
-  const buildJson = historyUtils.buildHistoryJson || ((history) => JSON.stringify(history, null, 2));
-  const dataStr = buildJson(currentHistory);
-  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `openrouter-history-${new Date().toISOString().split('T')[0]}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-
-  toast.success(`Exported ${currentHistory.length} history items as JSON`);
+  return exportHistoryJSONFromUtils({ currentHistory, toast, historyUtils });
 }
-
 function exportHistoryCSV() {
-  if (currentHistory.length === 0) {
-    toast.warning("No history to export");
-    return;
-  }
-
   const historyUtils = (typeof window !== "undefined" && window.optionsHistoryUtils) || {};
-  const buildCsv = historyUtils.buildHistoryCsv || ((history) => {
-    let csv = "timestamp,prompt,answer\n";
-    history.forEach((item) => {
-      const timestamp = new Date(item.createdAt).toISOString();
-      const prompt = `"${(item.prompt || "").replace(/"/g, '""')}"`;
-      const answer = `"${(item.answer || "").replace(/"/g, '""')}"`;
-      csv += `"${timestamp}",${prompt},${answer}\n`;
-    });
-    return csv;
-  });
-  const csv = buildCsv(currentHistory);
-
-  const dataBlob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `openrouter-history-${new Date().toISOString().split('T')[0]}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-
-  toast.success(`Exported ${currentHistory.length} history items as CSV`);
+  return exportHistoryCSVFromUtils({ currentHistory, toast, historyUtils });
 }
-
 async function clearAllHistory() {
   if (typeof optionsHistoryControllerUtils.clearAllHistory !== "function") return;
   await optionsHistoryControllerUtils.clearAllHistory({
@@ -668,125 +451,39 @@ async function clearAllHistory() {
     logError: (...args) => console.error(...args)
   });
 }
-
-// Export history button handlers
 document.getElementById("export-history-btn")?.addEventListener("click", exportHistoryJSON);
 document.getElementById("export-history-csv-btn")?.addEventListener("click", exportHistoryCSV);
 document.getElementById("clear-all-history-btn")?.addEventListener("click", clearAllHistory);
-
-// ---- Streaming debug log ----
-if (debugStreamToggle) {
-  debugStreamToggle.addEventListener("change", async () => {
-    const enabled = Boolean(debugStreamToggle.checked);
-    await setLocalStorage({ [DEBUG_STREAM_KEY]: enabled });
-    if (downloadDebugLogBtn) {
-      downloadDebugLogBtn.disabled = !enabled;
-    }
-    if (clearDebugLogBtn) {
-      clearDebugLogBtn.disabled = !enabled;
-    }
-    try {
-      await chrome.runtime.sendMessage({ type: "debug_set_enabled", enabled });
-    } catch (e) {
-      console.warn("Failed to notify debug toggle:", e);
-    }
-  });
-}
-
-if (downloadDebugLogBtn) {
-  downloadDebugLogBtn.addEventListener("click", async () => {
-    try {
-      const res = await chrome.runtime.sendMessage({ type: "debug_get_stream_log" });
-      if (!res?.ok) {
-        throw new Error(res?.error || "Failed to fetch debug log");
-      }
-      const payload = {
-        meta: res.meta || {},
-        entries: res.entries || []
-      };
-      const dataStr = JSON.stringify(payload, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      const filename = typeof buildDebugLogFilename === "function"
-        ? buildDebugLogFilename()
-        : `wegweiser-stream-debug-${Date.now()}.json`;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${payload.entries.length} debug entries`);
-    } catch (e) {
-      console.error("Failed to download debug log:", e);
-      toast.error("Failed to download debug log");
-    }
-  });
-}
-
-if (clearDebugLogBtn) {
-  clearDebugLogBtn.addEventListener("click", async () => {
-    try {
-      const res = await chrome.runtime.sendMessage({ type: "debug_clear_stream_log" });
-      if (!res?.ok) {
-        throw new Error(res?.error || "Failed to clear debug log");
-      }
-      toast.success("Debug log cleared");
-    } catch (e) {
-      console.error("Failed to clear debug log:", e);
-      toast.error("Failed to clear debug log");
-    }
-  });
-}
-
-// ---- Image storage cleanup ----
-if (clearImageCacheBtn) {
-  clearImageCacheBtn.addEventListener("click", async () => {
-    try {
-      if (typeof cleanupImageStore !== "function") {
-        throw new Error("Image store unavailable");
-      }
-      await cleanupImageStore(Infinity);
-      toast.success("Image cache cleared");
-    } catch (e) {
-      console.error("Failed to clear image cache:", e);
-      toast.error("Failed to clear image cache");
-    }
-  });
-}
-
-if (imageCacheLimitInput) {
-  imageCacheLimitInput.addEventListener("input", () => {
-    const normalized = normalizeImageCacheLimitMb(parseInt(imageCacheLimitInput.value, 10));
-    imageCacheLimitInput.value = normalized;
-    updateImageCacheLimitLabel(normalized);
-  });
-}
-
-// ---- Theme selector ----
-const themeSelect = document.getElementById("theme-select");
-
-// Load current theme
-getLocalStorage(['or_theme']).then((result) => {
-  if (result.or_theme && themeSelect) {
-    themeSelect.value = result.or_theme;
-  }
+registerDebugStreamHandlersFromUtils({
+  debugStreamToggle,
+  downloadDebugLogBtn,
+  clearDebugLogBtn,
+  setLocalStorage,
+  debugStreamKey: DEBUG_STREAM_KEY,
+  runtime: chrome.runtime,
+  toast,
+  buildDebugLogFilename: (typeof buildDebugLogFilename === "function") ? buildDebugLogFilename : null
 });
-
-// Theme change handler
-if (themeSelect) {
-  themeSelect.addEventListener("change", () => {
-    const themeName = themeSelect.value;
-    applyTheme(themeName);
-    toast.success(`Theme changed to ${THEMES[themeName].name}`);
-  });
-}
-
-// ---- Load history on page load ----
+registerImageCacheHandlersFromUtils({
+  clearImageCacheBtn,
+  imageCacheLimitInput,
+  normalizeImageCacheLimitMb,
+  updateImageCacheLimitLabel,
+  cleanupImageStore: (typeof cleanupImageStore === "function") ? cleanupImageStore : null,
+  toast
+});
+const themeSelect = document.getElementById("theme-select");
+registerThemeHandlersFromUtils({
+  themeSelect,
+  getLocalStorage,
+  applyTheme,
+  THEMES,
+  toast
+});
 document.addEventListener("DOMContentLoaded", async () => {
   loadPromptHistory();
   setupKeyVisibilityToggles();
 });
-
 optionsRuntimeEventsControllerUtils.registerOptionsRuntimeMessageHandlers?.({
   runtime: chrome.runtime,
   getModelsLoadInFlight: () => modelsLoadInFlight,

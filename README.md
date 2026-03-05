@@ -59,10 +59,26 @@ Run these in order for feature/bugfix branches:
 4. `npm run tdd:check:staged`
 5. `npm run test:related` *(quick loop for changed source files)*
 6. `npm test -- --runInBand` *(pre-PR gate)*
-7. `npm run test:smoke` *(UI flow gate)*
-8. Push and open PR *(required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`)*
+7. `npm run test:coverage -- --runInBand`
+8. `npm run coverage:ratchet -- --staged` *(or `--base/--head` on CI)*
+9. `npm run test:smoke` *(UI flow gate)*
+10. Push and open PR *(required checks: `build`, `browser-smoke`, `tdd-guard`, `coverage-ratchet`, `secrets`)*
 
-Use `test:related` for fast iteration and always run the full Jest + smoke gates before opening a PR. Use `npm run test:smoke:parallel` only for optional flake hunting.
+Use `test:related` for fast iteration and always run the full Jest + coverage-ratchet + smoke gates before opening a PR. Use `npm run test:smoke:parallel` only for optional flake hunting.
+
+
+### 📈 Coverage Ratchet (Hybrid Per-File Gate)
+
+- Gate behavior:
+  - no coverage regression on changed first-party source files (`src/**/*.js`, excluding `src/lib/**` and `src/image-viewer/**`)
+  - priority-module floor thresholds are always enforced
+- Local sequence:
+  - `npm run test:coverage -- --runInBand`
+  - `npm run coverage:ratchet -- --staged`
+- Manual maintenance (review required in PR):
+  - refresh baseline after intentional improvements: `npm run coverage:baseline:update`
+  - ratchet priority floors (+5 S/L/F, +3 B, capped by measured coverage): `npm run coverage:thresholds:ratchet`
+- If `coverage:ratchet` fails, inspect metric deltas in output and either raise coverage in changed files or intentionally refresh baseline/thresholds in the same PR.
 
 ### 🌐 Live Provider Smoke (Manual + Nightly)
 
@@ -94,20 +110,6 @@ For the next 2 weeks, track `tdd-guard` false positives and tune only `scripts/t
 - Not allowed:
   - broad ignores for core runtime folders (`src/background`, `src/sidepanel`, `src/projects`, `src/options`)
   - disabling `tdd-guard` or removing required status checks
-
-### 🔐 Branch Protection Baseline (Maintainers)
-
-Configure GitHub branch protection for `main` with:
-
-- Require pull request before merge
-- Required approvals: 1
-- Dismiss stale approvals: enabled
-- Require status checks: enabled
-- Require branches to be up to date: enabled
-- Required checks: `build`, `browser-smoke`, `tdd-guard`, `secrets`
-- Restrict force pushes: enabled
-- Restrict deletions: enabled
-- Include administrators: enabled
 
 ## 🔑 Setup
 

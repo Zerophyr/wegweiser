@@ -19,15 +19,23 @@ function showOptionsHistoryDetail(item, deps) {
   const detailContent = document.getElementById("history-detail-content");
   if (!previewColumn || !detailContent) return;
 
-  const ts = new Date(item.createdAt).toLocaleString();
+  const formatUtils = (typeof window !== "undefined" && window.optionsHistoryFormatUtils) || {};
+  const normalizeEntry = formatUtils.normalizeHistoryEntryForDisplay || ((entry) => ({
+    ...entry,
+    promptText: String(entry?.prompt || ""),
+    answerText: String(entry?.answer || "")
+  }));
+
+  const displayItem = normalizeEntry(item);
+  const ts = new Date(displayItem.createdAt).toLocaleString();
   const historyViewUtils = (typeof window !== "undefined" && window.optionsHistoryViewUtils) || {};
   const buildDetail = historyViewUtils.buildHistoryDetailHtml || ((entry, timestamp, escapeFn) => `
     <div style="margin-bottom: 20px;">
       <div style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 12px;">${timestamp}</div>
       <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Prompt</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeFn(entry.prompt)}</div>
+      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 16px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6;">${escapeFn(entry.promptText)}</div>
       <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 8px; font-weight: 600;">Answer</div>
-      <div style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;">${escapeFn(entry.answer || "No answer available")}</div>
+      <div class="history-answer-markdown" style="font-size: 13px; color: var(--color-text); margin-bottom: 20px; white-space: pre-wrap; background: var(--color-bg); padding: 16px; border-radius: 8px; line-height: 1.6; max-height: 400px; overflow-y: auto;"></div>
       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
         <button class="detail-copy-prompt-btn" style="padding: 8px 16px; background: var(--color-primary); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Prompt</button>
         <button class="detail-copy-answer-btn" style="padding: 8px 16px; background: var(--color-accent); color: var(--color-text-on-primary); border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s ease;">Copy Answer</button>
@@ -36,7 +44,18 @@ function showOptionsHistoryDetail(item, deps) {
     </div>
   `);
 
-  setHtmlSafely(detailContent, buildDetail(item, ts, escapeHtml));
+  setHtmlSafely(detailContent, buildDetail(displayItem, ts, escapeHtml));
+
+  const answerMarkdownEl = detailContent.querySelector(".history-answer-markdown");
+  if (answerMarkdownEl) {
+    const answerMarkdown = displayItem.answerText || "No answer available";
+    if (typeof window !== "undefined" && typeof window.applyMarkdownStyles === "function") {
+      window.applyMarkdownStyles(answerMarkdownEl, answerMarkdown);
+    } else {
+      answerMarkdownEl.textContent = answerMarkdown;
+    }
+  }
+
   previewColumn.classList.add("active");
 
   const copyPromptBtn = detailContent.querySelector(".detail-copy-prompt-btn");
@@ -46,7 +65,7 @@ function showOptionsHistoryDetail(item, deps) {
   if (copyPromptBtn) {
     copyPromptBtn.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(item.prompt);
+        await navigator.clipboard.writeText(displayItem.promptText || "");
         copyPromptBtn.textContent = "Copied!";
         setTimeout(() => {
           copyPromptBtn.textContent = "Copy Prompt";
@@ -60,7 +79,7 @@ function showOptionsHistoryDetail(item, deps) {
   if (copyAnswerBtn) {
     copyAnswerBtn.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(item.answer || "");
+        await navigator.clipboard.writeText(displayItem.answerText || "");
         copyAnswerBtn.textContent = "Copied!";
         setTimeout(() => {
           copyAnswerBtn.textContent = "Copy Answer";

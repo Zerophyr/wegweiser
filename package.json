@@ -22,7 +22,10 @@
     "test:related": "node scripts/tdd/run-related-tests.js --staged",
     "test:smoke:parallel": "playwright test --config=playwright.config.ts",
     "test:smoke:live": "playwright test --config=playwright.config.ts --workers=1 tests/browser/live-provider-validation.smoke.spec.ts",
-    "test:smoke:live:headed": "playwright test --config=playwright.config.ts --workers=1 --headed tests/browser/live-provider-validation.smoke.spec.ts"
+    "test:smoke:live:headed": "playwright test --config=playwright.config.ts --workers=1 --headed tests/browser/live-provider-validation.smoke.spec.ts",
+    "coverage:ratchet": "node scripts/coverage/check-ratchet.js",
+    "coverage:baseline:update": "node scripts/coverage/update-baseline.js",
+    "coverage:thresholds:ratchet": "node scripts/coverage/ratchet-priority-thresholds.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
