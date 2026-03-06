@@ -174,7 +174,7 @@ export function buildSmokeLocalSeed() {
     or_provider: "openrouter",
     or_model_provider: "openrouter",
     or_model: "openai/gpt-4o-mini",
-    or_api_key: "sk-or-smoke-test-key",
+    or_api_key: "SMOKE_TEST_KEY_PLACEHOLDER!",
     or_provider_enabled_openrouter: true,
     or_web_search: false,
     or_reasoning: false,

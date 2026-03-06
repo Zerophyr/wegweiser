@@ -15,9 +15,7 @@ const DEFAULT_ENCRYPTED_STORAGE_KEYS = [
   "or_provider_enabled_openrouter"
 ];
 
-const ENCRYPTED_STORAGE_KEYS = Array.isArray(globalThis?.ENCRYPTED_STORAGE_KEYS)
-  ? globalThis.ENCRYPTED_STORAGE_KEYS
-  : DEFAULT_ENCRYPTED_STORAGE_KEYS;
+const ENCRYPTED_STORAGE_KEYS = Object.freeze([...DEFAULT_ENCRYPTED_STORAGE_KEYS]);
 
 async function encryptJsonSafe(value) {
   if (typeof globalThis === "undefined" || typeof globalThis.encryptJson !== "function") {
@@ -103,3 +101,4 @@ if (typeof module !== "undefined") {
     migratePlaintextKey
   };
 }
+

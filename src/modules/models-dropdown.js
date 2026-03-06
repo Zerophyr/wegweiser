@@ -324,10 +324,7 @@ class ModelDropdownManager {
         [this.config.recentModelsKey]: this.state.recentlyUsedModels
       });
     } else {
-      // Save to storage
-      await chrome.storage.local.set({
-        [this.config.recentModelsKey]: this.state.recentlyUsedModels
-      });
+      console.warn('[ModelDropdown] setEncrypted unavailable; skipping recent model persistence for encrypted key', this.config.recentModelsKey);
     }
   }
   async loadRecentlyUsedModels() {
@@ -353,8 +350,8 @@ class ModelDropdownManager {
       try {
         if (usedEncrypted && typeof globalThis !== 'undefined' && typeof globalThis.setEncrypted === 'function') {
           await globalThis.setEncrypted(payload);
-        } else if (chrome?.storage?.local?.set) {
-          await chrome.storage.local.set(payload);
+        } else {
+          console.warn('[ModelDropdown] setEncrypted unavailable; skipping recent model normalization write for encrypted key', this.config.recentModelsKey);
         }
       } catch (e) {
         // ignore persistence errors
@@ -439,3 +436,4 @@ class ModelDropdownManager {
 if (typeof module !== "undefined") {
   module.exports = { ModelDropdownManager };
 }
+

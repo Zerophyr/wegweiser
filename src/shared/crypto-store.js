@@ -1,8 +1,27 @@
 // crypto-store.js - AES-GCM helpers for local storage encryption
 
-const KEY_STORAGE_KEY = "or_crypto_key";
-const KEY_OBFUSCATION_PREFIX = "v1:";
+const KEY_DB_NAME = "wegweiser-crypto-store";
+const KEY_STORE_NAME = "crypto_keys";
+const KEY_RECORD_ID = "primary";
+const RESET_MARKER_KEY = "or_crypto_reset_v2";
+const LEGACY_KEY_STORAGE_KEY = "or_crypto_key";
+const RESET_ENCRYPTED_STORAGE_KEYS = [
+  "or_provider",
+  "or_api_key",
+  "or_model",
+  "or_model_provider",
+  "or_recent_models",
+  "or_history_limit",
+  "or_history",
+  "or_projects",
+  "or_project_threads",
+  "or_web_search",
+  "or_reasoning",
+  "or_provider_enabled_openrouter"
+];
+
 let cachedKeyPromise = null;
+let cachedDbPromise = null;
 
 function getCrypto() {
   return (typeof globalThis !== "undefined" && globalThis.crypto) ? globalThis.crypto : null;
@@ -11,6 +30,127 @@ function getCrypto() {
 function getSubtle() {
   const cryptoObj = getCrypto();
   return cryptoObj?.subtle || null;
+}
+
+function getIndexedDb() {
+  if (typeof indexedDB !== "undefined") return indexedDB;
+  if (typeof globalThis !== "undefined" && globalThis.indexedDB) return globalThis.indexedDB;
+  return null;
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionDone(tx) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("IndexedDB transaction aborted"));
+  });
+}
+
+function openCryptoStoreDb(idb) {
+  return new Promise((resolve, reject) => {
+    const request = idb.open(KEY_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(KEY_STORE_NAME)) {
+        db.createObjectStore(KEY_STORE_NAME, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getCryptoDb() {
+  if (!cachedDbPromise) {
+    const idb = getIndexedDb();
+    if (!idb) {
+      throw new Error("IndexedDB unavailable");
+    }
+    cachedDbPromise = openCryptoStoreDb(idb).catch((error) => {
+      cachedDbPromise = null;
+      throw error;
+    });
+  }
+  return cachedDbPromise;
+}
+
+async function withKeyStore(mode, handler) {
+  const db = await getCryptoDb();
+  const tx = db.transaction(KEY_STORE_NAME, mode);
+  const store = tx.objectStore(KEY_STORE_NAME);
+  const result = await handler(store);
+  await transactionDone(tx);
+  return result;
+}
+
+async function loadPersistedKey() {
+  const record = await withKeyStore("readonly", (store) => requestToPromise(store.get(KEY_RECORD_ID)));
+  return record?.key || null;
+}
+
+async function savePersistedKey(key) {
+  await withKeyStore("readwrite", (store) => requestToPromise(store.put({ id: KEY_RECORD_ID, key })));
+}
+
+async function clearPersistedKey() {
+  try {
+    await withKeyStore("readwrite", (store) => requestToPromise(store.delete(KEY_RECORD_ID)));
+  } catch (_) {
+    // Ignore cleanup failures; key will be regenerated as needed.
+  }
+}
+
+async function ensureResetApplied() {
+  if (!chrome?.storage?.local) {
+    throw new Error("chrome.storage.local unavailable");
+  }
+
+  const markerResult = await chrome.storage.local.get([RESET_MARKER_KEY]);
+  if (markerResult?.[RESET_MARKER_KEY]) {
+    return;
+  }
+
+  const keysToRemove = [LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS];
+  if (typeof chrome.storage.local.remove === "function") {
+    await chrome.storage.local.remove(keysToRemove);
+  }
+
+  await clearPersistedKey();
+  await chrome.storage.local.set({ [RESET_MARKER_KEY]: true });
+}
+
+async function getOrCreateKey() {
+  if (cachedKeyPromise) return cachedKeyPromise;
+
+  cachedKeyPromise = (async () => {
+    const subtle = getSubtle();
+    if (!subtle) {
+      throw new Error("Web Crypto unavailable");
+    }
+
+    await ensureResetApplied();
+
+    const persistedKey = await loadPersistedKey();
+    if (persistedKey) {
+      return persistedKey;
+    }
+
+    const key = await subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    await savePersistedKey(key);
+    return key;
+  })().catch((error) => {
+    cachedKeyPromise = null;
+    throw error;
+  });
+
+  return cachedKeyPromise;
 }
 
 function bytesToBase64(bytes) {
@@ -29,44 +169,6 @@ function base64ToBytes(base64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
-}
-
-function obfuscateKey(rawBase64) {
-  return `${KEY_OBFUSCATION_PREFIX}${rawBase64.split("").reverse().join("")}`;
-}
-
-function deobfuscateKey(value) {
-  if (typeof value !== "string" || !value.startsWith(KEY_OBFUSCATION_PREFIX)) {
-    return "";
-  }
-  const reversed = value.slice(KEY_OBFUSCATION_PREFIX.length);
-  return reversed.split("").reverse().join("");
-}
-
-async function getOrCreateKey() {
-  if (cachedKeyPromise) return cachedKeyPromise;
-  cachedKeyPromise = (async () => {
-    const subtle = getSubtle();
-    if (!subtle || !chrome?.storage?.local) {
-      throw new Error("Web Crypto or storage unavailable");
-    }
-
-    const stored = await chrome.storage.local.get([KEY_STORAGE_KEY]);
-    const storedValue = stored[KEY_STORAGE_KEY];
-    const base64Key = deobfuscateKey(storedValue);
-    if (base64Key) {
-      const raw = base64ToBytes(base64Key);
-      return subtle.importKey("raw", raw, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
-    }
-
-    const key = await subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-    const raw = await subtle.exportKey("raw", key);
-    const rawBytes = new Uint8Array(raw);
-    const b64 = bytesToBase64(rawBytes);
-    await chrome.storage.local.set({ [KEY_STORAGE_KEY]: obfuscateKey(b64) });
-    return key;
-  })();
-  return cachedKeyPromise;
 }
 
 async function encryptJson(value) {

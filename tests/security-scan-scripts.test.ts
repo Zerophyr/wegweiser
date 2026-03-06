@@ -6,11 +6,13 @@ describe("security scan scripts", () => {
   const repoScanPath = path.join(__dirname, "..", "scripts", "security", "scan-repo-secrets.js");
   const stagedScanPath = path.join(__dirname, "..", "scripts", "security", "scan-staged-secrets.js");
   const commonPath = path.join(__dirname, "..", "scripts", "security", "scan-common.js");
+  const gitleaksPath = path.join(__dirname, "..", ".gitleaks.toml");
 
   test("scripts exist", () => {
     expect(fs.existsSync(repoScanPath)).toBe(true);
     expect(fs.existsSync(stagedScanPath)).toBe(true);
     expect(fs.existsSync(commonPath)).toBe(true);
+    expect(fs.existsSync(gitleaksPath)).toBe(true);
   });
 
   test("common scanner contains key secret patterns", () => {
@@ -33,5 +35,15 @@ describe("security scan scripts", () => {
     const content = fs.readFileSync(repoScanPath, "utf8");
     expect(content).toMatch(/git ls-files/);
     expect(content).toMatch(/--others --exclude-standard/);
+  });
+
+  test("gitleaks rules include broader token coverage", () => {
+    const content = fs.readFileSync(gitleaksPath, "utf8");
+    expect(content).toMatch(/id = "bearer-token"/);
+    expect(content).toMatch(/id = "jwt-token"/);
+    expect(content).toMatch(/id = "aws-access-key-id"/);
+    expect(content).toMatch(/id = "anthropic-api-key"/);
+    expect(content).toMatch(/id = "openai-api-key"/);
+    expect(content).toMatch(/id = "keyword-high-entropy-assignment"/);
   });
 });
