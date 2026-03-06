@@ -10,11 +10,20 @@ function resolvePurifier() {
   return null;
 }
 
+function escapeHtmlFallback(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function sanitizeHtml(html, config) {
   const value = typeof html === "string" ? html : "";
   const purifier = resolvePurifier();
   if (!purifier || typeof purifier.sanitize !== "function") {
-    return value;
+    return escapeHtmlFallback(value);
   }
   return purifier.sanitize(value, config);
 }

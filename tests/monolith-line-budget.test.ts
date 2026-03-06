@@ -7,6 +7,8 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
   maxLines: number;
   includeGlob: string;
   excludeGlobs: string[];
+  maxCharsPerLine?: number;
+  longLineAllowlist?: string[];
 };
 
 function normalizePath(filePath: string): string {
@@ -52,6 +54,11 @@ describe("line budget", () => {
   const srcDir = path.join(repoRoot, "src");
   const files = collectJsFiles(srcDir).sort();
 
+  test("defines long-line guard config", () => {
+    expect(config.maxCharsPerLine).toBeGreaterThan(0);
+    expect(Array.isArray(config.longLineAllowlist)).toBe(true);
+  });
+
   test("tracks at least one file", () => {
     expect(files.length).toBeGreaterThan(0);
   });
@@ -60,5 +67,31 @@ describe("line budget", () => {
     const filePath = path.join(repoRoot, relPath);
     const lineCount = fs.readFileSync(filePath, "utf8").split(/\r?\n/).length;
     expect(lineCount).toBeLessThanOrEqual(config.maxLines);
+  });
+
+  test.each(files)("%s does not bypass budget via minified long lines", (relPath: string) => {
+    const maxCharsPerLine = Number(config.maxCharsPerLine || 0);
+    if (!maxCharsPerLine) return;
+
+    const allowlist = new Set((config.longLineAllowlist || []).map((p) => normalizePath(p)));
+    const filePath = path.join(repoRoot, relPath);
+    const maxObserved = fs
+      .readFileSync(filePath, "utf8")
+      .split(/\r?\n/)
+      .reduce((max: number, line: string) => Math.max(max, line.length), 0);
+
+    if (allowlist.has(relPath)) {
+      expect(maxObserved).toBeGreaterThan(maxCharsPerLine);
+      return;
+    }
+
+    expect(maxObserved).toBeLessThanOrEqual(maxCharsPerLine);
+  });
+
+  test("long-line allowlist only contains tracked JS files", () => {
+    const allowlist = (config.longLineAllowlist || []).map((p) => normalizePath(p));
+    allowlist.forEach((entry) => {
+      expect(files).toContain(entry);
+    });
   });
 });

@@ -36,3 +36,8 @@ Please include:
    - `npm run security:scan`
    - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_|sk-or-v1-[A-Za-z0-9]{40,}" --oneline`
 5. Document remediation in internal release notes.
+
+## Permission and Data Protection Boundaries
+
+- Optional host access is declared as `<all_urls>` to support active-page summarization on arbitrary sites, but permission is requested only on demand and requires explicit user approval.
+- Local encryption uses a device-local key managed by the extension runtime. This protects against plaintext-at-rest inspection, not against attackers who can read extension storage and live runtime state.
