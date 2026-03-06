@@ -47,7 +47,7 @@ function sanitizeWithConfiguredPolicy(html) {
   if (typeof DOMPurify !== 'undefined') {
     return DOMPurify.sanitize(html, DOMPURIFY_CONFIG);
   }
-  return html;
+  return escapeCodeHtml(html || '');
 }
 
 const TOPIC_COLOR_COUNT = 6;

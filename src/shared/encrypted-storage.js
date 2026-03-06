@@ -19,12 +19,19 @@ const ENCRYPTED_STORAGE_KEYS = Array.isArray(globalThis?.ENCRYPTED_STORAGE_KEYS)
   ? globalThis.ENCRYPTED_STORAGE_KEYS
   : DEFAULT_ENCRYPTED_STORAGE_KEYS;
 
-const encryptJsonSafe = (typeof globalThis !== "undefined" && typeof globalThis.encryptJson === "function")
-  ? globalThis.encryptJson
-  : async (value) => value;
-const decryptJsonSafe = (typeof globalThis !== "undefined" && typeof globalThis.decryptJson === "function")
-  ? globalThis.decryptJson
-  : async (value) => value;
+async function encryptJsonSafe(value) {
+  if (typeof globalThis === "undefined" || typeof globalThis.encryptJson !== "function") {
+    throw new Error("encryptJson not available — crypto-store.js not loaded");
+  }
+  return globalThis.encryptJson(value);
+}
+
+async function decryptJsonSafe(value) {
+  if (typeof globalThis === "undefined" || typeof globalThis.decryptJson !== "function") {
+    throw new Error("decryptJson not available — crypto-store.js not loaded");
+  }
+  return globalThis.decryptJson(value);
+}
 
 function isEncryptedPayload(value) {
   return Boolean(value && typeof value === "object" && value.alg === "AES-GCM" && value.iv && value.data);
@@ -56,6 +63,10 @@ async function getEncrypted(keys) {
       try {
         result[key] = await decryptJsonSafe(encrypted);
       } catch (e) {
+        const message = e?.message || String(e);
+        if (/decryptJson not available/i.test(message)) {
+          throw e;
+        }
         result[key] = undefined;
       }
     } else {

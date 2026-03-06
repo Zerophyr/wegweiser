@@ -206,6 +206,8 @@ Wegweiser-extension/
 - **Local Image Storage** - Generated images stored in IndexedDB on your device
 - **Image Cleanup** - Manual clear option available in Options
 - **No Telemetry** - No data collected or shared
+- **Permission Disclosure** - Optional host permission uses `<all_urls>` and is only requested on-demand with explicit user approval for active-page features
+- **Encryption Threat Model** - Device-local encryption protects at-rest storage from casual file inspection, but not from attackers who can read extension storage and runtime memory
 - **Security Policy** - See `SECURITY.md` for reporting and incident-response guidance
 
 ### Secret Incident Recovery

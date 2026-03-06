@@ -50,12 +50,26 @@ function exportDocx(messages, filename) {
   downloadBlob(blob, filename || 'thread.docx');
 }
 
+
+function sanitizeExportHtml(htmlString) {
+  const value = typeof htmlString === 'string' ? htmlString : '';
+  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.sanitizeHtml === 'function') {
+    return window.safeHtml.sanitizeHtml(value);
+  }
+  if (typeof DOMPurify !== 'undefined' && typeof DOMPurify.sanitize === 'function') {
+    return DOMPurify.sanitize(value);
+  }
+  return escapeHtmlForExport(value);
+}
+
 function exportPdf(htmlString, filename) {
   const win = window.open('', '_blank');
   if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${filename || 'thread'}</title>
+  const safeTitle = escapeHtmlForExport(filename || 'thread');
+  const safeHtml = sanitizeExportHtml(htmlString);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title>
     <style>body{font-family:Arial,sans-serif;color:#111;padding:24px;} h2{margin-top:24px;} pre{white-space:pre-wrap;}</style>
-  </head><body>${htmlString}</body></html>`);
+  </head><body>${safeHtml}</body></html>`);
   win.document.close();
   win.focus();
   win.print();

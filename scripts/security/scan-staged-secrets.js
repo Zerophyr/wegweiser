@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 const {
   scanContent,
   printFindings,
@@ -7,7 +7,7 @@ const {
 } = require("./scan-common.js");
 
 function getStagedFiles() {
-  const output = execSync("git diff --cached --name-only --diff-filter=ACMR", { encoding: "utf8" });
+  const output = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], { encoding: "utf8" });
   return output
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -17,7 +17,7 @@ function getStagedFiles() {
 
 function readStagedFile(filePath) {
   try {
-    return execSync(`git show :"${filePath}"`, { encoding: "utf8" });
+    return execFileSync("git", ["show", `:${filePath}`], { encoding: "utf8" });
   } catch (_) {
     return null;
   }

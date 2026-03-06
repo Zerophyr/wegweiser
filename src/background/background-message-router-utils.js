@@ -274,6 +274,14 @@ export function registerBackgroundMessageRouter(chromeApi, deps) {
     if (msg?.type === deps.MESSAGE_TYPES.REQUEST_PERMISSION) {
       (async () => {
         try {
+          const runtimeId = chromeApi?.runtime?.id || "";
+          const senderUrl = sender?.url || "";
+          const trustedSenderPrefix = `chrome-extension://${runtimeId}/`;
+          if (!runtimeId || sender?.id !== chromeApi.runtime.id || sender?.tab || !senderUrl.startsWith(trustedSenderPrefix)) {
+            sendResponse({ ok: false, error: "Unauthorized sender" });
+            return;
+          }
+
           const url = msg.url;
           if (!url) {
             sendResponse({ ok: false, error: "No URL provided" });

@@ -21,10 +21,12 @@ describe("security scan scripts", () => {
     expect(content).toMatch(/PRIVATE KEY/);
   });
 
-  test("staged scan reads git index blob content", () => {
+  test("staged scan reads git index blob content without shell interpolation", () => {
     const content = fs.readFileSync(stagedScanPath, "utf8");
-    expect(content).toMatch(/git diff --cached --name-only --diff-filter=ACMR/);
-    expect(content).toMatch(/git show :/);
+    expect(content).toMatch(/execFileSync/);
+    expect(content).toMatch(/execFileSync\("git",\s*\["diff",\s*"--cached",\s*"--name-only",\s*"--diff-filter=ACMR"\]/);
+    expect(content).toMatch(/execFileSync\("git",\s*\["show",\s*`:\$\{filePath\}`\]/);
+    expect(content).not.toMatch(/execSync\(`git show/);
   });
 
   test("repo scan checks tracked and untracked files", () => {

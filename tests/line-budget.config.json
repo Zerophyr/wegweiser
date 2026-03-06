@@ -3,5 +3,10 @@
   "includeGlob": "src/**/*.js",
   "excludeGlobs": [
     "src/lib/**"
+  ],
+  "maxCharsPerLine": 1000,
+  "longLineAllowlist": [
+    "src/projects/projects.js",
+    "src/sidepanel/sidepanel.js"
   ]
 }

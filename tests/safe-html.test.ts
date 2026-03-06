@@ -30,4 +30,16 @@ describe("safe-html", () => {
     expect(el.innerHTML).not.toContain("<script>");
     delete (global as any).DOMPurify;
   });
+
+  test("sanitizeHtml fails closed when sanitizer is unavailable", () => {
+    delete (global as any).DOMPurify;
+    const dirty = '<img src=x onerror="alert(1)"><script>alert(1)</script><b>ok</b>';
+    const clean = sanitizeHtml(dirty);
+
+    expect(clean).toContain("&lt;img");
+    expect(clean).toContain("&lt;script&gt;");
+    expect(clean).not.toContain("<script>");
+    expect(clean).not.toContain("<img");
+  });
+
 });
