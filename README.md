@@ -130,17 +130,6 @@ Wegweiser-extension/
 - **Encryption Threat Model** - Device-local encryption protects at-rest storage from casual file inspection, but not from attackers who can read extension storage and runtime memory
 - **Security Policy** - See `SECURITY.md` for reporting and incident-response guidance
 
-### Secret Incident Recovery
-
-If a credential is exposed:
-1. Revoke the leaked token/key immediately.
-2. Rotate and replace credentials in local settings/CI.
-3. Verify remotes contain no embedded credentials:
-   - `git remote -v`
-4. Run scans:
-   - `npm run security:scan`
-   - `git log --all -G "ghp_[A-Za-z0-9]{36}|github_pat_|sk-or-v1-[A-Za-z0-9]{40,}" --oneline`
-
 ## 📝 Changelog
 
 ### v1.2.0 (Latest)
