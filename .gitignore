@@ -57,6 +57,7 @@ CLAUDE.md
 docs/
 .local-backup-docs/
 .local-backup-meta/
+.maintainer-workflow.local.md
 description.md
 audit.md
 
