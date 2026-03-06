@@ -23,6 +23,26 @@ describe("encrypted storage runtime", () => {
     warnSpy.mockRestore();
   });
 
+  test("setEncrypted ignores global ENCRYPTED_STORAGE_KEYS override", async () => {
+    jest.resetModules();
+    const globalAny = global as any;
+
+    globalAny.ENCRYPTED_STORAGE_KEYS = [];
+    globalAny.encryptJson = jest.fn().mockResolvedValue({ alg: "AES-GCM", iv: "iv", data: "cipher" });
+
+    const { setEncrypted } = require("../src/shared/encrypted-storage.js");
+
+    await setEncrypted({ or_api_key: "secret" });
+
+    expect(globalAny.encryptJson).toHaveBeenCalledWith("secret");
+    expect(globalAny.chrome.storage.local.set).toHaveBeenCalledWith({
+      or_api_key: { alg: "AES-GCM", iv: "iv", data: "cipher" }
+    });
+
+    delete globalAny.ENCRYPTED_STORAGE_KEYS;
+    delete globalAny.encryptJson;
+  });
+
   test("setEncrypted throws when encryptJson is unavailable", async () => {
     jest.resetModules();
     const globalAny = global as any;

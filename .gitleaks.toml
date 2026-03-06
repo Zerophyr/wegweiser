@@ -41,3 +41,38 @@ description = "OpenRouter API key"
 regex = '''sk-or-v1-[A-Za-z0-9]{40,}'''
 tags = ["openrouter", "token"]
 
+[[rules]]
+id = "bearer-token"
+description = "Bearer token"
+regex = '''\bBearer\s+[A-Za-z0-9._\-]{20,}\b'''
+tags = ["auth", "token"]
+
+[[rules]]
+id = "jwt-token"
+description = "JWT token"
+regex = '''\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b'''
+tags = ["jwt", "token"]
+
+[[rules]]
+id = "aws-access-key-id"
+description = "AWS access key id"
+regex = '''\bAKIA[0-9A-Z]{16}\b'''
+tags = ["aws", "key"]
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key"
+regex = '''\bsk-ant-[A-Za-z0-9_\-]{20,}\b'''
+tags = ["anthropic", "token"]
+
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI-style API key"
+regex = '''\bsk-(?:proj|live|test)-[A-Za-z0-9_\-]{20,}\b'''
+tags = ["openai", "token"]
+
+[[rules]]
+id = "keyword-high-entropy-assignment"
+description = "Keyword based high entropy secret assignment"
+regex = '''(?i)\b(?:api[_-]?key|token|secret|password|passwd)\b\s*[:=]\s*["'][A-Za-z0-9_\-]{24,}["']'''
+tags = ["generic", "secret"]

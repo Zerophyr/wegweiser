@@ -6,6 +6,7 @@ describe("ModelDropdownManager storage keys", () => {
     const globalAny = global as any;
     document.body.innerHTML = '<input id="model-input" />';
     globalAny.groupModelsByProvider = jest.fn(() => ({}));
+    globalAny.setEncrypted = jest.fn().mockResolvedValue(undefined);
     globalAny.chrome = {
       storage: {
         sync: {
@@ -57,6 +58,28 @@ describe("ModelDropdownManager storage keys", () => {
     });
 
     delete globalAny.setEncrypted;
+  });
+
+  test("addToRecentlyUsed does not write plaintext when setEncrypted is unavailable", async () => {
+    delete (global as any).setEncrypted;
+    const input = document.getElementById("model-input");
+    const dropdown = new ModelDropdownManager({
+      inputElement: input,
+      favoritesKey: "fav_key",
+      recentModelsKey: "recent_key",
+      onModelSelect: jest.fn()
+    });
+
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    await dropdown.addToRecentlyUsed("openai/gpt-4o");
+
+    expect(global.chrome.storage.local.set).not.toHaveBeenCalledWith({
+      recent_key: ["openai/gpt-4o"]
+    });
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
   test("loadRecentlyUsedModels uses encrypted storage when available", async () => {
@@ -572,4 +595,3 @@ describe("ModelDropdownManager storage keys", () => {
     expect(() => dropdown.show("")).not.toThrow();
   });
 });
-
