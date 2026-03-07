@@ -73,15 +73,6 @@ _(Coming soon)_
    - **Light** - Clean light theme
 3. Theme applies immediately
 
-### Release Packaging & CRX Signing
-1. Run packaging:
-   - `npm run release`
-2. Optional signed CRX output requires both environment variables:
-   - `CWS_PRIVATE_KEY_PATH` (path to private key file)
-   - `CHROME_PATH` (path to Chrome/Chromium executable)
-3. If either variable is missing or invalid, release still creates the upload ZIP and skips signed CRX.
-4. Never commit key files or place credentials in git remote URLs.
-
 ### Options Highlights
 1. **Provider card**: Add your OpenRouter API key to unlock model loading
 2. **Balance display**: Uses OpenRouter credits endpoint automatically
