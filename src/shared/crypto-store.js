@@ -3,7 +3,12 @@
 const KEY_DB_NAME = "wegweiser-crypto-store";
 const KEY_STORE_NAME = "crypto_keys";
 const KEY_RECORD_ID = "primary";
+const KEY_PENDING_RECORD_ID = "pending_v2";
 const RESET_MARKER_KEY = "or_crypto_reset_v2";
+const INIT_LOCK_KEY = "or_crypto_init_lock_v2";
+const INIT_LOCK_TIMEOUT_MS = 5000;
+const INIT_LOCK_RETRY_MS = 25;
+const INIT_LOCK_WAIT_LIMIT_MS = 10000;
 const LEGACY_KEY_STORAGE_KEY = "or_crypto_key";
 const RESET_ENCRYPTED_STORAGE_KEYS = [
   "or_provider",
@@ -36,6 +41,13 @@ function getIndexedDb() {
   if (typeof indexedDB !== "undefined") return indexedDB;
   if (typeof globalThis !== "undefined" && globalThis.indexedDB) return globalThis.indexedDB;
   return null;
+}
+
+function getStorageLocal() {
+  if (!chrome?.storage?.local) {
+    throw new Error("chrome.storage.local unavailable");
+  }
+  return chrome.storage.local;
 }
 
 function requestToPromise(request) {
@@ -90,40 +102,212 @@ async function withKeyStore(mode, handler) {
   return result;
 }
 
+async function loadKeyRecord(id) {
+  return withKeyStore("readonly", (store) => requestToPromise(store.get(id)));
+}
+
+async function saveKeyRecord(id, key) {
+  await withKeyStore("readwrite", (store) => requestToPromise(store.put({ id, key })));
+}
+
+async function clearKeyRecord(id) {
+  try {
+    await withKeyStore("readwrite", (store) => requestToPromise(store.delete(id)));
+  } catch (_) {
+    // Ignore cleanup failures; key material will be regenerated if needed.
+  }
+}
+
 async function loadPersistedKey() {
-  const record = await withKeyStore("readonly", (store) => requestToPromise(store.get(KEY_RECORD_ID)));
+  const record = await loadKeyRecord(KEY_RECORD_ID);
   return record?.key || null;
 }
 
-async function savePersistedKey(key) {
-  await withKeyStore("readwrite", (store) => requestToPromise(store.put({ id: KEY_RECORD_ID, key })));
-}
-
 async function clearPersistedKey() {
-  try {
-    await withKeyStore("readwrite", (store) => requestToPromise(store.delete(KEY_RECORD_ID)));
-  } catch (_) {
-    // Ignore cleanup failures; key will be regenerated as needed.
+  await clearKeyRecord(KEY_RECORD_ID);
+}
+
+function createLockToken() {
+  return `lock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isLockActive(lockValue, now = Date.now()) {
+  return Boolean(lockValue && typeof lockValue.owner === "string" && typeof lockValue.expiresAt === "number" && lockValue.expiresAt > now);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readInitState() {
+  return getStorageLocal().get([RESET_MARKER_KEY, INIT_LOCK_KEY]);
+}
+
+async function tryAcquireInitLock(owner) {
+  const storage = getStorageLocal();
+  const now = Date.now();
+  const state = await readInitState();
+  const currentLock = state?.[INIT_LOCK_KEY];
+
+  if (state?.[RESET_MARKER_KEY]) {
+    return false;
+  }
+
+  if (isLockActive(currentLock, now) && currentLock.owner !== owner) {
+    return false;
+  }
+
+  await storage.set({
+    [INIT_LOCK_KEY]: {
+      owner,
+      acquiredAt: now,
+      expiresAt: now + INIT_LOCK_TIMEOUT_MS
+    }
+  });
+
+  const verify = await storage.get([INIT_LOCK_KEY]);
+  return verify?.[INIT_LOCK_KEY]?.owner === owner;
+}
+
+async function releaseInitLock(owner) {
+  const storage = getStorageLocal();
+  const state = await storage.get([INIT_LOCK_KEY]);
+  if (state?.[INIT_LOCK_KEY]?.owner === owner && typeof storage.remove === "function") {
+    await storage.remove(INIT_LOCK_KEY);
   }
 }
 
-async function ensureResetApplied() {
-  if (!chrome?.storage?.local) {
-    throw new Error("chrome.storage.local unavailable");
+async function waitForResetOrLockRelease(owner) {
+  const deadline = Date.now() + INIT_LOCK_WAIT_LIMIT_MS;
+  while (Date.now() < deadline) {
+    const state = await readInitState();
+    if (state?.[RESET_MARKER_KEY]) {
+      return true;
+    }
+    const lockValue = state?.[INIT_LOCK_KEY];
+    if (!isLockActive(lockValue) || lockValue?.owner === owner) {
+      return false;
+    }
+    await delay(INIT_LOCK_RETRY_MS);
+  }
+  return false;
+}
+
+async function verifyKeyUsable(subtle, key) {
+  const cryptoObj = getCrypto();
+  if (!cryptoObj || typeof cryptoObj.getRandomValues !== "function") {
+    throw new Error("Web Crypto unavailable");
+  }
+  const iv = cryptoObj.getRandomValues(new Uint8Array(12));
+  const probe = new Uint8Array([11, 22, 33, 44]);
+  const encrypted = await subtle.encrypt({ name: "AES-GCM", iv }, key, probe);
+  const decrypted = await subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+  const decoded = new Uint8Array(decrypted);
+  if (decoded.length !== probe.length) {
+    throw new Error("Persisted key verification failed");
+  }
+  for (let i = 0; i < probe.length; i += 1) {
+    if (decoded[i] !== probe[i]) {
+      throw new Error("Persisted key verification failed");
+    }
+  }
+}
+
+async function createAndVerifyPendingKey(subtle) {
+  const key = await subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  await saveKeyRecord(KEY_PENDING_RECORD_ID, key);
+  const pendingRecord = await loadKeyRecord(KEY_PENDING_RECORD_ID);
+  if (!pendingRecord?.key) {
+    throw new Error("Pending key persistence verification failed");
+  }
+  await verifyKeyUsable(subtle, pendingRecord.key);
+  return pendingRecord.key;
+}
+
+async function promotePendingKey(subtle) {
+  const pendingRecord = await loadKeyRecord(KEY_PENDING_RECORD_ID);
+  if (!pendingRecord?.key) {
+    throw new Error("Pending key missing");
+  }
+  await saveKeyRecord(KEY_RECORD_ID, pendingRecord.key);
+  const primaryRecord = await loadKeyRecord(KEY_RECORD_ID);
+  if (!primaryRecord?.key) {
+    throw new Error("Primary key persistence verification failed");
+  }
+  await verifyKeyUsable(subtle, primaryRecord.key);
+  await clearKeyRecord(KEY_PENDING_RECORD_ID);
+  return primaryRecord.key;
+}
+
+async function ensureMarkerBackedPrimaryKey(subtle) {
+  const persistedKey = await loadPersistedKey();
+  if (persistedKey) {
+    return persistedKey;
   }
 
-  const markerResult = await chrome.storage.local.get([RESET_MARKER_KEY]);
-  if (markerResult?.[RESET_MARKER_KEY]) {
-    return;
+  const key = await subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  await saveKeyRecord(KEY_RECORD_ID, key);
+  const primaryRecord = await loadKeyRecord(KEY_RECORD_ID);
+  if (!primaryRecord?.key) {
+    throw new Error("Primary key persistence verification failed");
   }
+  await verifyKeyUsable(subtle, primaryRecord.key);
+  return primaryRecord.key;
+}
 
-  const keysToRemove = [LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS];
-  if (typeof chrome.storage.local.remove === "function") {
-    await chrome.storage.local.remove(keysToRemove);
+async function runResetBootstrap(subtle) {
+  const storage = getStorageLocal();
+  await getCryptoDb();
+
+  const owner = createLockToken();
+  let lockHeld = false;
+
+  try {
+    while (true) {
+      const state = await readInitState();
+      if (state?.[RESET_MARKER_KEY]) {
+        return ensureMarkerBackedPrimaryKey(subtle);
+      }
+
+      if (!lockHeld) {
+        lockHeld = await tryAcquireInitLock(owner);
+        if (!lockHeld) {
+          const markerWritten = await waitForResetOrLockRelease(owner);
+          if (markerWritten) {
+            return ensureMarkerBackedPrimaryKey(subtle);
+          }
+          continue;
+        }
+      }
+
+      const lockedState = await readInitState();
+      if (lockedState?.[RESET_MARKER_KEY]) {
+        return ensureMarkerBackedPrimaryKey(subtle);
+      }
+      if (lockedState?.[INIT_LOCK_KEY]?.owner !== owner) {
+        lockHeld = false;
+        continue;
+      }
+
+      await createAndVerifyPendingKey(subtle);
+      try {
+        if (typeof storage.remove === "function") {
+          await storage.remove([LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS]);
+        }
+        const primaryKey = await promotePendingKey(subtle);
+        await storage.set({ [RESET_MARKER_KEY]: true });
+        return primaryKey;
+      } catch (error) {
+        await clearKeyRecord(KEY_PENDING_RECORD_ID);
+        await clearPersistedKey();
+        throw error;
+      }
+    }
+  } finally {
+    if (lockHeld) {
+      await releaseInitLock(owner);
+    }
   }
-
-  await clearPersistedKey();
-  await chrome.storage.local.set({ [RESET_MARKER_KEY]: true });
 }
 
 async function getOrCreateKey() {
@@ -135,16 +319,7 @@ async function getOrCreateKey() {
       throw new Error("Web Crypto unavailable");
     }
 
-    await ensureResetApplied();
-
-    const persistedKey = await loadPersistedKey();
-    if (persistedKey) {
-      return persistedKey;
-    }
-
-    const key = await subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-    await savePersistedKey(key);
-    return key;
+    return runResetBootstrap(subtle);
   })().catch((error) => {
     cachedKeyPromise = null;
     throw error;

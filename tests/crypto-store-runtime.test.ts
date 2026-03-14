@@ -16,6 +16,12 @@ type TransactionMock = {
   objectStore: (name: string) => any;
 };
 
+type IndexedDbOptions = {
+  failOpen?: boolean;
+  failPutIds?: string[];
+  log?: string[];
+};
+
 function createRequest(): RequestMock {
   return {
     onsuccess: null,
@@ -24,9 +30,47 @@ function createRequest(): RequestMock {
   };
 }
 
-function createIndexedDbMock() {
+function createStorageState(initial: Record<string, any> = {}) {
+  const state = { ...initial };
+
+  const get = jest.fn(async (keys?: string[] | string | Record<string, any>) => {
+    if (Array.isArray(keys)) {
+      return keys.reduce((acc, key) => {
+        acc[key] = state[key];
+        return acc;
+      }, {} as Record<string, any>);
+    }
+    if (typeof keys === "string") {
+      return { [keys]: state[keys] };
+    }
+    if (keys && typeof keys === "object") {
+      return Object.keys(keys).reduce((acc, key) => {
+        acc[key] = state[key] === undefined ? keys[key] : state[key];
+        return acc;
+      }, {} as Record<string, any>);
+    }
+    return { ...state };
+  });
+
+  const set = jest.fn(async (payload: Record<string, any>) => {
+    Object.assign(state, payload);
+  });
+
+  const remove = jest.fn(async (keys: string[] | string) => {
+    const keyList = Array.isArray(keys) ? keys : [keys];
+    for (const key of keyList) {
+      delete state[key];
+    }
+  });
+
+  return { state, get, set, remove };
+}
+
+function createIndexedDbMock(options: IndexedDbOptions = {}) {
   const store = new Map<string, any>();
   let storeCreated = false;
+  const failPutIds = new Set(options.failPutIds || []);
+  const log = options.log || [];
 
   const db = {
     objectStoreNames: {
@@ -51,6 +95,7 @@ function createIndexedDbMock() {
             get(id: string) {
               const req = createRequest();
               setTimeout(() => {
+                log.push(`idb:get:${id}`);
                 req.result = store.get(id);
                 req.onsuccess && req.onsuccess();
                 setTimeout(() => tx.oncomplete && tx.oncomplete(), 0);
@@ -60,6 +105,15 @@ function createIndexedDbMock() {
             put(value: any) {
               const req = createRequest();
               setTimeout(() => {
+                log.push(`idb:put:${value.id}`);
+                if (failPutIds.has(value.id)) {
+                  const error = new Error(`put failed for ${value.id}`);
+                  req.error = error;
+                  tx.error = error;
+                  req.onerror && req.onerror();
+                  setTimeout(() => tx.onerror && tx.onerror(), 0);
+                  return;
+                }
                 store.set(value.id, value);
                 req.result = value;
                 req.onsuccess && req.onsuccess();
@@ -70,6 +124,7 @@ function createIndexedDbMock() {
             delete(id: string) {
               const req = createRequest();
               setTimeout(() => {
+                log.push(`idb:delete:${id}`);
                 store.delete(id);
                 req.result = undefined;
                 req.onsuccess && req.onsuccess();
@@ -88,6 +143,11 @@ function createIndexedDbMock() {
     open(_dbName: string, _version: number) {
       const req = createRequest();
       setTimeout(() => {
+        if (options.failOpen) {
+          req.error = new Error("open failed");
+          req.onerror && req.onerror();
+          return;
+        }
         req.result = db;
         req.onupgradeneeded && req.onupgradeneeded();
         req.onsuccess && req.onsuccess();
@@ -96,56 +156,63 @@ function createIndexedDbMock() {
     }
   };
 
-  return { indexedDb, store };
+  return { indexedDb, store, log };
 }
 
-function setRuntimeApis(globalAny: any, indexedDb: any, subtle: any) {
+function setRuntimeApis(globalAny: any, indexedDb: any, subtle: any, localStorageMock: ReturnType<typeof createStorageState>) {
   Object.defineProperty(globalAny, "indexedDB", {
     configurable: true,
     writable: true,
     value: indexedDb
   });
+
+  const subtleApi = {
+    encrypt: jest.fn(async (_algorithm: any, _key: any, data: Uint8Array) => data),
+    decrypt: jest.fn(async (_algorithm: any, _key: any, data: ArrayBuffer | Uint8Array) => data),
+    ...subtle
+  };
+
   Object.defineProperty(globalAny, "crypto", {
     configurable: true,
     writable: true,
     value: {
-      subtle,
+      subtle: subtleApi,
       getRandomValues: (arr: Uint8Array) => arr
     }
   });
+  globalAny.chrome.storage.local.get = localStorageMock.get;
+  globalAny.chrome.storage.local.set = localStorageMock.set;
+  globalAny.chrome.storage.local.remove = localStorageMock.remove;
+}
+
+function loadCryptoStoreModule() {
+  let loaded: any;
+  jest.isolateModules(() => {
+    loaded = require("../src/shared/crypto-store.js");
+  });
+  return loaded;
 }
 
 describe("crypto-store runtime", () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
-    const local = (global as any).chrome.storage.local;
-    local.get.mockReset();
-    local.set.mockReset();
-    if (local.remove && typeof local.remove.mockReset === "function") {
-      local.remove.mockReset();
-    }
+    jest.restoreAllMocks();
   });
 
-  test("generates non-extractable key and applies one-time reset", async () => {
+  test("generates a non-extractable key, verifies persistence, then applies one-time reset", async () => {
     const globalAny = global as any;
-    const { indexedDb, store } = createIndexedDbMock();
+    const log: string[] = [];
+    const indexedDbMock = createIndexedDbMock({ log });
+    const localStorageMock = createStorageState();
     const generatedKey = { type: "secret", id: "k1" };
-
     const subtle = {
       generateKey: jest.fn().mockResolvedValue(generatedKey)
     };
 
-    setRuntimeApis(globalAny, indexedDb, subtle);
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
 
-    globalAny.chrome.storage.local.get
-      .mockResolvedValueOnce({})
-      .mockResolvedValue({ or_crypto_reset_v2: true });
-    globalAny.chrome.storage.local.remove = jest.fn().mockResolvedValue(undefined);
-    globalAny.chrome.storage.local.set.mockResolvedValue(undefined);
-
-    const { getOrCreateKey } = require("../src/shared/crypto-store.js");
-
+    const { getOrCreateKey } = loadCryptoStoreModule();
     const key = await getOrCreateKey();
 
     expect(key).toBe(generatedKey);
@@ -154,35 +221,122 @@ describe("crypto-store runtime", () => {
       false,
       ["encrypt", "decrypt"]
     );
-    expect(globalAny.chrome.storage.local.remove).toHaveBeenCalledWith(expect.arrayContaining([
+    expect(localStorageMock.remove).toHaveBeenCalledWith(expect.arrayContaining([
       "or_crypto_key",
       "or_api_key",
       "or_recent_models"
     ]));
-    expect(globalAny.chrome.storage.local.set).toHaveBeenCalledWith({ or_crypto_reset_v2: true });
-    expect(globalAny.chrome.storage.local.set).not.toHaveBeenCalledWith(expect.objectContaining({ or_crypto_key: expect.anything() }));
-    expect(store.get("primary")?.key).toBe(generatedKey);
+    expect(localStorageMock.set).toHaveBeenCalledWith({ or_crypto_reset_v2: true });
+    expect(indexedDbMock.store.get("primary")?.key).toBe(generatedKey);
+    expect(log.indexOf("idb:put:pending_v2")).toBeLessThan(log.indexOf("idb:get:pending_v2"));
+    expect(log.indexOf("idb:get:pending_v2")).toBeLessThan(log.indexOf("idb:put:primary"));
   });
 
-  test("does not reset again when marker already exists", async () => {
+  test("does not clear encrypted data when IndexedDB open fails", async () => {
     const globalAny = global as any;
-    const { indexedDb } = createIndexedDbMock();
+    const indexedDbMock = createIndexedDbMock({ failOpen: true });
+    const localStorageMock = createStorageState({ or_api_key: { data: "cipher" } });
+    const subtle = {
+      generateKey: jest.fn()
+    };
 
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+
+    await expect(getOrCreateKey()).rejects.toThrow("open failed");
+    expect(localStorageMock.remove).not.toHaveBeenCalledWith(expect.arrayContaining(["or_api_key"]));
+    expect(localStorageMock.set).not.toHaveBeenCalledWith({ or_crypto_reset_v2: true });
+    expect(localStorageMock.state.or_api_key).toEqual({ data: "cipher" });
+  });
+
+  test("does not set reset marker or clear encrypted values when key persistence fails", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock({ failPutIds: ["pending_v2"] });
+    const localStorageMock = createStorageState({ or_api_key: { data: "cipher" } });
     const subtle = {
       generateKey: jest.fn().mockResolvedValue({ type: "secret", id: "k2" })
     };
 
-    setRuntimeApis(globalAny, indexedDb, subtle);
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
 
-    globalAny.chrome.storage.local.get.mockResolvedValue({ or_crypto_reset_v2: true });
-    globalAny.chrome.storage.local.remove = jest.fn().mockResolvedValue(undefined);
-    globalAny.chrome.storage.local.set.mockResolvedValue(undefined);
+    const { getOrCreateKey } = loadCryptoStoreModule();
 
-    const { getOrCreateKey } = require("../src/shared/crypto-store.js");
+    await expect(getOrCreateKey()).rejects.toThrow("put failed for pending_v2");
+    expect(localStorageMock.remove).not.toHaveBeenCalledWith(expect.arrayContaining(["or_api_key"]));
+    expect(localStorageMock.state.or_crypto_reset_v2).toBeUndefined();
+    expect(indexedDbMock.store.get("primary")).toBeUndefined();
+  });
 
-    await getOrCreateKey();
+  test("stale init lock is ignored and replaced during recovery", async () => {
+    const globalAny = global as any;
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(10000);
+    const indexedDbMock = createIndexedDbMock();
+    const localStorageMock = createStorageState({
+      or_crypto_init_lock_v2: {
+        owner: "stale-owner",
+        expiresAt: 1000
+      }
+    });
+    const generatedKey = { type: "secret", id: "k3" };
+    const subtle = {
+      generateKey: jest.fn().mockResolvedValue(generatedKey)
+    };
 
-    expect(globalAny.chrome.storage.local.remove).not.toHaveBeenCalled();
-    expect(globalAny.chrome.storage.local.set).not.toHaveBeenCalledWith({ or_crypto_reset_v2: true });
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+    const key = await getOrCreateKey();
+
+    expect(key).toBe(generatedKey);
+    expect(localStorageMock.state.or_crypto_reset_v2).toBe(true);
+    expect(localStorageMock.state.or_crypto_init_lock_v2).toBeUndefined();
+    nowSpy.mockRestore();
+  });
+
+  test("concurrent module instances converge on one persisted key", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock();
+    const localStorageMock = createStorageState();
+    const generatedKey = { type: "secret", id: "shared-key" };
+    const subtle = {
+      generateKey: jest.fn().mockResolvedValue(generatedKey)
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const cryptoStoreA = loadCryptoStoreModule();
+    const cryptoStoreB = loadCryptoStoreModule();
+
+    const [keyA, keyB] = await Promise.all([
+      cryptoStoreA.getOrCreateKey(),
+      cryptoStoreB.getOrCreateKey()
+    ]);
+
+    expect(keyA).toBe(generatedKey);
+    expect(keyB).toBe(generatedKey);
+    expect(subtle.generateKey).toHaveBeenCalledTimes(1);
+    expect(localStorageMock.state.or_crypto_reset_v2).toBe(true);
+    expect(indexedDbMock.store.get("primary")?.key).toBe(generatedKey);
+  });
+
+  test("does not reset again when marker already exists", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock();
+    const persistedKey = { type: "secret", id: "existing" };
+    indexedDbMock.store.set("primary", { id: "primary", key: persistedKey });
+    const localStorageMock = createStorageState({ or_crypto_reset_v2: true });
+    const subtle = {
+      generateKey: jest.fn()
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+    const key = await getOrCreateKey();
+
+    expect(key).toBe(persistedKey);
+    expect(localStorageMock.remove).not.toHaveBeenCalled();
+    expect(subtle.generateKey).not.toHaveBeenCalled();
   });
 });

@@ -6,20 +6,26 @@ describe("security scan scripts", () => {
   const repoScanPath = path.join(__dirname, "..", "scripts", "security", "scan-repo-secrets.js");
   const stagedScanPath = path.join(__dirname, "..", "scripts", "security", "scan-staged-secrets.js");
   const commonPath = path.join(__dirname, "..", "scripts", "security", "scan-common.js");
+  const workflowPath = path.join(__dirname, "..", ".github", "workflows", "security.yml");
   const gitleaksPath = path.join(__dirname, "..", ".gitleaks.toml");
 
-  test("scripts exist", () => {
+  test("scripts and workflow exist", () => {
     expect(fs.existsSync(repoScanPath)).toBe(true);
     expect(fs.existsSync(stagedScanPath)).toBe(true);
     expect(fs.existsSync(commonPath)).toBe(true);
+    expect(fs.existsSync(workflowPath)).toBe(true);
     expect(fs.existsSync(gitleaksPath)).toBe(true);
   });
 
-  test("common scanner contains key secret patterns", () => {
+  test("common scanner contains expanded key patterns for local fallback scans", () => {
     const content = fs.readFileSync(commonPath, "utf8");
     expect(content).toMatch(/ghp_\[A-Za-z0-9\]\{36\}/);
     expect(content).toMatch(/github_pat_\[A-Za-z0-9_\]\{20,/);
     expect(content).toMatch(/sk-or-v1-\[A-Za-z0-9\]\{40,/);
+    expect(content).toMatch(/Bearer/);
+    expect(content).toMatch(/AKIA/);
+    expect(content).toMatch(/sk-ant-/);
+    expect(content).toMatch(/sk-\(\?:proj\|live\|test\)/);
     expect(content).toMatch(/PRIVATE KEY/);
   });
 
@@ -31,13 +37,20 @@ describe("security scan scripts", () => {
     expect(content).not.toMatch(/execSync\(`git show/);
   });
 
-  test("repo scan checks tracked and untracked files", () => {
+  test("repo scan prefers gitleaks with the tracked config", () => {
     const content = fs.readFileSync(repoScanPath, "utf8");
-    expect(content).toMatch(/git ls-files/);
-    expect(content).toMatch(/--others --exclude-standard/);
+    expect(content).toMatch(/gitleaks/);
+    expect(content).toMatch(/--config/);
+    expect(content).toMatch(/\.gitleaks\.toml/);
   });
 
-  test("gitleaks rules include broader token coverage", () => {
+  test("security workflow installs gitleaks and runs the repository scan", () => {
+    const content = fs.readFileSync(workflowPath, "utf8");
+    expect(content).toMatch(/Install gitleaks/);
+    expect(content).toMatch(/npm run security:scan/);
+  });
+
+  test("gitleaks rules include broader token coverage without a blanket tests allowlist", () => {
     const content = fs.readFileSync(gitleaksPath, "utf8");
     expect(content).toMatch(/id = "bearer-token"/);
     expect(content).toMatch(/id = "jwt-token"/);
@@ -45,5 +58,7 @@ describe("security scan scripts", () => {
     expect(content).toMatch(/id = "anthropic-api-key"/);
     expect(content).toMatch(/id = "openai-api-key"/);
     expect(content).toMatch(/id = "keyword-high-entropy-assignment"/);
+    expect(content).not.toMatch(/'''tests\/\.\*'''/);
+    expect(content).toMatch(/SMOKE_TEST_KEY_PLACEHOLDER/);
   });
 });

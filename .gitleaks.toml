@@ -1,14 +1,12 @@
 title = "Wegweiser Secret Scan Rules"
 
 [allowlist]
-description = "Allow non-secret placeholders"
+description = "Allow explicit non-secret placeholders"
 regexes = [
   '''sk-or-\.\.\.''',
   '''ghp_\[A-Za-z0-9\]\{36\}''',
-  '''github_pat_\[A-Za-z0-9_\]\+'''
-]
-paths = [
-  '''tests/.*'''
+  '''github_pat_\[A-Za-z0-9_\]\+''',
+  '''SMOKE_TEST_KEY_PLACEHOLDER!?'''
 ]
 
 [[rules]]

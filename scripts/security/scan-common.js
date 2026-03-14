@@ -1,5 +1,4 @@
 const fs = require("fs");
-const path = require("path");
 
 const SECRET_PATTERNS = [
   {
@@ -13,6 +12,26 @@ const SECRET_PATTERNS = [
   {
     name: "OpenRouter API key",
     regex: /\bsk-or-v1-[A-Za-z0-9]{40,}\b/g
+  },
+  {
+    name: "Bearer token",
+    regex: /\bBearer\s+[A-Za-z0-9._\-]{20,}\b/g
+  },
+  {
+    name: "JWT token",
+    regex: /\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b/g
+  },
+  {
+    name: "AWS access key id",
+    regex: /\bAKIA[0-9A-Z]{16}\b/g
+  },
+  {
+    name: "Anthropic API key",
+    regex: /\bsk-ant-[A-Za-z0-9_\-]{20,}\b/g
+  },
+  {
+    name: "OpenAI-style API key",
+    regex: /\bsk-(?:proj|live|test)-[A-Za-z0-9_\-]{20,}\b/g
   },
   {
     name: "Git credentials in URL",
