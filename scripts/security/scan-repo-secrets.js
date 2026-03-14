@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 const path = require("path");
 const {
   scanContent,
@@ -8,20 +8,20 @@ const {
   readUtf8Safe
 } = require("./scan-common.js");
 
-function runGit(command) {
-  return execSync(command, { encoding: "utf8" })
+function runGit(args) {
+  return execFileSync("git", args, { encoding: "utf8" })
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 }
 
 function getCandidateFiles() {
-  const tracked = runGit("git ls-files");
-  const untracked = runGit("git ls-files --others --exclude-standard");
+  const tracked = runGit(["ls-files"]);
+  const untracked = runGit(["ls-files", "--others", "--exclude-standard"]);
   return [...new Set([...tracked, ...untracked])].filter((filePath) => !shouldSkipFile(filePath));
 }
 
-function main() {
+function runNodeFallbackScan() {
   const files = getCandidateFiles();
   const findings = [];
 
@@ -37,7 +37,34 @@ function main() {
     process.exit(1);
   }
 
-  console.log(`Security scan passed. Checked ${files.length} file(s).`);
+  console.log(`Security scan passed via fallback scanner. Checked ${files.length} file(s).`);
+}
+
+function runGitleaks(repoRoot) {
+  const configPath = path.join(repoRoot, ".gitleaks.toml");
+  try {
+    execFileSync(
+      "gitleaks",
+      ["detect", "--no-git", "--source", repoRoot, "--config", configPath],
+      { stdio: "inherit" }
+    );
+    console.log("Security scan passed via gitleaks.");
+    return true;
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return false;
+    }
+    process.exit(typeof error.status === "number" && error.status > 0 ? error.status : 1);
+  }
+}
+
+function main() {
+  const repoRoot = path.resolve(__dirname, "..", "..");
+  const usedGitleaks = runGitleaks(repoRoot);
+  if (usedGitleaks) {
+    return;
+  }
+  runNodeFallbackScan();
 }
 
 main();
