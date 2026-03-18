@@ -55,7 +55,7 @@ describe("security scan scripts", () => {
     const content = fs.readFileSync(workflowPath, "utf8");
     expect(content).toMatch(/npm run security:scan/);
     expect(content).toMatch(/actions\/setup-go@/);
-    expect(content).toMatch(/go install github\.com\/gitleaks\/gitleaks\/v8@v8\.24\.3/);
+    expect(content).toMatch(/go install github\.com\/zricethezav\/gitleaks\/v8@v8\.24\.3/);
     expect(content).not.toMatch(/curl -sSL .*gitleaks/);
   });
 
@@ -63,7 +63,7 @@ describe("security scan scripts", () => {
   test("history workflow also installs gitleaks via Go and uses the tracked config", () => {
     const content = fs.readFileSync(historyWorkflowPath, "utf8");
     expect(content).toMatch(/actions\/setup-go@/);
-    expect(content).toMatch(/go install github\.com\/gitleaks\/gitleaks\/v8@v8\.24\.3/);
+    expect(content).toMatch(/go install github\.com\/zricethezav\/gitleaks\/v8@v8\.24\.3/);
     expect(content).toMatch(/--config \.gitleaks\.toml/);
     expect(content).not.toMatch(/curl -sSL .*gitleaks/);
   });

@@ -66,10 +66,10 @@
     "lines": 82.35
   },
   "src/modules/exporter.js": {
-    "statements": 20.58,
-    "branches": 23.07,
-    "functions": 22.22,
-    "lines": 22.58
+    "statements": 58.2,
+    "branches": 42.59,
+    "functions": 64.28,
+    "lines": 59.67
   },
   "src/modules/image-cards.js": {
     "statements": 61.95,
@@ -78,10 +78,10 @@
     "lines": 61.95
   },
   "src/modules/markdown.js": {
-    "statements": 54.54,
-    "branches": 28.07,
-    "functions": 50,
-    "lines": 57.28
+    "statements": 57.27,
+    "branches": 32.2,
+    "functions": 57.14,
+    "lines": 60.19
   },
   "src/modules/models-dropdown-events-utils.js": {
     "statements": 46.21,
@@ -96,10 +96,10 @@
     "lines": 87.64
   },
   "src/modules/models-dropdown.js": {
-    "statements": 68.23,
-    "branches": 57.81,
+    "statements": 68.5,
+    "branches": 58.37,
     "functions": 36.06,
-    "lines": 71.07
+    "lines": 71.36
   },
   "src/modules/provider-ui-utils.js": {
     "statements": 81.25,
@@ -108,16 +108,16 @@
     "lines": 81.25
   },
   "src/modules/safe-html.js": {
-    "statements": 70.83,
-    "branches": 50,
+    "statements": 88,
+    "branches": 73.07,
     "functions": 100,
-    "lines": 76.19
+    "lines": 95.45
   },
   "src/modules/source-cards.js": {
-    "statements": 36.9,
-    "branches": 18.91,
-    "functions": 7.69,
-    "lines": 39.74
+    "statements": 39.77,
+    "branches": 21.95,
+    "functions": 14.28,
+    "lines": 42.68
   },
   "src/modules/sources-modal-utils.js": {
     "statements": 76.36,
@@ -126,16 +126,22 @@
     "lines": 77.77
   },
   "src/modules/sources.js": {
-    "statements": 86.82,
-    "branches": 62.5,
+    "statements": 91.33,
+    "branches": 62.02,
     "functions": 81.81,
-    "lines": 90.9
+    "lines": 92.56
   },
   "src/modules/streaming-ui.js": {
     "statements": 78.57,
     "branches": 75,
     "functions": 100,
     "lines": 84.61
+  },
+  "src/modules/toast.js": {
+    "statements": 60.29,
+    "branches": 27.41,
+    "functions": 30.76,
+    "lines": 61.19
   },
   "src/options/options-history-detail-controller-utils.js": {
     "statements": 53.33,
@@ -192,10 +198,10 @@
     "lines": 88.23
   },
   "src/projects/projects-archive-view-utils.js": {
-    "statements": 82,
-    "branches": 54.54,
-    "functions": 83.33,
-    "lines": 90.24
+    "statements": 86.04,
+    "branches": 57.77,
+    "functions": 80,
+    "lines": 94.44
   },
   "src/projects/projects-basic-utils.js": {
     "statements": 77.08,
@@ -270,10 +276,10 @@
     "lines": 100
   },
   "src/projects/projects-events-controller-utils.js": {
-    "statements": 46.87,
-    "branches": 23.88,
-    "functions": 31.81,
-    "lines": 48.78
+    "statements": 49.58,
+    "branches": 23.52,
+    "functions": 33.33,
+    "lines": 50.84
   },
   "src/projects/projects-export-menu-utils.js": {
     "statements": 88.23,
@@ -360,10 +366,10 @@
     "lines": 100
   },
   "src/projects/projects-render-controller-utils.js": {
-    "statements": 72.47,
-    "branches": 49.42,
-    "functions": 82.35,
-    "lines": 74.28
+    "statements": 75.75,
+    "branches": 54.76,
+    "functions": 81.25,
+    "lines": 77.31
   },
   "src/projects/projects-runtime-events-controller-utils.js": {
     "statements": 86.36,
@@ -372,10 +378,10 @@
     "lines": 90.47
   },
   "src/projects/projects-send-controller-utils.js": {
-    "statements": 50.5,
-    "branches": 33.55,
-    "functions": 68.42,
-    "lines": 52.91
+    "statements": 50,
+    "branches": 34.89,
+    "functions": 66.66,
+    "lines": 52.48
   },
   "src/projects/projects-send-deps-utils.js": {
     "statements": 100,
@@ -438,16 +444,16 @@
     "lines": 100
   },
   "src/projects/projects-stream-runtime-utils.js": {
-    "statements": 80.19,
-    "branches": 56.04,
+    "statements": 81.91,
+    "branches": 53.26,
     "functions": 100,
-    "lines": 89.53
+    "lines": 91.35
   },
   "src/projects/projects-stream-utils.js": {
-    "statements": 85.04,
-    "branches": 55.14,
-    "functions": 80,
-    "lines": 88.23
+    "statements": 87.62,
+    "branches": 53.84,
+    "functions": 78.57,
+    "lines": 90.42
   },
   "src/projects/projects-summarization-flow-utils.js": {
     "statements": 71.05,
@@ -474,10 +480,10 @@
     "lines": 100
   },
   "src/projects/projects-ui-controller-utils.js": {
-    "statements": 64.76,
-    "branches": 37.66,
-    "functions": 71.42,
-    "lines": 68.81
+    "statements": 80.61,
+    "branches": 55.12,
+    "functions": 84.61,
+    "lines": 84.09
   },
   "src/projects/projects-view-utils.js": {
     "statements": 100,
@@ -487,7 +493,7 @@
   },
   "src/projects/projects.js": {
     "statements": 35.18,
-    "branches": 22.34,
+    "branches": 22.87,
     "functions": 3.31,
     "lines": 100
   },
@@ -503,6 +509,12 @@
     "functions": 47.05,
     "lines": 56.64
   },
+  "src/shared/crypto-store.js": {
+    "statements": 72.03,
+    "branches": 56.66,
+    "functions": 83.92,
+    "lines": 73.33
+  },
   "src/shared/debug-log.js": {
     "statements": 100,
     "branches": 71.42,
@@ -510,10 +522,10 @@
     "lines": 100
   },
   "src/shared/encrypted-storage.js": {
-    "statements": 53.48,
-    "branches": 48.64,
-    "functions": 33.33,
-    "lines": 57.5
+    "statements": 76.36,
+    "branches": 66.66,
+    "functions": 85.71,
+    "lines": 82.35
   },
   "src/shared/image-cache.js": {
     "statements": 55.97,
@@ -552,10 +564,10 @@
     "lines": 100
   },
   "src/sidepanel/sidepanel-answer-persistence-controller-utils.js": {
-    "statements": 68.18,
-    "branches": 52.77,
-    "functions": 69.23,
-    "lines": 74.68
+    "statements": 69.13,
+    "branches": 54.79,
+    "functions": 66.66,
+    "lines": 75.67
   },
   "src/sidepanel/sidepanel-answer-store-utils.js": {
     "statements": 89.47,
@@ -582,10 +594,10 @@
     "lines": 100
   },
   "src/sidepanel/sidepanel-image-generation-utils.js": {
-    "statements": 48.42,
-    "branches": 30.86,
-    "functions": 62.5,
-    "lines": 50
+    "statements": 44.31,
+    "branches": 30.95,
+    "functions": 42.85,
+    "lines": 45.88
   },
   "src/sidepanel/sidepanel-model-controller-utils.js": {
     "statements": 38.68,
