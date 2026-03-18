@@ -1,22 +1,18 @@
 // sources.js - Source citation and display system
 
-function buildHtmlNodes(html) {
-  const safeHtml = typeof html === "string" ? html : "";
-  if (typeof document === "undefined") return [];
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
-    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
-  }
-  return [document.createTextNode(safeHtml)];
+function getSafeHtmlModule() {
+  return (typeof globalThis !== 'undefined' && globalThis.safeHtml)
+  || (typeof module !== 'undefined' && module.exports ? require('./safe-html.js') : null)
+  || {};
 }
 
 function setSafeHtml(element, html) {
   if (!element) return;
-  if (typeof window !== 'undefined' && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === 'function') {
-    window.safeHtml.setSanitizedHtml(element, html || '');
+  if (typeof getSafeHtmlModule().setSanitizedHtml === 'function') {
+    getSafeHtmlModule().setSanitizedHtml(element, html || '');
     return;
   }
-  element.replaceChildren(...buildHtmlNodes(html));
+  element.textContent = typeof html === 'string' ? html : '';
 }
 
 
@@ -124,17 +120,25 @@ function extractSources(text) {
   return { sources, cleanText };
 }
 
+function buildDomainBadgeDataUrl(domain) {
+  const raw = String(domain || '').trim().replace(/^www\./i, '');
+  const initialCandidate = (raw.charAt(0) || '?').toUpperCase();
+  const initial = /[A-Z0-9]/.test(initialCandidate) ? initialCandidate : '?';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#27272a"/><text x="16" y="21" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#f4f4f5">${initial}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 /**
- * Get favicon URL for a domain
+ * Get local badge icon data URL for a domain
  * @param {string} url - Full URL
- * @returns {string} Favicon URL
+ * @returns {string} Data URL badge
  */
 function getFaviconUrl(url) {
   try {
-    const domain = new URL(url).origin;
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    const domain = new URL(url).hostname.replace('www.', '');
+    return buildDomainBadgeDataUrl(domain);
   } catch (e) {
-    return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text y="12" font-size="12">🔗</text></svg>';
+    return buildDomainBadgeDataUrl('');
   }
 }
 

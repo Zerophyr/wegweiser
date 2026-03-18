@@ -15,9 +15,19 @@ const testGlobal = global as unknown as {
   applyMarkdownStyles?: (text: string) => string;
 };
 
+function installSafeHtmlStub() {
+  const safeHtml = {
+    setSanitizedHtml: (element: HTMLElement, html: string) => { element.innerHTML = html; },
+    appendSanitizedHtml: (element: HTMLElement, html: string) => { element.insertAdjacentHTML("beforeend", html); }
+  };
+  (global as any).safeHtml = safeHtml;
+  (window as any).safeHtml = safeHtml;
+}
+
 function loadProjects() {
   if (projectsLoaded) return;
   win.__TEST__ = true;
+  installSafeHtmlStub();
   testGlobal.applyMarkdownStyles = (text: string) => text;
   require("../src/projects/projects.js");
   projectsLoaded = true;
@@ -26,6 +36,7 @@ function loadProjects() {
 describe("renderChatMessages", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="chat-messages"></div>';
+    installSafeHtmlStub();
     loadProjects();
   });
 

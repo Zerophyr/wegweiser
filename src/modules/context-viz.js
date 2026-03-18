@@ -1,24 +1,19 @@
 // Context Memory Visualization Component
 // Displays conversation context as an interactive timeline
 
-function buildHtmlNodes(html) {
-  const safeHtml = typeof html === "string" ? html : "";
-  if (typeof document === "undefined") return [];
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
-    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
-  }
-  const textNode = document.createTextNode(safeHtml);
-  return [textNode];
+function getSafeHtmlModule() {
+  return (typeof globalThis !== "undefined" && globalThis.safeHtml)
+  || (typeof module !== "undefined" && module.exports ? require("./safe-html.js") : null)
+  || {};
 }
 
 function setSafeHtml(element, html) {
   if (!element) return;
-  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-    window.safeHtml.setSanitizedHtml(element, html || "");
+  if (typeof getSafeHtmlModule().setSanitizedHtml === "function") {
+    getSafeHtmlModule().setSanitizedHtml(element, html || "");
     return;
   }
-  element.replaceChildren(...buildHtmlNodes(html));
+  element.textContent = typeof html === "string" ? html : "";
 }
 
 class ContextVisualization {

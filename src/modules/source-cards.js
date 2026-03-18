@@ -3,6 +3,15 @@
 let activeCard = null;
 let hideTimeout = null;
 
+function buildDomainBadgeDataUrl(value) {
+  const raw = String(value || '').trim().replace(/^www\./i, '');
+  const initialCandidate = (raw.charAt(0) || '?').toUpperCase();
+  const initial = /[A-Z0-9]/.test(initialCandidate) ? initialCandidate : '?';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#27272a"/><text x="16" y="21" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#f4f4f5">${initial}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+
 function removeActiveCard() {
   if (activeCard) {
     activeCard.remove();
@@ -54,9 +63,8 @@ function buildCard(source) {
 
   const favicon = document.createElement('img');
   favicon.className = 'source-card-favicon';
-  const faviconDomain = encodeURIComponent(String(source?.url || ''));
-  favicon.src = `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=32`;
   const label = source?.domain || source?.title || source?.url || 'Source';
+  favicon.src = buildDomainBadgeDataUrl(label);
   favicon.alt = String(label);
 
   const domain = document.createElement('div');

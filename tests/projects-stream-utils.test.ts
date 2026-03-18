@@ -10,6 +10,16 @@ const {
 } = require("../src/projects/projects-stream-utils.js");
 
 describe("projects stream helpers", () => {
+
+beforeEach(() => {
+  const safeHtml = {
+    setSanitizedHtml: (element: HTMLElement, html: string) => { element.innerHTML = html; },
+    appendSanitizedHtml: (element: HTMLElement, html: string) => { element.insertAdjacentHTML("beforeend", html); }
+  };
+  (global as any).safeHtml = safeHtml;
+  (window as any).safeHtml = safeHtml;
+});
+
   test("builds assistant message shape", () => {
     expect(buildAssistantMessage("Hi", { model: "x" })).toEqual({
       role: "assistant",

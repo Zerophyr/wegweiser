@@ -20,7 +20,8 @@ describe('sidepanel streaming UI state', () => {
     const persistenceJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'sidepanel', 'sidepanel-answer-persistence-controller-utils.js'), 'utf8');
     expect(sidepanelJs).toMatch(/createAnswerPersistenceController/);
     expect(persistenceJs).toMatch(/setAnswerHtmlSafe\(payload\.html\)/);
-    expect(persistenceJs).toMatch(/safeHtml\.setSanitizedHtml\(element,\s*html\s*\|\|\s*""\)/);
+    expect(persistenceJs).toMatch(/function getSafeHtmlModule\(/);
+    expect(persistenceJs).toMatch(/getSafeHtmlModule\(\)\.setSanitizedHtml\(element,\s*html\s*\|\|\s*""\)/);
   });
 
   test('does not interpolate raw error messages directly into innerHTML', () => {

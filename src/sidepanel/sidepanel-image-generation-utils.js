@@ -1,13 +1,9 @@
 // sidepanel-image-generation-utils.js - image generation orchestration helpers
 
-function buildHtmlNodes(html) {
-  const safeHtml = typeof html === "string" ? html : "";
-  if (typeof document === "undefined") return [];
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
-    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
-  }
-  return [document.createTextNode(safeHtml)];
+function getSafeHtmlModule() {
+  return (typeof globalThis !== "undefined" && globalThis.safeHtml)
+  || (typeof module !== "undefined" && module.exports ? require("../modules/safe-html.js") : null)
+  || {};
 }
 
 function setSafeHtml(element, html, safeHtmlSetter) {
@@ -16,11 +12,11 @@ function setSafeHtml(element, html, safeHtmlSetter) {
     safeHtmlSetter(element, html);
     return;
   }
-  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-    window.safeHtml.setSanitizedHtml(element, html);
+  if (typeof getSafeHtmlModule().setSanitizedHtml === "function") {
+    getSafeHtmlModule().setSanitizedHtml(element, html || "");
     return;
   }
-  element.replaceChildren(...buildHtmlNodes(html));
+  element.textContent = typeof html === "string" ? html : "";
 }
 
 function clearElementContent(element) {

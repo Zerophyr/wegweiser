@@ -19,6 +19,7 @@ type TransactionMock = {
 type IndexedDbOptions = {
   failOpen?: boolean;
   failPutIds?: string[];
+  failDeleteIds?: string[];
   log?: string[];
 };
 
@@ -70,6 +71,7 @@ function createIndexedDbMock(options: IndexedDbOptions = {}) {
   const store = new Map<string, any>();
   let storeCreated = false;
   const failPutIds = new Set(options.failPutIds || []);
+  const failDeleteIds = new Set(options.failDeleteIds || []);
   const log = options.log || [];
 
   const db = {
@@ -125,6 +127,14 @@ function createIndexedDbMock(options: IndexedDbOptions = {}) {
               const req = createRequest();
               setTimeout(() => {
                 log.push(`idb:delete:${id}`);
+                if (failDeleteIds.has(id)) {
+                  const error = new Error(`delete failed for ${id}`);
+                  req.error = error;
+                  tx.error = error;
+                  req.onerror && req.onerror();
+                  setTimeout(() => tx.onerror && tx.onerror(), 0);
+                  return;
+                }
                 store.delete(id);
                 req.result = undefined;
                 req.onsuccess && req.onsuccess();
@@ -268,6 +278,84 @@ describe("crypto-store runtime", () => {
     expect(indexedDbMock.store.get("primary")).toBeUndefined();
   });
 
+
+  test("does not clear encrypted values when reset marker write fails after primary promotion", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock();
+    const localStorageMock = createStorageState({ or_api_key: { data: "cipher" } });
+    localStorageMock.set.mockImplementation(async (payload: Record<string, any>) => {
+      if (Object.prototype.hasOwnProperty.call(payload, "or_crypto_reset_v2")) {
+        throw new Error("marker write failed");
+      }
+      Object.assign(localStorageMock.state, payload);
+    });
+    const subtle = {
+      generateKey: jest.fn().mockResolvedValue({ type: "secret", id: "k2b" })
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+
+    await expect(getOrCreateKey()).rejects.toThrow("marker write failed");
+    expect(localStorageMock.state.or_api_key).toEqual({ data: "cipher" });
+    expect(indexedDbMock.store.get("primary")?.key).toEqual({ type: "secret", id: "k2b" });
+    expect(localStorageMock.state.or_crypto_reset_v2).toBeUndefined();
+  });
+
+  test("aborts bootstrap if the init lock is lost before key generation", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock();
+    const localStorageMock = createStorageState();
+    let lockReads = 0;
+    const baseGet = localStorageMock.get;
+    localStorageMock.get = jest.fn(async (keys?: string[] | string | Record<string, any>) => {
+      const result = await baseGet(keys);
+      const requestedKeys = Array.isArray(keys) ? keys : (typeof keys === "string" ? [keys] : Object.keys(keys || {}));
+      if (requestedKeys.includes("or_crypto_init_lock_v2")) {
+        lockReads += 1;
+        if (lockReads >= 5) {
+          result.or_crypto_init_lock_v2 = {
+            owner: "other-owner",
+            acquiredAt: 1,
+            expiresAt: Date.now() + 60000
+          };
+        }
+      }
+      return result;
+    });
+    const subtle = {
+      generateKey: jest.fn().mockResolvedValue({ type: "secret", id: "k-lock" })
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+
+    await expect(getOrCreateKey()).rejects.toThrow("Crypto init lock lost");
+    expect(subtle.generateKey).not.toHaveBeenCalled();
+    expect(localStorageMock.remove).not.toHaveBeenCalledWith(expect.arrayContaining(["or_api_key"]));
+    expect(localStorageMock.state.or_crypto_reset_v2).toBeUndefined();
+  });
+
+  test("cleanup failures after marker write do not roll back the new key state", async () => {
+    const globalAny = global as any;
+    const indexedDbMock = createIndexedDbMock({ failDeleteIds: ["pending_v2"] });
+    const localStorageMock = createStorageState();
+    const subtle = {
+      generateKey: jest.fn().mockResolvedValue({ type: "secret", id: "k2c" })
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const { getOrCreateKey } = loadCryptoStoreModule();
+    const key = await getOrCreateKey();
+
+    expect(key).toEqual({ type: "secret", id: "k2c" });
+    expect(localStorageMock.state.or_crypto_reset_v2).toBe(true);
+    expect(indexedDbMock.store.get("primary")?.key).toEqual({ type: "secret", id: "k2c" });
+  });
+
   test("stale init lock is ignored and replaced during recovery", async () => {
     const globalAny = global as any;
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(10000);
@@ -293,6 +381,44 @@ describe("crypto-store runtime", () => {
     expect(localStorageMock.state.or_crypto_init_lock_v2).toBeUndefined();
     nowSpy.mockRestore();
   });
+
+  test("long-running init renews the lock instead of losing it to timeout expiry", async () => {
+    const globalAny = global as any;
+    let now = 1000;
+    const nowSpy = jest.spyOn(Date, "now").mockImplementation(() => now);
+    const indexedDbMock = createIndexedDbMock();
+    const localStorageMock = createStorageState();
+    const generatedKey = { type: "secret", id: "k4" };
+    let resolveGenerateKey: ((value: any) => void) | null = null;
+    const subtle = {
+      generateKey: jest.fn().mockImplementation(() => new Promise((resolve) => {
+        resolveGenerateKey = resolve;
+        now += 35000;
+      }))
+    };
+
+    setRuntimeApis(globalAny, indexedDbMock.indexedDb, subtle, localStorageMock);
+
+    const cryptoStoreA = loadCryptoStoreModule();
+    const cryptoStoreB = loadCryptoStoreModule();
+
+    const pendingA = cryptoStoreA.getOrCreateKey();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const pendingB = cryptoStoreB.getOrCreateKey();
+    if (!resolveGenerateKey) throw new Error("missing generateKey resolver");
+    const finishGenerateKey = resolveGenerateKey as (value: any) => void;
+    finishGenerateKey(generatedKey);
+
+    const [keyA, keyB] = await Promise.all([pendingA, pendingB]);
+
+    expect(keyA).toBe(generatedKey);
+    expect(keyB).toBe(generatedKey);
+    expect(subtle.generateKey).toHaveBeenCalledTimes(1);
+    expect(localStorageMock.state.or_crypto_reset_v2).toBe(true);
+
+    nowSpy.mockRestore();
+  }, 15000);
 
   test("concurrent module instances converge on one persisted key", async () => {
     const globalAny = global as any;

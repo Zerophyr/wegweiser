@@ -2,16 +2,23 @@ export {};
 const fs = require("fs");
 const path = require("path");
 
+function expectDynamicSafeHtmlLookup(content: string) {
+  expect(content).toMatch(/function getSafeHtmlModule\(/);
+  expect(content).not.toMatch(/const safeHtmlModule\s*=/);
+}
+
 describe("safe html sinks", () => {
   test("sidepanel prompt and image rendering route through safe helper", () => {
     const promptContent = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-prompt-controller-utils.js"), "utf8");
     const imageContent = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-image-generation-utils.js"), "utf8");
+    expectDynamicSafeHtmlLookup(imageContent);
     expect(imageContent).toMatch(/function setSafeHtml\(/);
     expect(promptContent).toMatch(/setSafeHtmlFromImage\(answerContent/);
   });
 
   test("sidepanel summarize routes dynamic answer container through safe helper", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "sidepanel", "sidepanel-summarize-controller-utils.js"), "utf8");
+    expectDynamicSafeHtmlLookup(content);
     expect(content).toMatch(/function setSafeHtml\(/);
     expect(content).toMatch(/setSafeHtml\(answerItem/);
     expect(content).not.toMatch(/answerEl\.insertAdjacentHTML\("beforeend"/);
@@ -19,6 +26,7 @@ describe("safe html sinks", () => {
 
   test("projects stream runtime uses safe helper for error and markdown sinks", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-stream-runtime-utils.js"), "utf8");
+    expectDynamicSafeHtmlLookup(content);
     expect(content).toMatch(/function setSafeHtml\(/);
     expect(content).toMatch(/setSafeHtml\(ui\.content/);
     expect(content).toMatch(/setSafeHtml\(assistantBubble/);
@@ -39,6 +47,7 @@ describe("safe html sinks", () => {
   });
   test("toast routes rendering through helper instead of direct toast innerHTML", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "modules", "toast.js"), "utf8");
+    expectDynamicSafeHtmlLookup(content);
     expect(content).toMatch(/function setToastHtml\(/);
     expect(content).toMatch(/setToastHtml\(toast, toastHtml\)/);
     expect(content).not.toMatch(/toast\.innerHTML\s*=/);
@@ -65,6 +74,7 @@ describe("safe html sinks", () => {
 
   test("projects render controller routes HTML writes through helper", () => {
     const content = fs.readFileSync(path.join(__dirname, "..", "src", "projects", "projects-render-controller-utils.js"), "utf8");
+    expectDynamicSafeHtmlLookup(content);
     expect(content).toMatch(/function setSafeHtml\(/);
     expect(content).toMatch(/setSafeHtml\(deps\.elements\.ProjectsGrid/);
     expect(content).toMatch(/setSafeHtml\(deps\.elements\.threadList/);

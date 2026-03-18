@@ -17,18 +17,29 @@ const DEFAULT_ENCRYPTED_STORAGE_KEYS = [
 
 const ENCRYPTED_STORAGE_KEYS = Object.freeze([...DEFAULT_ENCRYPTED_STORAGE_KEYS]);
 
+function getCryptoApi() {
+  if (typeof globalThis === "undefined") return null;
+  const cryptoApi = globalThis.__wegweiserCrypto;
+  if (!cryptoApi || typeof cryptoApi !== "object") {
+    return null;
+  }
+  return cryptoApi;
+}
+
 async function encryptJsonSafe(value) {
-  if (typeof globalThis === "undefined" || typeof globalThis.encryptJson !== "function") {
+  const cryptoApi = getCryptoApi();
+  if (!cryptoApi || typeof cryptoApi.encryptJson !== "function") {
     throw new Error("encryptJson not available — crypto-store.js not loaded");
   }
-  return globalThis.encryptJson(value);
+  return cryptoApi.encryptJson(value);
 }
 
 async function decryptJsonSafe(value) {
-  if (typeof globalThis === "undefined" || typeof globalThis.decryptJson !== "function") {
+  const cryptoApi = getCryptoApi();
+  if (!cryptoApi || typeof cryptoApi.decryptJson !== "function") {
     throw new Error("decryptJson not available — crypto-store.js not loaded");
   }
-  return globalThis.decryptJson(value);
+  return cryptoApi.decryptJson(value);
 }
 
 function isEncryptedPayload(value) {
@@ -91,7 +102,6 @@ async function setEncrypted(values) {
 if (typeof globalThis !== "undefined") {
   globalThis.getEncrypted = getEncrypted;
   globalThis.setEncrypted = setEncrypted;
-  globalThis.migratePlaintextKey = migratePlaintextKey;
 }
 
 if (typeof module !== "undefined") {

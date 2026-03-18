@@ -10,6 +10,16 @@ const {
 } = require("../src/projects/projects-stream-runtime-utils.js");
 
 describe("projects stream runtime utils", () => {
+
+beforeEach(() => {
+  const safeHtml = {
+    setSanitizedHtml: (element: HTMLElement, html: string) => { element.innerHTML = html; },
+    appendSanitizedHtml: (element: HTMLElement, html: string) => { element.insertAdjacentHTML("beforeend", html); }
+  };
+  (global as any).safeHtml = safeHtml;
+  (window as any).safeHtml = safeHtml;
+});
+
   test("renderStreamError wires retry click and sanitizes html", async () => {
     document.body.innerHTML = '<div id="c"></div>';
     const content = document.getElementById("c");
