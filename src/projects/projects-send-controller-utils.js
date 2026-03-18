@@ -1,13 +1,9 @@
 // projects-send-controller-utils.js - send/stream/retry orchestration for Projects
 
-function buildHtmlNodes(html) {
-  const safeHtml = typeof html === "string" ? html : "";
-  if (typeof document === "undefined") return [];
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(`<body>${safeHtml}</body>`, "text/html");
-    return Array.from(doc.body.childNodes).map((node) => document.importNode(node, true));
-  }
-  return [document.createTextNode(safeHtml)];
+function getSafeHtmlModule() {
+  return (typeof globalThis !== "undefined" && globalThis.safeHtml)
+  || (typeof module !== "undefined" && module.exports ? require("../modules/safe-html.js") : null)
+  || {};
 }
 
 function setSafeHtml(element, html, safeHtmlSetter) {
@@ -16,12 +12,8 @@ function setSafeHtml(element, html, safeHtmlSetter) {
     safeHtmlSetter(element, html || "");
     return;
   }
-  if (typeof window !== "undefined" && window.safeHtml && typeof window.safeHtml.setSanitizedHtml === "function") {
-    window.safeHtml.setSanitizedHtml(element, html || "");
-    return;
-  }
-  if (typeof element.replaceChildren === "function") {
-    element.replaceChildren(...buildHtmlNodes(html));
+  if (typeof getSafeHtmlModule().setSanitizedHtml === "function") {
+    getSafeHtmlModule().setSanitizedHtml(element, html || "");
     return;
   }
   if ("textContent" in element) {

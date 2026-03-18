@@ -6,7 +6,7 @@ describe("encrypted storage runtime", () => {
     const globalAny = global as any;
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
-    globalAny.decryptJson = jest.fn().mockRejectedValue(new Error("bad decrypt"));
+    globalAny.__wegweiserCrypto = { decryptJson: jest.fn().mockRejectedValue(new Error("bad decrypt")) };
     globalAny.chrome.storage.local.get.mockResolvedValue({
       or_api_key: { alg: "AES-GCM", iv: "iv", data: "data" }
     });
@@ -19,7 +19,7 @@ describe("encrypted storage runtime", () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
 
-    delete globalAny.decryptJson;
+    delete globalAny.__wegweiserCrypto;
     warnSpy.mockRestore();
   });
 
@@ -28,25 +28,25 @@ describe("encrypted storage runtime", () => {
     const globalAny = global as any;
 
     globalAny.ENCRYPTED_STORAGE_KEYS = [];
-    globalAny.encryptJson = jest.fn().mockResolvedValue({ alg: "AES-GCM", iv: "iv", data: "cipher" });
+    globalAny.__wegweiserCrypto = { encryptJson: jest.fn().mockResolvedValue({ alg: "AES-GCM", iv: "iv", data: "cipher" }) };
 
     const { setEncrypted } = require("../src/shared/encrypted-storage.js");
 
     await setEncrypted({ or_api_key: "secret" });
 
-    expect(globalAny.encryptJson).toHaveBeenCalledWith("secret");
+    expect(globalAny.__wegweiserCrypto.encryptJson).toHaveBeenCalledWith("secret");
     expect(globalAny.chrome.storage.local.set).toHaveBeenCalledWith({
       or_api_key: { alg: "AES-GCM", iv: "iv", data: "cipher" }
     });
 
     delete globalAny.ENCRYPTED_STORAGE_KEYS;
-    delete globalAny.encryptJson;
+    delete globalAny.__wegweiserCrypto;
   });
 
   test("setEncrypted throws when encryptJson is unavailable", async () => {
     jest.resetModules();
     const globalAny = global as any;
-    delete globalAny.encryptJson;
+    delete globalAny.__wegweiserCrypto;
 
     const { setEncrypted } = require("../src/shared/encrypted-storage.js");
 
@@ -56,7 +56,7 @@ describe("encrypted storage runtime", () => {
   test("getEncrypted throws when decryptJson is unavailable", async () => {
     jest.resetModules();
     const globalAny = global as any;
-    delete globalAny.decryptJson;
+    delete globalAny.__wegweiserCrypto;
 
     globalAny.chrome.storage.local.get.mockResolvedValue({
       or_api_key: { alg: "AES-GCM", iv: "iv", data: "data" }

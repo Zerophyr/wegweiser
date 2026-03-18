@@ -7,6 +7,7 @@ describe("security scan scripts", () => {
   const stagedScanPath = path.join(__dirname, "..", "scripts", "security", "scan-staged-secrets.js");
   const commonPath = path.join(__dirname, "..", "scripts", "security", "scan-common.js");
   const workflowPath = path.join(__dirname, "..", ".github", "workflows", "security.yml");
+  const historyWorkflowPath = path.join(__dirname, "..", ".github", "workflows", "security-history.yml");
   const gitleaksPath = path.join(__dirname, "..", ".gitleaks.toml");
 
   test("scripts and workflow exist", () => {
@@ -14,6 +15,7 @@ describe("security scan scripts", () => {
     expect(fs.existsSync(stagedScanPath)).toBe(true);
     expect(fs.existsSync(commonPath)).toBe(true);
     expect(fs.existsSync(workflowPath)).toBe(true);
+    expect(fs.existsSync(historyWorkflowPath)).toBe(true);
     expect(fs.existsSync(gitleaksPath)).toBe(true);
   });
 
@@ -37,17 +39,33 @@ describe("security scan scripts", () => {
     expect(content).not.toMatch(/execSync\(`git show/);
   });
 
-  test("repo scan prefers gitleaks with the tracked config", () => {
+  test("repo scan prefers gitleaks with the tracked config and cleans up temp workspaces", () => {
     const content = fs.readFileSync(repoScanPath, "utf8");
     expect(content).toMatch(/gitleaks/);
     expect(content).toMatch(/--config/);
     expect(content).toMatch(/\.gitleaks\.toml/);
+    expect(content).toMatch(/--no-git/);
+    expect(content).toMatch(/--source/);
+    expect(content).toMatch(/mkdtempSync/);
+    expect(content).toMatch(/fs\.rmSync/);
+    expect(content).not.toMatch(/process\.exit\(/);
   });
 
-  test("security workflow installs gitleaks and runs the repository scan", () => {
+  test("security workflow installs gitleaks via Go and runs the repository scan", () => {
     const content = fs.readFileSync(workflowPath, "utf8");
-    expect(content).toMatch(/Install gitleaks/);
     expect(content).toMatch(/npm run security:scan/);
+    expect(content).toMatch(/actions\/setup-go@/);
+    expect(content).toMatch(/go install github\.com\/gitleaks\/gitleaks\/v8@v8\.24\.3/);
+    expect(content).not.toMatch(/curl -sSL .*gitleaks/);
+  });
+
+
+  test("history workflow also installs gitleaks via Go and uses the tracked config", () => {
+    const content = fs.readFileSync(historyWorkflowPath, "utf8");
+    expect(content).toMatch(/actions\/setup-go@/);
+    expect(content).toMatch(/go install github\.com\/gitleaks\/gitleaks\/v8@v8\.24\.3/);
+    expect(content).toMatch(/--config \.gitleaks\.toml/);
+    expect(content).not.toMatch(/curl -sSL .*gitleaks/);
   });
 
   test("gitleaks rules include broader token coverage without a blanket tests allowlist", () => {

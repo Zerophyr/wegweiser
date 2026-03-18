@@ -112,14 +112,16 @@ Wegweiser-extension/
 - **Key Marker Clarification** - Storage key markers (for example `v1:`) are compatibility metadata, not a security boundary
 - **Masked Keys** - API/provisioning keys are hidden by default with a visibility toggle
 - **Content Security Policy** - Strict CSP prevents injection attacks
-- **Input Validation** - All user input sanitized
+- **Input Validation** - Dynamic HTML sinks fail closed and render escaped text if sanitization is unavailable
 - **URL Validation** - Only HTTPS links allowed
 - **Local Image Storage** - Generated images stored in IndexedDB on your device
 - **Image Cleanup** - Manual clear option available in Options
 - **No Telemetry** - No data collected or shared
+- **Local Source Badges** - Citation badges are generated locally; cited URLs are not sent to third-party favicon services
 - **Permission Disclosure** - Optional host permission uses `<all_urls>` and is only requested on-demand with explicit user approval for active-page features
 - **Encryption Threat Model** - Device-local encryption protects at-rest storage from casual file inspection, but not from attackers who can read extension storage and runtime memory
-- **Security Policy** - See `SECURITY.md` for reporting and incident-response guidance
+- **Security Policy** - See `SECURITY.md` for reporting, crypto bootstrap details, sanitizer behavior, and retained globals
+- **Pinned Secret Scanning** - The required `secrets` CI check installs pinned `gitleaks` tooling via Go and scans repo content with the tracked ruleset
 
 ## 📝 Changelog
 

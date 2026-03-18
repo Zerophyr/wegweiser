@@ -23,6 +23,7 @@ describe("source cards", () => {
     expect(titleEl?.textContent).toBe('<img src=x onerror=alert(1)>');
     expect(urlEl?.textContent).toContain("https://example.com/");
     expect(card.querySelector("script")).toBeNull();
-    expect(card.querySelector("img.source-card-favicon")?.getAttribute("src")).toContain("domain=");
+    expect(card.querySelector("img.source-card-favicon")?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(card.querySelector("img.source-card-favicon")?.getAttribute("src")).not.toContain("google.com/s2/favicons");
   });
 });

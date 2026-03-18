@@ -6,10 +6,12 @@ const KEY_RECORD_ID = "primary";
 const KEY_PENDING_RECORD_ID = "pending_v2";
 const RESET_MARKER_KEY = "or_crypto_reset_v2";
 const INIT_LOCK_KEY = "or_crypto_init_lock_v2";
-const INIT_LOCK_TIMEOUT_MS = 5000;
+const INIT_LOCK_TIMEOUT_MS = 30000;
+const INIT_LOCK_HEARTBEAT_MS = 1000;
 const INIT_LOCK_RETRY_MS = 25;
 const INIT_LOCK_WAIT_LIMIT_MS = 10000;
 const LEGACY_KEY_STORAGE_KEY = "or_crypto_key";
+const CRYPTO_API_GLOBAL_KEY = "__wegweiserCrypto";
 const RESET_ENCRYPTED_STORAGE_KEYS = [
   "or_provider",
   "or_api_key",
@@ -169,6 +171,47 @@ async function tryAcquireInitLock(owner) {
   return verify?.[INIT_LOCK_KEY]?.owner === owner;
 }
 
+async function renewInitLock(owner) {
+  const storage = getStorageLocal();
+  const state = await storage.get([INIT_LOCK_KEY, RESET_MARKER_KEY]);
+  if (state?.[RESET_MARKER_KEY]) {
+    return false;
+  }
+  const lockValue = state?.[INIT_LOCK_KEY];
+  if (!lockValue || lockValue.owner !== owner) {
+    return false;
+  }
+  const now = Date.now();
+  await storage.set({
+    [INIT_LOCK_KEY]: {
+      owner,
+      acquiredAt: lockValue.acquiredAt || now,
+      expiresAt: now + INIT_LOCK_TIMEOUT_MS
+    }
+  });
+  const verify = await storage.get([INIT_LOCK_KEY]);
+  return verify?.[INIT_LOCK_KEY]?.owner === owner;
+}
+
+async function assertInitLockHeld(owner) {
+  const renewed = await renewInitLock(owner);
+  if (!renewed) {
+    throw new Error("Crypto init lock lost");
+  }
+}
+
+function startInitLockHeartbeat(owner) {
+  if (typeof setInterval !== "function") {
+    return () => {};
+  }
+  const intervalId = setInterval(() => {
+    renewInitLock(owner).catch(() => {
+      // Ignore heartbeat failures; bootstrap flow re-checks lock ownership.
+    });
+  }, INIT_LOCK_HEARTBEAT_MS);
+  return () => clearInterval(intervalId);
+}
+
 async function releaseInitLock(owner) {
   const storage = getStorageLocal();
   const state = await storage.get([INIT_LOCK_KEY]);
@@ -261,6 +304,7 @@ async function runResetBootstrap(subtle) {
 
   const owner = createLockToken();
   let lockHeld = false;
+  let stopHeartbeat = null;
 
   try {
     while (true) {
@@ -278,6 +322,7 @@ async function runResetBootstrap(subtle) {
           }
           continue;
         }
+        stopHeartbeat = startInitLockHeartbeat(owner);
       }
 
       const lockedState = await readInitState();
@@ -285,25 +330,56 @@ async function runResetBootstrap(subtle) {
         return ensureMarkerBackedPrimaryKey(subtle);
       }
       if (lockedState?.[INIT_LOCK_KEY]?.owner !== owner) {
+        if (typeof stopHeartbeat === "function") {
+          stopHeartbeat();
+          stopHeartbeat = null;
+        }
         lockHeld = false;
         continue;
       }
 
-      await createAndVerifyPendingKey(subtle);
-      try {
-        if (typeof storage.remove === "function") {
-          await storage.remove([LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS]);
-        }
-        const primaryKey = await promotePendingKey(subtle);
+      const persistedKey = await loadPersistedKey();
+      if (persistedKey) {
+        await verifyKeyUsable(subtle, persistedKey);
+        await assertInitLockHeld(owner);
         await storage.set({ [RESET_MARKER_KEY]: true });
-        return primaryKey;
+        if (typeof storage.remove === "function") {
+          try {
+            await storage.remove([LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS]);
+          } catch (_) {
+            // Cleanup is best-effort once the reset marker is durable.
+          }
+        }
+        return persistedKey;
+      }
+
+      await assertInitLockHeld(owner);
+      await createAndVerifyPendingKey(subtle);
+      await assertInitLockHeld(owner);
+
+      let primaryKey;
+      try {
+        primaryKey = await promotePendingKey(subtle);
+        await assertInitLockHeld(owner);
+        await storage.set({ [RESET_MARKER_KEY]: true });
       } catch (error) {
         await clearKeyRecord(KEY_PENDING_RECORD_ID);
-        await clearPersistedKey();
         throw error;
       }
+
+      if (typeof storage.remove === "function") {
+        try {
+          await storage.remove([LEGACY_KEY_STORAGE_KEY, ...RESET_ENCRYPTED_STORAGE_KEYS]);
+        } catch (_) {
+          // Cleanup is best-effort once the new primary key and reset marker are durable.
+        }
+      }
+      return primaryKey;
     }
   } finally {
+    if (typeof stopHeartbeat === "function") {
+      stopHeartbeat();
+    }
     if (lockHeld) {
       await releaseInitLock(owner);
     }
@@ -374,9 +450,10 @@ async function decryptJson(payload) {
 }
 
 if (typeof globalThis !== "undefined") {
-  globalThis.getOrCreateKey = getOrCreateKey;
-  globalThis.encryptJson = encryptJson;
-  globalThis.decryptJson = decryptJson;
+  globalThis[CRYPTO_API_GLOBAL_KEY] = Object.freeze({
+    encryptJson,
+    decryptJson
+  });
 }
 
 if (typeof module !== "undefined") {
