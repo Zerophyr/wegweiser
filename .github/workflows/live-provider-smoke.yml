@@ -1,8 +1,6 @@
 name: Live Provider Smoke
 
 on:
-  schedule:
-    - cron: "23 2 * * *"
   workflow_dispatch:
 
 jobs:
